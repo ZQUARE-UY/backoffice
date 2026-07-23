@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 
 import { AppSidebar } from "@/components/app-sidebar"
+import { BusquedaGlobal } from "@/components/busqueda-global"
 import { Separator } from "@/components/ui/separator"
 import {
   SidebarInset,
@@ -33,6 +34,9 @@ export default async function ProtegidoLayout({
           <span className="text-sm text-muted-foreground">
             Backoffice de gestión
           </span>
+          <div className="ml-auto">
+            <BusquedaGlobal />
+          </div>
         </header>
         <div className="flex flex-1 flex-col gap-6 p-6">{children}</div>
       </SidebarInset>
