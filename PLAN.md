@@ -152,8 +152,14 @@ ZQUARE (unidad compartida del Workspace)
 - [x] Layout base (sidebar, login, tema)
 - [x] Proyecto Supabase creado y migración aplicada (RLS verificado)
 - [x] OAuth de Google configurado (consentimiento Interno, solo cuentas @zquare.uy) — login probado con éxito el 2026-07-23
-- [ ] Deploy en Vercel
-- [ ] DNS: subdominio `backoffice.zquare.uy`
+- [x] Deploy en Vercel (Hobby) — repo público `github.com/ZQUARE-UY/backoffice`, producción en `https://backoffice-zeta-teal.vercel.app` (login end-to-end OK el 2026-07-23)
+- [ ] DNS: subdominio `backoffice.zquare.uy` *(pendiente — por ahora se usa la URL de Vercel)*
+- [ ] Invitar a los 3 socios a la organización GitHub ZQUARE-UY
+
+> **Notas de deploy (para no repetir tropiezos):**
+> - Vercel Hobby no deploya repos privados de una organización → el repo se dejó público (no contiene secretos; `.env.local` está en gitignore). Alternativa futura si se quiere privado: Cloudflare Pages (gratis) o Vercel Pro.
+> - Usar SIEMPRE la URL estable de Vercel (`backoffice-zeta-teal.vercel.app`), no las URLs con hash por-deploy. El Site URL y los Redirect URLs de Supabase apuntan a la estable.
+> - Al cargar env vars en Vercel, pegar el valor en texto plano — si se copia el campo enmascarado se guardan caracteres "•" y el login falla con "Cannot convert argument to a ByteString".
 
 ### Fase 1 — Clientes y documentos *(2-3 sesiones)*
 - [ ] CRUD de clientes y proyectos
@@ -214,3 +220,7 @@ de Google en la consola del Workspace.
   fichas estándar, búsqueda global, plantilla de carpetas Drive creada
   automáticamente por el sistema. Pendiente: estructura actual de Drive de
   Joaquín para ajustar la plantilla.
+- **2026-07-23** — Fase 0 completada y desplegada: repo en GitHub
+  (ZQUARE-UY/backoffice, público), deploy en Vercel Hobby, login con Google
+  funcionando end-to-end en producción. Pendientes menores: DNS del subdominio
+  e invitar a los socios a GitHub.
