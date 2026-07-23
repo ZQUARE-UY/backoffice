@@ -166,7 +166,7 @@ ZQUARE (unidad compartida del Workspace)
 - [x] Presupuestos con ítems por horas y versionado (editor con total en vivo, CRUD completo, verificado el 2026-07-23)
 - [x] Documentos: alta con link a Drive, tipos (incl. minuta) y tags, CRUD completo (verificado el 2026-07-23)
 - [ ] Creación automática de la estructura de carpetas en Drive al dar de alta cliente/proyecto
-- [ ] Búsqueda global (Cmd+K)
+- [x] Búsqueda global (Cmd+K) sobre clientes, proyectos y documentos (verificado el 2026-07-23)
 - [ ] Registro de decisiones
 - [ ] Carga de datos históricos (clientes y docs que ya tienen en Drive)
 - [ ] (Opcional) Google Picker para elegir archivos de Drive desde la app
