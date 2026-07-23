@@ -11,9 +11,9 @@ import { BotonGoogle } from "./boton-google"
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>
+  searchParams: Promise<{ error?: string; detalle?: string }>
 }) {
-  const { error } = await searchParams
+  const { error, detalle } = await searchParams
 
   return (
     <main className="flex min-h-svh items-center justify-center p-6">
@@ -27,9 +27,16 @@ export default async function LoginPage({
         <CardContent className="flex flex-col gap-4">
           <BotonGoogle />
           {error && (
-            <p className="text-center text-sm text-destructive">
-              Hubo un problema al iniciar sesión. Probá de nuevo.
-            </p>
+            <div className="flex flex-col gap-1 text-center">
+              <p className="text-sm text-destructive">
+                Hubo un problema al iniciar sesión. Probá de nuevo.
+              </p>
+              {detalle && (
+                <p className="text-xs text-muted-foreground break-words">
+                  {detalle}
+                </p>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
