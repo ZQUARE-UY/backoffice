@@ -28,6 +28,7 @@ import {
 import { type Cliente, type Proyecto } from "@/lib/dominio"
 import { createClient } from "@/lib/supabase/server"
 
+import { EditarCliente } from "./editar-cliente"
 import { NuevoProyecto } from "./nuevo-proyecto"
 
 function formatearMonto(monto: number | null, moneda: string | null) {
@@ -86,6 +87,7 @@ export default async function ClientePage({
               <p className="text-muted-foreground">{cliente.empresa}</p>
             )}
           </div>
+          <EditarCliente cliente={cliente} />
         </div>
       </div>
 

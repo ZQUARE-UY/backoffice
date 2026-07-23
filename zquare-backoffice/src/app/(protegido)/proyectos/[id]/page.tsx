@@ -2,6 +2,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { ArrowLeftIcon } from "lucide-react"
 
+import { EditarProyecto } from "./editar-proyecto"
 import { EstadoProyectoBadge } from "@/components/estado-badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -65,11 +66,14 @@ export default async function ProyectoPage({
           <ArrowLeftIcon data-icon="inline-start" />
           {cliente?.nombre ?? "Cliente"}
         </Button>
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {proyecto.nombre}
-          </h1>
-          <EstadoProyectoBadge estado={proyecto.estado} />
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {proyecto.nombre}
+            </h1>
+            <EstadoProyectoBadge estado={proyecto.estado} />
+          </div>
+          <EditarProyecto proyecto={proyecto} />
         </div>
       </div>
 
