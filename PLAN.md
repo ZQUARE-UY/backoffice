@@ -123,25 +123,38 @@ el mismo lugar, siempre.
   pereza.
 - **Estructura de carpetas Drive estandarizada y automática.** Al dar de alta
   un cliente o proyecto, el sistema crea las carpetas en Drive vía API —
-  idénticas para todos los clientes, sin excepciones. Plantilla propuesta
-  (borrador, a ajustar cuando Joaquín pase la estructura actual):
+  idénticas para todos los clientes, sin excepciones. **Plantilla confirmada
+  por Joaquín el 2026-07-23** (basada en la estructura real de la carpeta
+  "Cognitiva", el nombre viejo de la empresa):
 
 ```
-ZQUARE (unidad compartida del Workspace)
+ZQUARE (Unidad compartida del Workspace)
+├── Empresa/
+│   ├── Minutas internas/
+│   └── Plantillas/              ← ej. "Guia para contrato"
 └── Clientes/
-    └── <Cliente>/
-        ├── 00 - Info general/
-        └── <Proyecto>/
-            ├── 01 - Presupuestos/
-            ├── 02 - Analisis y propuesta/
-            ├── 03 - Contratos/
-            ├── 04 - Documentacion tecnica/
-            └── 05 - Entregables/
+    └── <Cliente>/               (ej: Iberpark)
+        ├── Contrato/
+        ├── Minutas/
+        ├── Presupuestos/
+        └── Proyectos/
+            └── <Proyecto>/      (ej: Modelo Sommelier)
+                ├── Analisis y propuesta/
+                ├── Presentaciones/
+                └── Entregables/
 ```
 
-- **Pendiente:** Joaquín pasa la estructura actual de la carpeta Drive (en los
-  mails personales) para ajustar la plantilla y planificar la migración al
-  Workspace.
+- **Drive como nube del sistema (decidido el 2026-07-23).** El backoffice se
+  integra con la API de Drive como interfaz sobre el almacenamiento real:
+  - *Etapa 1:* creación automática de carpetas al dar de alta cliente/proyecto
+    + listado en vivo de los archivos de la carpeta en cada ficha.
+  - *Etapa 2:* subir archivos a Drive desde el backoffice.
+  - Prerrequisitos: Unidad compartida "ZQUARE" creada, cuenta de servicio de
+    Google con la Drive API habilitada y agregada como miembro de la unidad.
+  - Migración pendiente: mover/copiar el contenido de "Cognitiva" (hoy en
+    cuentas personales, dueños alannicolasort y joaco1119) a la unidad
+    compartida. Ojo: los Google Docs de cuentas personales se copian con
+    "Hacer una copia" para que queden como propiedad de la empresa.
 
 ## 6. Fases de implementación
 
@@ -165,7 +178,9 @@ ZQUARE (unidad compartida del Workspace)
 - [x] CRUD de clientes y proyectos (migración + fichas + alta guiada, verificado end-to-end el 2026-07-23)
 - [x] Presupuestos con ítems por horas y versionado (editor con total en vivo, CRUD completo, verificado el 2026-07-23)
 - [x] Documentos: alta con link a Drive, tipos (incl. minuta) y tags, CRUD completo (verificado el 2026-07-23)
-- [ ] Creación automática de la estructura de carpetas en Drive al dar de alta cliente/proyecto
+- [ ] Integración Drive etapa 1: carpetas automáticas al dar de alta cliente/proyecto + listado en vivo en las fichas *(esperando: unidad compartida + cuenta de servicio)*
+- [ ] Integración Drive etapa 2: subir archivos desde el backoffice
+- [ ] Migrar contenido de "Cognitiva" a la unidad compartida ZQUARE
 - [x] Búsqueda global (Cmd+K) sobre clientes, proyectos y documentos (verificado el 2026-07-23)
 - [x] Registro de decisiones (bitácora con participantes y vínculo opcional a cliente, verificado el 2026-07-23)
 - [ ] Carga de datos históricos (clientes y docs que ya tienen en Drive)
@@ -224,3 +239,7 @@ de Google en la consola del Workspace.
   (ZQUARE-UY/backoffice, público), deploy en Vercel Hobby, login con Google
   funcionando end-to-end en producción. Pendientes menores: DNS del subdominio
   e invitar a los socios a GitHub.
+- **2026-07-23** — v1.3: plantilla de carpetas Drive confirmada (basada en la
+  estructura real de "Cognitiva") y decisión de usar Drive como nube del
+  sistema vía API (carpetas automáticas, listado en vivo, subida de archivos),
+  con migración a Unidad compartida ZQUARE.
