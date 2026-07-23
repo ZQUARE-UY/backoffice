@@ -2,6 +2,9 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { ArrowLeftIcon } from "lucide-react"
 
+import { BotonEliminar } from "@/components/boton-eliminar"
+
+import { eliminarProyecto } from "@/app/(protegido)/clientes/actions"
 import { EditarProyecto } from "./editar-proyecto"
 import { EstadoProyectoBadge } from "@/components/estado-badge"
 import { Button } from "@/components/ui/button"
@@ -73,7 +76,18 @@ export default async function ProyectoPage({
             </h1>
             <EstadoProyectoBadge estado={proyecto.estado} />
           </div>
-          <EditarProyecto proyecto={proyecto} />
+          <div className="flex gap-2">
+            <EditarProyecto proyecto={proyecto} />
+            <BotonEliminar
+              accion={eliminarProyecto.bind(
+                null,
+                proyecto.id,
+                proyecto.cliente_id
+              )}
+              titulo={`¿Eliminar "${proyecto.nombre}"?`}
+              descripcion="Se ocultará el proyecto. Podés recuperarlo desde la base si hace falta."
+            />
+          </div>
         </div>
       </div>
 

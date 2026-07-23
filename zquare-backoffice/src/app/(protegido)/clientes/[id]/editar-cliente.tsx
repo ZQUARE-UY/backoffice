@@ -44,81 +44,81 @@ export function EditarCliente({ cliente }: { cliente: Cliente }) {
       />
       <DialogContent className="sm:max-w-lg">
         {abierto && (
-        <form action={onSubmit}>
-          <DialogHeader>
-            <DialogTitle>Editar cliente</DialogTitle>
-          </DialogHeader>
-          <FieldGroup className="py-4">
-            <Field>
-              <FieldLabel htmlFor="nombre">Nombre *</FieldLabel>
-              <Input
-                id="nombre"
-                name="nombre"
-                required
-                defaultValue={cliente.nombre}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="empresa">Empresa</FieldLabel>
-              <Input
-                id="empresa"
-                name="empresa"
-                defaultValue={cliente.empresa ?? ""}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="estado">Estado</FieldLabel>
-              <SelectCampo
-                id="estado"
-                name="estado"
-                defaultValue={cliente.estado}
-                opciones={Object.entries(ESTADOS_CLIENTE).map(
-                  ([valor, info]) => ({ valor, label: info.label })
-                )}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="email">Email</FieldLabel>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                defaultValue={cliente.email ?? ""}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="telefono">Teléfono</FieldLabel>
-              <Input
-                id="telefono"
-                name="telefono"
-                defaultValue={cliente.telefono ?? ""}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="origen">Origen</FieldLabel>
-              <Input
-                id="origen"
-                name="origen"
-                defaultValue={cliente.origen ?? ""}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="notas">Notas</FieldLabel>
-              <Textarea
-                id="notas"
-                name="notas"
-                rows={3}
-                defaultValue={cliente.notas ?? ""}
-              />
-            </Field>
-          </FieldGroup>
-          <DialogFooter>
-            <Button type="submit" disabled={pendiente}>
-              {pendiente && <Spinner data-icon="inline-start" />}
-              Guardar cambios
-            </Button>
-          </DialogFooter>
-        </form>
+          <form action={onSubmit}>
+            <DialogHeader>
+              <DialogTitle>Editar cliente</DialogTitle>
+            </DialogHeader>
+            <FieldGroup className="py-4">
+              <Field>
+                <FieldLabel htmlFor="nombre">Nombre *</FieldLabel>
+                <Input
+                  id="nombre"
+                  name="nombre"
+                  required
+                  defaultValue={cliente.nombre}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="empresa">Empresa</FieldLabel>
+                <Input
+                  id="empresa"
+                  name="empresa"
+                  defaultValue={cliente.empresa ?? ""}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="estado">Estado</FieldLabel>
+                <SelectCampo
+                  id="estado"
+                  name="estado"
+                  defaultValue={cliente.estado}
+                  opciones={Object.entries(ESTADOS_CLIENTE).map(
+                    ([valor, info]) => ({ valor, label: info.label }),
+                  )}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="email">Email</FieldLabel>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  defaultValue={cliente.email ?? ""}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="telefono">Teléfono</FieldLabel>
+                <Input
+                  id="telefono"
+                  name="telefono"
+                  defaultValue={cliente.telefono ?? ""}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="origen">Origen</FieldLabel>
+                <Input
+                  id="origen"
+                  name="origen"
+                  defaultValue={cliente.origen ?? ""}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="notas">Notas</FieldLabel>
+                <Textarea
+                  id="notas"
+                  name="notas"
+                  rows={3}
+                  defaultValue={cliente.notas ?? ""}
+                />
+              </Field>
+            </FieldGroup>
+            <DialogFooter>
+              <Button type="submit" disabled={pendiente}>
+                {pendiente && <Spinner data-icon="inline-start" />}
+                Guardar cambios
+              </Button>
+            </DialogFooter>
+          </form>
         )}
       </DialogContent>
     </Dialog>

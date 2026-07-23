@@ -28,6 +28,9 @@ import {
 import { type Cliente, type Proyecto } from "@/lib/dominio"
 import { createClient } from "@/lib/supabase/server"
 
+import { BotonEliminar } from "@/components/boton-eliminar"
+
+import { eliminarCliente } from "../actions"
 import { EditarCliente } from "./editar-cliente"
 import { NuevoProyecto } from "./nuevo-proyecto"
 
@@ -87,7 +90,14 @@ export default async function ClientePage({
               <p className="text-muted-foreground">{cliente.empresa}</p>
             )}
           </div>
-          <EditarCliente cliente={cliente} />
+          <div className="flex gap-2">
+            <EditarCliente cliente={cliente} />
+            <BotonEliminar
+              accion={eliminarCliente.bind(null, cliente.id)}
+              titulo={`¿Eliminar a ${cliente.nombre}?`}
+              descripcion="Se ocultará el cliente junto con todos sus proyectos. Podés recuperarlo desde la base si hace falta."
+            />
+          </div>
         </div>
       </div>
 

@@ -94,6 +94,40 @@ export async function actualizarProyecto(id: string, formData: FormData) {
   revalidatePath(`/proyectos/${id}`)
 }
 
+export async function eliminarCliente(id: string) {
+  const supabase = await createClient()
+  const ahora = new Date().toISOString()
+
+  // Soft delete en cascada: el cliente y sus proyectos.
+  const { error: errProy } = await supabase
+    .from("proyectos")
+    .update({ deleted_at: ahora })
+    .eq("cliente_id", id)
+    .is("deleted_at", null)
+  if (errProy) throw new Error(errProy.message)
+
+  const { error } = await supabase
+    .from("clientes")
+    .update({ deleted_at: ahora })
+    .eq("id", id)
+  if (error) throw new Error(error.message)
+
+  revalidatePath("/clientes")
+  redirect("/clientes")
+}
+
+export async function eliminarProyecto(id: string, clienteId: string) {
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from("proyectos")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id)
+  if (error) throw new Error(error.message)
+
+  revalidatePath(`/clientes/${clienteId}`)
+  redirect(`/clientes/${clienteId}`)
+}
+
 export async function crearProyecto(formData: FormData) {
   const clienteId = formData.get("cliente_id") as string
   const nombre = (formData.get("nombre") as string | null)?.trim()
