@@ -150,8 +150,8 @@ ZQUARE (unidad compartida del Workspace)
 - [x] Esquema inicial + RLS (migración en `zquare-backoffice/supabase/migrations/`)
 - [x] Código de login con Google + allowlist de los 4 mails (proxy + RLS)
 - [x] Layout base (sidebar, login, tema)
-- [ ] Crear proyecto Supabase y aplicar la migración *(manual: cuenta en supabase.com)*
-- [ ] Configurar OAuth de Google *(manual: consola GCP del Workspace — pasos en el README)*
+- [x] Proyecto Supabase creado y migración aplicada (RLS verificado)
+- [x] OAuth de Google configurado (consentimiento Interno, solo cuentas @zquare.uy) — login probado con éxito el 2026-07-23
 - [ ] Deploy en Vercel
 - [ ] DNS: subdominio `backoffice.zquare.uy`
 
