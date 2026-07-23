@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import {
   FileTextIcon,
   HomeIcon,
+  ScrollTextIcon,
   UsersIcon,
   WalletIcon,
 } from "lucide-react"
@@ -27,6 +28,7 @@ import { UserMenu } from "@/components/user-menu"
 const secciones = [
   { titulo: "Inicio", href: "/", icono: HomeIcon, disponible: true },
   { titulo: "Clientes", href: "/clientes", icono: UsersIcon, disponible: true },
+  { titulo: "Decisiones", href: "/decisiones", icono: ScrollTextIcon, disponible: true },
   { titulo: "Documentos", href: "/documentos", icono: FileTextIcon, disponible: false },
   { titulo: "Finanzas", href: "/finanzas", icono: WalletIcon, disponible: false },
 ]

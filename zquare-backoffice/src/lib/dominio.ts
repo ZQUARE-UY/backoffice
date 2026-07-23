@@ -121,3 +121,21 @@ export type Documento = {
   created_at: string
   updated_at: string
 }
+
+export type Decision = {
+  id: string
+  titulo: string
+  detalle: string | null
+  fecha: string
+  participantes: string[]
+  cliente_id: string | null
+  proyecto_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type Socio = {
+  id: string
+  nombre: string
+  email: string
+}
