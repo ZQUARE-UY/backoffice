@@ -1,6 +1,12 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { ArrowLeftIcon, FileTextIcon, FolderIcon } from "lucide-react"
+import {
+  ArrowLeftIcon,
+  ExternalLinkIcon,
+  FileTextIcon,
+  FilesIcon,
+  FolderIcon,
+} from "lucide-react"
 
 import {
   EstadoClienteBadge,
@@ -31,16 +37,21 @@ import {
 } from "@/components/ui/table"
 import {
   formatearMonto,
+  TIPOS_DOCUMENTO,
   type Cliente,
+  type Documento,
   type Presupuesto,
   type Proyecto,
 } from "@/lib/dominio"
 import { createClient } from "@/lib/supabase/server"
 
+import { Badge } from "@/components/ui/badge"
 import { BotonEliminar } from "@/components/boton-eliminar"
 
 import { eliminarCliente } from "../actions"
+import { DocumentoAcciones } from "./documento-acciones"
 import { EditarCliente } from "./editar-cliente"
+import { NuevoDocumento } from "./nuevo-documento"
 import { NuevoPresupuesto } from "./nuevo-presupuesto"
 import { NuevoProyecto } from "./nuevo-proyecto"
 
@@ -61,8 +72,11 @@ export default async function ClientePage({
 
   if (!cliente) notFound()
 
-  const [{ data: proyectosData }, { data: presupuestosData }] =
-    await Promise.all([
+  const [
+    { data: proyectosData },
+    { data: presupuestosData },
+    { data: documentosData },
+  ] = await Promise.all([
       supabase
         .from("proyectos")
         .select("*")
@@ -75,10 +89,18 @@ export default async function ClientePage({
         .eq("cliente_id", id)
         .is("deleted_at", null)
         .order("version", { ascending: false }),
+      supabase
+        .from("documentos")
+        .select("*")
+        .eq("cliente_id", id)
+        .is("deleted_at", null)
+        .order("fecha", { ascending: false }),
     ])
 
   const proyectos = (proyectosData ?? []) as Proyecto[]
   const presupuestos = (presupuestosData ?? []) as Presupuesto[]
+  const documentos = (documentosData ?? []) as Documento[]
+  const proyectosMini = proyectos.map((p) => ({ id: p.id, nombre: p.nombre }))
 
   return (
     <>
@@ -203,10 +225,7 @@ export default async function ClientePage({
 
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold tracking-tight">Presupuestos</h2>
-        <NuevoPresupuesto
-          clienteId={cliente.id}
-          proyectos={proyectos.map((p) => ({ id: p.id, nombre: p.nombre }))}
-        />
+        <NuevoPresupuesto clienteId={cliente.id} proyectos={proyectosMini} />
       </div>
 
       {presupuestos.length === 0 ? (
@@ -251,6 +270,70 @@ export default async function ClientePage({
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {presupuesto.fecha_envio ?? "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold tracking-tight">Documentos</h2>
+        <NuevoDocumento clienteId={cliente.id} proyectos={proyectosMini} />
+      </div>
+
+      {documentos.length === 0 ? (
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <FilesIcon />
+            </EmptyMedia>
+            <EmptyTitle>Sin documentos</EmptyTitle>
+            <EmptyDescription>
+              Agregá análisis, propuestas, contratos o minutas con su link a
+              Drive.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      ) : (
+        <div className="rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Título</TableHead>
+                <TableHead>Tipo</TableHead>
+                <TableHead>Fecha</TableHead>
+                <TableHead className="w-10" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {documentos.map((documento) => (
+                <TableRow key={documento.id}>
+                  <TableCell className="font-medium">
+                    <a
+                      href={documento.drive_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 hover:underline"
+                    >
+                      {documento.titulo}
+                      <ExternalLinkIcon className="size-3.5 text-muted-foreground" />
+                    </a>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">
+                      {TIPOS_DOCUMENTO[documento.tipo].label}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {documento.fecha}
+                  </TableCell>
+                  <TableCell>
+                    <DocumentoAcciones
+                      documento={documento}
+                      proyectos={proyectosMini}
+                    />
                   </TableCell>
                 </TableRow>
               ))}

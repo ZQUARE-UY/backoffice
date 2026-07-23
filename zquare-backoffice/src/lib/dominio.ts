@@ -29,6 +29,17 @@ export const ESTADOS_PRESUPUESTO = {
 
 export type EstadoPresupuesto = keyof typeof ESTADOS_PRESUPUESTO
 
+export const TIPOS_DOCUMENTO = {
+  analisis: { label: "Análisis" },
+  propuesta: { label: "Propuesta" },
+  contrato: { label: "Contrato" },
+  informe: { label: "Informe" },
+  minuta: { label: "Minuta" },
+  otro: { label: "Otro" },
+}
+
+export type TipoDocumento = keyof typeof TIPOS_DOCUMENTO
+
 export const MONEDAS = ["USD", "UYU"] as const
 export type Moneda = (typeof MONEDAS)[number]
 
@@ -96,4 +107,17 @@ export type PresupuestoItem = {
   tarifa: number
   subtotal: number
   orden: number
+}
+
+export type Documento = {
+  id: string
+  cliente_id: string
+  proyecto_id: string | null
+  tipo: TipoDocumento
+  titulo: string
+  drive_url: string
+  tags: string[]
+  fecha: string
+  created_at: string
+  updated_at: string
 }
