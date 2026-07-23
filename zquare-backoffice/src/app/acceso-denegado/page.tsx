@@ -21,7 +21,12 @@ export default function AccesoDenegadoPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button variant="outline" className="w-full" render={<Link href="/login" />}>
+          <Button
+            variant="outline"
+            className="w-full"
+            nativeButton={false}
+            render={<Link href="/login" />}
+          >
             Volver al inicio de sesión
           </Button>
         </CardContent>

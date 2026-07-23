@@ -26,7 +26,7 @@ import { UserMenu } from "@/components/user-menu"
 
 const secciones = [
   { titulo: "Inicio", href: "/", icono: HomeIcon, disponible: true },
-  { titulo: "Clientes", href: "/clientes", icono: UsersIcon, disponible: false },
+  { titulo: "Clientes", href: "/clientes", icono: UsersIcon, disponible: true },
   { titulo: "Documentos", href: "/documentos", icono: FileTextIcon, disponible: false },
   { titulo: "Finanzas", href: "/finanzas", icono: WalletIcon, disponible: false },
 ]
@@ -47,7 +47,11 @@ export function AppSidebar({ email }: { email: string }) {
               {secciones.map((seccion) => (
                 <SidebarMenuItem key={seccion.href}>
                   <SidebarMenuButton
-                    isActive={pathname === seccion.href}
+                    isActive={
+                      seccion.href === "/"
+                        ? pathname === "/"
+                        : pathname.startsWith(seccion.href)
+                    }
                     disabled={!seccion.disponible}
                     render={
                       seccion.disponible ? (
