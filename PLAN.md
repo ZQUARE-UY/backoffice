@@ -162,7 +162,7 @@ ZQUARE (unidad compartida del Workspace)
 > - Al cargar env vars en Vercel, pegar el valor en texto plano — si se copia el campo enmascarado se guardan caracteres "•" y el login falla con "Cannot convert argument to a ByteString".
 
 ### Fase 1 — Clientes y documentos *(2-3 sesiones)*
-- [ ] CRUD de clientes y proyectos
+- [x] CRUD de clientes y proyectos (migración + fichas + alta guiada, verificado end-to-end el 2026-07-23)
 - [ ] Presupuestos con ítems y versionado
 - [ ] Documentos: alta con link a Drive, tipos y tags, listado filtrable
 - [ ] Creación automática de la estructura de carpetas en Drive al dar de alta cliente/proyecto
