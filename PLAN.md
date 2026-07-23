@@ -163,7 +163,7 @@ ZQUARE (unidad compartida del Workspace)
 
 ### Fase 1 — Clientes y documentos *(2-3 sesiones)*
 - [x] CRUD de clientes y proyectos (migración + fichas + alta guiada, verificado end-to-end el 2026-07-23)
-- [ ] Presupuestos con ítems y versionado
+- [x] Presupuestos con ítems por horas y versionado (editor con total en vivo, CRUD completo, verificado el 2026-07-23)
 - [ ] Documentos: alta con link a Drive, tipos y tags, listado filtrable
 - [ ] Creación automática de la estructura de carpetas en Drive al dar de alta cliente/proyecto
 - [ ] Búsqueda global (Cmd+K)
