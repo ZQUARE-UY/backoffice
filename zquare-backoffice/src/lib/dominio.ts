@@ -20,8 +20,28 @@ export const ESTADOS_PROYECTO = {
 
 export type EstadoProyecto = keyof typeof ESTADOS_PROYECTO
 
+export const ESTADOS_PRESUPUESTO = {
+  borrador: { label: "Borrador", variant: "secondary" as const },
+  enviado: { label: "Enviado", variant: "default" as const },
+  aprobado: { label: "Aprobado", variant: "outline" as const },
+  rechazado: { label: "Rechazado", variant: "outline" as const },
+}
+
+export type EstadoPresupuesto = keyof typeof ESTADOS_PRESUPUESTO
+
 export const MONEDAS = ["USD", "UYU"] as const
 export type Moneda = (typeof MONEDAS)[number]
+
+export function formatearMonto(
+  monto: number | null,
+  moneda: string | null
+): string {
+  if (monto == null) return "—"
+  return `${moneda ?? ""} ${monto.toLocaleString("es-UY", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}`.trim()
+}
 
 export type Cliente = {
   id: string
@@ -51,4 +71,29 @@ export type Proyecto = {
   moneda: Moneda | null
   created_at: string
   updated_at: string
+}
+
+export type Presupuesto = {
+  id: string
+  cliente_id: string
+  proyecto_id: string | null
+  version: number
+  estado: EstadoPresupuesto
+  moneda: Moneda
+  fecha_envio: string | null
+  total: number
+  notas: string | null
+  drive_url: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type PresupuestoItem = {
+  id: string
+  presupuesto_id: string
+  descripcion: string
+  horas: number | null
+  tarifa: number
+  subtotal: number
+  orden: number
 }

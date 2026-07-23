@@ -1,8 +1,12 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { ArrowLeftIcon, FolderIcon } from "lucide-react"
+import { ArrowLeftIcon, FileTextIcon, FolderIcon } from "lucide-react"
 
-import { EstadoClienteBadge, EstadoProyectoBadge } from "@/components/estado-badge"
+import {
+  EstadoClienteBadge,
+  EstadoPresupuestoBadge,
+  EstadoProyectoBadge,
+} from "@/components/estado-badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -25,19 +29,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { type Cliente, type Proyecto } from "@/lib/dominio"
+import {
+  formatearMonto,
+  type Cliente,
+  type Presupuesto,
+  type Proyecto,
+} from "@/lib/dominio"
 import { createClient } from "@/lib/supabase/server"
 
 import { BotonEliminar } from "@/components/boton-eliminar"
 
 import { eliminarCliente } from "../actions"
 import { EditarCliente } from "./editar-cliente"
+import { NuevoPresupuesto } from "./nuevo-presupuesto"
 import { NuevoProyecto } from "./nuevo-proyecto"
-
-function formatearMonto(monto: number | null, moneda: string | null) {
-  if (monto == null) return "—"
-  return `${moneda ?? ""} ${monto.toLocaleString("es-UY")}`.trim()
-}
 
 export default async function ClientePage({
   params,
@@ -56,14 +61,24 @@ export default async function ClientePage({
 
   if (!cliente) notFound()
 
-  const { data: proyectosData } = await supabase
-    .from("proyectos")
-    .select("*")
-    .eq("cliente_id", id)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false })
+  const [{ data: proyectosData }, { data: presupuestosData }] =
+    await Promise.all([
+      supabase
+        .from("proyectos")
+        .select("*")
+        .eq("cliente_id", id)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("presupuestos")
+        .select("*")
+        .eq("cliente_id", id)
+        .is("deleted_at", null)
+        .order("version", { ascending: false }),
+    ])
 
   const proyectos = (proyectosData ?? []) as Proyecto[]
+  const presupuestos = (presupuestosData ?? []) as Presupuesto[]
 
   return (
     <>
@@ -178,6 +193,64 @@ export default async function ClientePage({
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {proyecto.fecha_fin_estimada ?? "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold tracking-tight">Presupuestos</h2>
+        <NuevoPresupuesto
+          clienteId={cliente.id}
+          proyectos={proyectos.map((p) => ({ id: p.id, nombre: p.nombre }))}
+        />
+      </div>
+
+      {presupuestos.length === 0 ? (
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <FileTextIcon />
+            </EmptyMedia>
+            <EmptyTitle>Sin presupuestos</EmptyTitle>
+            <EmptyDescription>
+              Este cliente todavía no tiene presupuestos cargados.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      ) : (
+        <div className="rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Versión</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead>Total</TableHead>
+                <TableHead>Enviado</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {presupuestos.map((presupuesto) => (
+                <TableRow key={presupuesto.id}>
+                  <TableCell className="font-medium">
+                    <Link
+                      href={`/presupuestos/${presupuesto.id}`}
+                      className="hover:underline"
+                    >
+                      Presupuesto v{presupuesto.version}
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    <EstadoPresupuestoBadge estado={presupuesto.estado} />
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {formatearMonto(presupuesto.total, presupuesto.moneda)}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {presupuesto.fecha_envio ?? "—"}
                   </TableCell>
                 </TableRow>
               ))}

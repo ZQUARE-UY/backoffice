@@ -153,7 +153,7 @@ ZQUARE (unidad compartida del Workspace)
 - [x] Proyecto Supabase creado y migración aplicada (RLS verificado)
 - [x] OAuth de Google configurado (consentimiento Interno, solo cuentas @zquare.uy) — login probado con éxito el 2026-07-23
 - [x] Deploy en Vercel (Hobby) — repo público `github.com/ZQUARE-UY/backoffice`, producción en `https://backoffice-zeta-teal.vercel.app` (login end-to-end OK el 2026-07-23)
-- [ ] DNS: subdominio `backoffice.zquare.uy` *(pendiente — por ahora se usa la URL de Vercel)*
+- [x] DNS: subdominio `backoffice.zquare.uy` funcionando con SSL (verificado por TXT desde la cuenta Vercel de Martín, 2026-07-23)
 - [ ] Invitar a los 3 socios a la organización GitHub ZQUARE-UY
 
 > **Notas de deploy (para no repetir tropiezos):**
