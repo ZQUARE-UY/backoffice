@@ -1,8 +1,6 @@
 import { redirect } from "next/navigation"
 
 import { AppSidebar } from "@/components/app-sidebar"
-import { BusquedaGlobal } from "@/components/busqueda-global"
-import { Separator } from "@/components/ui/separator"
 import {
   SidebarInset,
   SidebarProvider,
@@ -28,15 +26,8 @@ export default async function ProtegidoLayout({
     <SidebarProvider>
       <AppSidebar email={user.email ?? ""} />
       <SidebarInset>
-        <header className="flex h-14 items-center gap-2 border-b px-4">
+        <header className="flex h-14 items-center border-b px-4 md:hidden">
           <SidebarTrigger />
-          <Separator orientation="vertical" className="h-4" />
-          <span className="text-sm text-muted-foreground">
-            Backoffice de gestión
-          </span>
-          <div className="ml-auto">
-            <BusquedaGlobal />
-          </div>
         </header>
         <div className="flex flex-1 flex-col gap-6 p-6">{children}</div>
       </SidebarInset>

@@ -179,7 +179,7 @@ ZQUARE (Unidad compartida del Workspace)
 - [x] Presupuestos con ítems por horas y versionado (editor con total en vivo, CRUD completo, verificado el 2026-07-23)
 - [x] Documentos: alta con link a Drive, tipos (incl. minuta) y tags, CRUD completo (verificado el 2026-07-23)
 - [x] Integración Drive etapa 1: carpetas automáticas al dar de alta cliente/proyecto + listado en vivo en las fichas (verificado end-to-end el 2026-07-23; env vars `GOOGLE_DRIVE_SHARED_ID` y `GOOGLE_SERVICE_ACCOUNT_KEY_B64` cargadas en Vercel el 2026-07-24 — pendiente confirmar con una alta de prueba en producción)
-- [x] Integración Drive etapa 2: subir archivos desde el backoffice (subida "resumable" directa navegador→Google, sin límite de tamaño; botón en la ficha del cliente con selección de subcarpeta y barra de progreso; verificado build el 2026-07-24. Pendiente probar en producción con archivo real — validar que Google acepte el PUT cross-origin/CORS; plan B si falla: subida por chunks vía servidor)
+- [x] Integración Drive etapa 2: subir archivos desde el backoffice (subida "resumable" directa navegador→Google, sin límite de tamaño; botón en la ficha del cliente con selección de subcarpeta y barra de progreso). **Verificado end-to-end en producción el 2026-07-24** (subida real OK, el PUT cross-origin/CORS funciona). Incluye botón "Crear carpeta en Drive" para clientes dados de alta antes de configurar Drive.
 - [ ] Migrar contenido de "Cognitiva" a la unidad compartida ZQUARE
 - [x] Búsqueda global (Cmd+K) sobre clientes, proyectos y documentos (verificado el 2026-07-23)
 - [x] Registro de decisiones (bitácora con participantes y vínculo opcional a cliente, verificado el 2026-07-23)

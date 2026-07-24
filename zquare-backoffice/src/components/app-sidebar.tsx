@@ -10,6 +10,7 @@ import {
   WalletIcon,
 } from "lucide-react"
 
+import { BusquedaGlobal } from "@/components/busqueda-global"
 import {
   Sidebar,
   SidebarContent,
@@ -22,6 +23,7 @@ import {
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { UserMenu } from "@/components/user-menu"
 
@@ -37,9 +39,17 @@ export function AppSidebar({ email }: { email: string }) {
   const pathname = usePathname()
 
   return (
-    <Sidebar>
-      <SidebarHeader className="px-4 py-3">
-        <span className="text-lg font-semibold tracking-tight">ZQUARE</span>
+    <Sidebar collapsible="icon">
+      <SidebarHeader className="gap-3 px-4 py-3 group-data-[collapsible=icon]:px-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-lg font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
+            ZQUARE
+          </span>
+          <SidebarTrigger className="text-muted-foreground" />
+        </div>
+        <div className="group-data-[collapsible=icon]:hidden">
+          <BusquedaGlobal />
+        </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
