@@ -53,6 +53,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { eliminarCliente } from "../actions"
 import { ArchivosDrive, BotonAbrirCarpeta } from "./archivos-drive"
 import { DocumentoAcciones } from "./documento-acciones"
+import { SubirArchivo } from "./subir-archivo"
 import { EditarCliente } from "./editar-cliente"
 import { NuevoDocumento } from "./nuevo-documento"
 import { NuevoPresupuesto } from "./nuevo-presupuesto"
@@ -177,7 +178,13 @@ export default async function ClientePage({
             <h2 className="text-lg font-semibold tracking-tight">
               Carpeta en Drive
             </h2>
-            <BotonAbrirCarpeta carpetaId={cliente.drive_folder_id} />
+            <div className="flex items-center gap-2">
+              <SubirArchivo
+                carpetaPadreId={cliente.drive_folder_id}
+                subcarpetas={["Contrato", "Minutas", "Presupuestos"]}
+              />
+              <BotonAbrirCarpeta carpetaId={cliente.drive_folder_id} />
+            </div>
           </div>
           <Suspense fallback={<Skeleton className="h-24 w-full rounded-lg" />}>
             <ArchivosDrive carpetaId={cliente.drive_folder_id} />
