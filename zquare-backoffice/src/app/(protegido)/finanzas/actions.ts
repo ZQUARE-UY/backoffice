@@ -28,6 +28,14 @@ function datosDesde(formData: FormData) {
   const tc_a_usd = moneda === "USD" ? 1 : tcIngresado
   if (tc_a_usd <= 0) throw new Error("El tipo de cambio debe ser mayor a 0")
 
+  // "Pagado por": un socio (su id) o el fondo común (socio_id NULL). Los
+  // ingresos siempre van al fondo común.
+  const pagadoPor = textoOpcional(formData.get("pagado_por"))
+  const socio_id =
+    tipo === "gasto" && pagadoPor && pagadoPor !== "fondo_comun"
+      ? pagadoPor
+      : null
+
   return {
     tipo,
     fecha: textoOpcional(formData.get("fecha")) ?? undefined,
@@ -36,7 +44,7 @@ function datosDesde(formData: FormData) {
     tc_a_usd,
     categoria: textoOpcional(formData.get("categoria")),
     descripcion: textoOpcional(formData.get("descripcion")),
-    socio_id: textoOpcional(formData.get("socio_id")),
+    socio_id,
     cliente_id: textoOpcional(formData.get("cliente_id")),
     comprobante_url: textoOpcional(formData.get("comprobante_url")),
   }

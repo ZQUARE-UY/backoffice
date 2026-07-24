@@ -82,19 +82,35 @@ export default async function FinanzasPage() {
     .reduce((acc, m) => acc + m.monto_usd, 0)
   const resultado = ingresos - gastos
 
+  // Caja del fondo común: ingresos menos gastos pagados con el fondo.
+  const gastosFondo = movimientos
+    .filter((m) => m.tipo === "gasto" && m.socio_id == null)
+    .reduce((acc, m) => acc + m.monto_usd, 0)
+  const caja = ingresos - gastosFondo
+
   return (
     <>
       <div className="flex items-center justify-between">
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-semibold tracking-tight">Finanzas</h1>
           <p className="text-muted-foreground">
-            Ingresos, gastos y aportes de los socios, consolidado en USD.
+            Ingresos y gastos de la empresa, consolidado en USD.
           </p>
         </div>
         <NuevoMovimiento socios={socios} clientes={clientes} />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader>
+            <CardDescription>Caja (fondo común)</CardDescription>
+            <CardTitle
+              className={`text-2xl ${caja < 0 ? "text-destructive" : ""}`}
+            >
+              {usd(caja)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
         <Card>
           <CardHeader>
             <CardDescription>Ingresos</CardDescription>
@@ -129,8 +145,8 @@ export default async function FinanzasPage() {
             </EmptyMedia>
             <EmptyTitle>Sin movimientos</EmptyTitle>
             <EmptyDescription>
-              Cargá el primer ingreso, gasto o aporte para empezar a llevar las
-              finanzas de la empresa.
+              Cargá el primer ingreso o gasto para empezar a llevar las finanzas
+              de la empresa.
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
@@ -145,7 +161,7 @@ export default async function FinanzasPage() {
                 <TableHead>Fecha</TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Detalle</TableHead>
-                <TableHead>Socio</TableHead>
+                <TableHead>Pagado por</TableHead>
                 <TableHead className="text-right">Monto</TableHead>
                 <TableHead className="text-right">USD</TableHead>
                 <TableHead className="w-0" />
@@ -173,7 +189,9 @@ export default async function FinanzasPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {m.socio_id ? nombreSocio.get(m.socio_id) ?? "—" : "—"}
+                      {m.socio_id
+                        ? nombreSocio.get(m.socio_id) ?? "—"
+                        : "Fondo común"}
                     </TableCell>
                     <TableCell className="text-right whitespace-nowrap tabular-nums">
                       {m.comprobante_url ? (
