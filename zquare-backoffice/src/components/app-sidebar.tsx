@@ -29,7 +29,7 @@ const secciones = [
   { titulo: "Inicio", href: "/", icono: HomeIcon, disponible: true },
   { titulo: "Clientes", href: "/clientes", icono: UsersIcon, disponible: true },
   { titulo: "Decisiones", href: "/decisiones", icono: ScrollTextIcon, disponible: true },
-  { titulo: "Documentos", href: "/documentos", icono: FileTextIcon, disponible: false },
+  { titulo: "Documentos", href: "/documentos", icono: FileTextIcon, disponible: true },
   { titulo: "Finanzas", href: "/finanzas", icono: WalletIcon, disponible: true },
 ]
 
