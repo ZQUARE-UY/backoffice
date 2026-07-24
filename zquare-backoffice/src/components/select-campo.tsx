@@ -13,12 +13,14 @@ export function SelectCampo({
   defaultValue,
   id,
   triggerClassName,
+  onValueChange,
 }: {
   name: string
   opciones: Opcion[]
   defaultValue: string
   id?: string
   triggerClassName?: string
+  onValueChange?: (valor: string) => void
 }) {
   return (
     <div className={cn("relative", triggerClassName)}>
@@ -26,6 +28,9 @@ export function SelectCampo({
         id={id}
         name={name}
         defaultValue={defaultValue}
+        onChange={
+          onValueChange ? (e) => onValueChange(e.target.value) : undefined
+        }
         className={cn(
           "flex h-8 w-full appearance-none items-center rounded-lg border border-input bg-transparent py-2 pr-8 pl-2.5 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50"
         )}

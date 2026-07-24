@@ -30,7 +30,7 @@ const secciones = [
   { titulo: "Clientes", href: "/clientes", icono: UsersIcon, disponible: true },
   { titulo: "Decisiones", href: "/decisiones", icono: ScrollTextIcon, disponible: true },
   { titulo: "Documentos", href: "/documentos", icono: FileTextIcon, disponible: false },
-  { titulo: "Finanzas", href: "/finanzas", icono: WalletIcon, disponible: false },
+  { titulo: "Finanzas", href: "/finanzas", icono: WalletIcon, disponible: true },
 ]
 
 export function AppSidebar({ email }: { email: string }) {

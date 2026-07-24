@@ -43,6 +43,33 @@ export type TipoDocumento = keyof typeof TIPOS_DOCUMENTO
 export const MONEDAS = ["USD", "UYU"] as const
 export type Moneda = (typeof MONEDAS)[number]
 
+// Tipos de movimiento financiero. `signo` indica si suma (+) o resta (−) al
+// resultado de la empresa; los aportes/retiros de socios no son resultado sino
+// movimientos de capital, por eso su signo es 0.
+export const TIPOS_MOVIMIENTO = {
+  ingreso: { label: "Ingreso", variant: "default" as const, signo: 1 },
+  gasto: { label: "Gasto", variant: "destructive" as const, signo: -1 },
+  aporte_socio: { label: "Aporte de socio", variant: "secondary" as const, signo: 0 },
+  retiro_socio: { label: "Retiro de socio", variant: "outline" as const, signo: 0 },
+}
+
+export type TipoMovimiento = keyof typeof TIPOS_MOVIMIENTO
+
+// Categorías sugeridas (no obligatorias): se muestran como datalist y se puede
+// escribir una libre. Consolidar una nueva es solo sumarla acá.
+export const CATEGORIAS_SUGERIDAS = [
+  "Cobro a cliente",
+  "Software y servicios",
+  "Diseño",
+  "Infraestructura",
+  "Dominio y hosting",
+  "Legal y contable",
+  "Marketing",
+  "Oficina",
+  "Impuestos",
+  "Otro",
+]
+
 export function formatearMonto(
   monto: number | null,
   moneda: string | null
@@ -140,4 +167,28 @@ export type Socio = {
   id: string
   nombre: string
   email: string
+}
+
+export type Movimiento = {
+  id: string
+  tipo: TipoMovimiento
+  fecha: string
+  moneda: Moneda
+  monto: number
+  tc_a_usd: number
+  monto_usd: number
+  categoria: string | null
+  descripcion: string | null
+  socio_id: string | null
+  cliente_id: string | null
+  proyecto_id: string | null
+  comprobante_url: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type BalanceSocio = {
+  socio_id: string
+  nombre: string
+  aporte_neto_usd: number
 }
