@@ -43,17 +43,18 @@ export type TipoDocumento = keyof typeof TIPOS_DOCUMENTO
 export const MONEDAS = ["USD", "UYU"] as const
 export type Moneda = (typeof MONEDAS)[number]
 
-// Tipos de movimiento financiero. `signo` indica si suma (+) o resta (−) al
-// resultado de la empresa; los aportes/retiros de socios no son resultado sino
-// movimientos de capital, por eso su signo es 0.
+// Tipos de movimiento financiero (modelo Splitwise). `signo` indica si suma (+)
+// o resta (−) al resultado de la empresa.
 export const TIPOS_MOVIMIENTO = {
   ingreso: { label: "Ingreso", variant: "default" as const, signo: 1 },
   gasto: { label: "Gasto", variant: "destructive" as const, signo: -1 },
-  aporte_socio: { label: "Aporte de socio", variant: "secondary" as const, signo: 0 },
-  retiro_socio: { label: "Retiro de socio", variant: "outline" as const, signo: 0 },
 }
 
 export type TipoMovimiento = keyof typeof TIPOS_MOVIMIENTO
+
+// Valor especial para "pagado por" cuando el pago sale del fondo común de la
+// empresa (en la base se guarda como socio_id NULL).
+export const FONDO_COMUN = "fondo_comun"
 
 // Categorías sugeridas (no obligatorias): se muestran como datalist y se puede
 // escribir una libre. Consolidar una nueva es solo sumarla acá.
@@ -195,5 +196,6 @@ export type Movimiento = {
 export type BalanceSocio = {
   socio_id: string
   nombre: string
-  aporte_neto_usd: number
+  pagado_usd: number
+  saldo_usd: number
 }

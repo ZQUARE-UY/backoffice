@@ -31,7 +31,7 @@ export default async function InicioPage() {
     supabase.auth.getUser(),
     supabase
       .from("movimientos")
-      .select("tipo, fecha, monto_usd")
+      .select("tipo, fecha, monto_usd, socio_id")
       .is("deleted_at", null),
     supabase.from("clientes").select("estado").is("deleted_at", null),
     supabase.from("proyectos").select("estado").is("deleted_at", null),
@@ -57,6 +57,13 @@ export default async function InicioPage() {
     .reduce((acc, m) => acc + m.monto_usd, 0)
   const resultado = ingresos - gastos
 
+  // Caja (fondo común): entra por ingresos, sale por gastos pagados con el
+  // fondo (socio_id null). Los gastos que fronteó un socio no tocan la caja.
+  const gastosFondo = movimientos
+    .filter((m) => m.tipo === "gasto" && m.socio_id == null)
+    .reduce((acc, m) => acc + m.monto_usd, 0)
+  const caja = ingresos - gastosFondo
+
   const clientesActivos = clientes.filter((c) => c.estado === "activo").length
   const proyectosEnCurso = proyectos.filter(
     (p) => p.estado === "en_curso"
@@ -72,6 +79,11 @@ export default async function InicioPage() {
     .filter((e) => e.cantidad > 0)
 
   const metricas = [
+    {
+      label: "Caja (fondo común)",
+      valor: formatearUsd(caja),
+      tono: caja < 0 ? "text-destructive" : "",
+    },
     {
       label: "Ingresos",
       valor: formatearUsd(ingresos),
@@ -92,7 +104,7 @@ export default async function InicioPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {metricas.map((m) => (
           <Card key={m.label}>
             <CardHeader>

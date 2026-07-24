@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
   CATEGORIAS_SUGERIDAS,
+  FONDO_COMUN,
   MONEDAS,
   TIPOS_MOVIMIENTO,
   type Cliente,
@@ -25,14 +26,15 @@ export function CamposMovimiento({
   clientes: Pick<Cliente, "id" | "nombre">[]
 }) {
   const [moneda, setMoneda] = useState<string>(movimiento?.moneda ?? "USD")
+  const [tipo, setTipo] = useState<string>(movimiento?.tipo ?? "gasto")
 
   const opcionesTipo = Object.entries(TIPOS_MOVIMIENTO).map(([valor, t]) => ({
     valor,
     label: t.label,
   }))
   const opcionesMoneda = MONEDAS.map((m) => ({ valor: m, label: m }))
-  const opcionesSocio = [
-    { valor: "", label: "Sin socio" },
+  const opcionesPagadoPor = [
+    { valor: FONDO_COMUN, label: "Fondo común" },
     ...socios.map((s) => ({ valor: s.id, label: s.nombre })),
   ]
   const opcionesCliente = [
@@ -48,8 +50,9 @@ export function CamposMovimiento({
           <SelectCampo
             id="tipo"
             name="tipo"
-            defaultValue={movimiento?.tipo ?? "gasto"}
+            defaultValue={tipo}
             opciones={opcionesTipo}
+            onValueChange={setTipo}
           />
         </Field>
         <Field>
@@ -132,15 +135,24 @@ export function CamposMovimiento({
       </Field>
 
       <div className="grid grid-cols-2 gap-4">
-        <Field>
-          <FieldLabel htmlFor="socio_id">Socio</FieldLabel>
-          <SelectCampo
-            id="socio_id"
-            name="socio_id"
-            defaultValue={movimiento?.socio_id ?? ""}
-            opciones={opcionesSocio}
-          />
-        </Field>
+        {tipo === "gasto" ? (
+          <Field>
+            <FieldLabel htmlFor="pagado_por">Pagado por</FieldLabel>
+            <SelectCampo
+              id="pagado_por"
+              name="pagado_por"
+              defaultValue={movimiento?.socio_id ?? FONDO_COMUN}
+              opciones={opcionesPagadoPor}
+            />
+          </Field>
+        ) : (
+          <Field>
+            <FieldLabel>Destino</FieldLabel>
+            <p className="flex h-8 items-center text-sm text-muted-foreground">
+              Fondo común
+            </p>
+          </Field>
+        )}
         <Field>
           <FieldLabel htmlFor="cliente_id">Cliente</FieldLabel>
           <SelectCampo
