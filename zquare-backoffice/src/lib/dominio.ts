@@ -81,6 +81,11 @@ export function formatearMonto(
   })}`.trim()
 }
 
+// Atajo para montos ya consolidados en USD: redondea a centavos y formatea.
+export function formatearUsd(monto: number): string {
+  return formatearMonto(Math.round(monto * 100) / 100, "USD")
+}
+
 export type Cliente = {
   id: string
   nombre: string

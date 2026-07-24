@@ -1,10 +1,10 @@
 import Link from "next/link"
 import { WalletIcon } from "lucide-react"
 
+import { BalanceSociosTabla } from "@/components/balance-socios-tabla"
 import { Badge } from "@/components/ui/badge"
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/table"
 import {
   formatearMonto,
+  formatearUsd,
   TIPOS_MOVIMIENTO,
   type BalanceSocio,
   type Cliente,
@@ -40,9 +41,7 @@ import { NuevoMovimiento } from "./nuevo-movimiento"
 
 export const metadata = { title: "Finanzas" }
 
-function usd(monto: number): string {
-  return formatearMonto(Math.round(monto * 100) / 100, "USD")
-}
+const usd = formatearUsd
 
 export default async function FinanzasPage() {
   const supabase = await createClient()
@@ -83,10 +82,6 @@ export default async function FinanzasPage() {
     .reduce((acc, m) => acc + m.monto_usd, 0)
   const resultado = ingresos - gastos
 
-  // Balance entre socios: cuánto está cada uno respecto del promedio aportado.
-  const totalAportado = balance.reduce((acc, b) => acc + b.aporte_neto_usd, 0)
-  const promedio = balance.length > 0 ? totalAportado / balance.length : 0
-
   return (
     <>
       <div className="flex items-center justify-between">
@@ -124,54 +119,7 @@ export default async function FinanzasPage() {
         </Card>
       </div>
 
-      {balance.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Balance de socios</CardTitle>
-            <CardDescription>
-              Aporte neto de cada socio (aportes menos retiros) y su diferencia
-              contra el promedio. Un valor negativo indica cuánto le falta poner
-              para emparejar.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Socio</TableHead>
-                  <TableHead className="text-right">Aporte neto</TableHead>
-                  <TableHead className="text-right">vs. promedio</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {balance.map((b) => {
-                  const diff = b.aporte_neto_usd - promedio
-                  return (
-                    <TableRow key={b.socio_id}>
-                      <TableCell className="font-medium">{b.nombre}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {usd(b.aporte_neto_usd)}
-                      </TableCell>
-                      <TableCell
-                        className={`text-right tabular-nums ${
-                          diff < -0.005
-                            ? "text-destructive"
-                            : diff > 0.005
-                              ? "text-emerald-600 dark:text-emerald-500"
-                              : "text-muted-foreground"
-                        }`}
-                      >
-                        {diff > 0.005 ? "+" : ""}
-                        {usd(diff)}
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
+      <BalanceSociosTabla balance={balance} />
 
       {movimientos.length === 0 ? (
         <Empty>
