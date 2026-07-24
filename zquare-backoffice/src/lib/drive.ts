@@ -134,3 +134,56 @@ export async function listarArchivos(
 export function urlCarpeta(carpetaId: string): string {
   return `https://drive.google.com/drive/folders/${carpetaId}`
 }
+
+// Devuelve la carpeta destino de una subida: si se indica una subcarpeta, la
+// asegura (crea si no existe) dentro del padre; si no, sube al padre directo.
+export async function resolverCarpetaDestino(
+  padreId: string,
+  subcarpeta?: string | null
+): Promise<string> {
+  if (!subcarpeta) return padreId
+  return asegurarCarpeta(subcarpeta, padreId)
+}
+
+// Inicia una subida "resumable" contra Drive con la cuenta de servicio y
+// devuelve la URL de sesión. El navegador después sube los bytes directo a esa
+// URL (sin pasar por nuestro servidor, así no hay límite de tamaño de Vercel).
+// La URL de sesión ya viene autorizada: no expone las credenciales.
+export async function iniciarSubidaResumable(
+  nombre: string,
+  carpetaId: string,
+  mimeType: string
+): Promise<string> {
+  const cred = credenciales()
+  const auth = new google.auth.JWT({
+    email: cred.client_email,
+    key: cred.private_key,
+    scopes: SCOPES,
+  })
+  const { token } = await auth.getAccessToken()
+  if (!token) throw new Error("No se pudo autenticar con Drive")
+
+  const params = new URLSearchParams({
+    uploadType: "resumable",
+    supportsAllDrives: "true",
+    fields: "id,name,webViewLink",
+  })
+  const res = await fetch(
+    `https://www.googleapis.com/upload/drive/v3/files?${params.toString()}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json; charset=UTF-8",
+        "X-Upload-Content-Type": mimeType || "application/octet-stream",
+      },
+      body: JSON.stringify({ name: nombre, parents: [carpetaId] }),
+    }
+  )
+  if (!res.ok) {
+    throw new Error(`No se pudo iniciar la subida a Drive (${res.status})`)
+  }
+  const location = res.headers.get("location")
+  if (!location) throw new Error("Drive no devolvió la URL de subida")
+  return location
+}
