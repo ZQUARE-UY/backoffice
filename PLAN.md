@@ -190,7 +190,7 @@ ZQUARE (Unidad compartida del Workspace)
 - [x] Movimientos: ingresos, gastos, aportes y retiros, multi-moneda con TC (monto en moneda original + `monto_usd` calculado por la DB; alta/edición/borrado; verificado build el 2026-07-24, pendiente aplicar migración y probar end-to-end)
 - [x] Categorías de gasto/ingreso (catálogo sugerido con datalist, categoría libre)
 - [x] Balance entre socios (vista `balance_socios`: aporte neto por socio vs. promedio, quién está abajo y por cuánto)
-- [ ] Carga de movimientos históricos (diseñadora, dominio, Workspace)
+- [~] Carga de movimientos históricos: seña diseñadora cargada (gasto + aporte de Joaquín, 230 USD, 2026-07-24) vía `supabase/seeds/`. Pendiente: dominio + Workspace de Martín (montos a confirmar)
 
 ### Fase 3 — Dashboard *(1-2 sesiones)*
 - [ ] Métricas: facturación, gastos, resultado, clientes activos, proyectos por estado
