@@ -3,6 +3,11 @@
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 
+import {
+  crearCarpetaCliente,
+  crearCarpetaProyecto,
+  driveConfigurado,
+} from "@/lib/drive"
 import { idSocioActual } from "@/lib/socio-actual"
 import { createClient } from "@/lib/supabase/server"
 
@@ -39,6 +44,19 @@ export async function crearCliente(formData: FormData) {
     .single()
 
   if (error) throw new Error(error.message)
+
+  // Carpeta en Drive (tolerante: si falla, el cliente igual queda creado).
+  if (driveConfigurado()) {
+    try {
+      const carpetaId = await crearCarpetaCliente(nombre)
+      await supabase
+        .from("clientes")
+        .update({ drive_folder_id: carpetaId })
+        .eq("id", data.id)
+    } catch (e) {
+      console.error("No se pudo crear la carpeta de Drive del cliente:", e)
+    }
+  }
 
   revalidatePath("/clientes")
   redirect(`/clientes/${data.id}`)
@@ -153,6 +171,30 @@ export async function crearProyecto(formData: FormData) {
     .single()
 
   if (error) throw new Error(error.message)
+
+  // Carpeta del proyecto dentro de la carpeta del cliente (si Drive está
+  // configurado y el cliente tiene su carpeta creada).
+  if (driveConfigurado()) {
+    try {
+      const { data: cli } = await supabase
+        .from("clientes")
+        .select("drive_folder_id")
+        .eq("id", clienteId)
+        .maybeSingle()
+      if (cli?.drive_folder_id) {
+        const carpetaId = await crearCarpetaProyecto(
+          nombre,
+          cli.drive_folder_id
+        )
+        await supabase
+          .from("proyectos")
+          .update({ drive_folder_id: carpetaId })
+          .eq("id", data.id)
+      }
+    } catch (e) {
+      console.error("No se pudo crear la carpeta de Drive del proyecto:", e)
+    }
+  }
 
   revalidatePath(`/clientes/${clienteId}`)
   redirect(`/proyectos/${data.id}`)

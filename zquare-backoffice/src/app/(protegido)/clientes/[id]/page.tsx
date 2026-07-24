@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import {
@@ -47,8 +48,10 @@ import { createClient } from "@/lib/supabase/server"
 
 import { Badge } from "@/components/ui/badge"
 import { BotonEliminar } from "@/components/boton-eliminar"
+import { Skeleton } from "@/components/ui/skeleton"
 
 import { eliminarCliente } from "../actions"
+import { ArchivosDrive, BotonAbrirCarpeta } from "./archivos-drive"
 import { DocumentoAcciones } from "./documento-acciones"
 import { EditarCliente } from "./editar-cliente"
 import { NuevoDocumento } from "./nuevo-documento"
@@ -167,6 +170,20 @@ export default async function ClientePage({
           </CardContent>
         </Card>
       </div>
+
+      {cliente.drive_folder_id && (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold tracking-tight">
+              Carpeta en Drive
+            </h2>
+            <BotonAbrirCarpeta carpetaId={cliente.drive_folder_id} />
+          </div>
+          <Suspense fallback={<Skeleton className="h-24 w-full rounded-lg" />}>
+            <ArchivosDrive carpetaId={cliente.drive_folder_id} />
+          </Suspense>
+        </div>
+      )}
 
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold tracking-tight">Proyectos</h2>

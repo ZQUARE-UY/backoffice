@@ -63,6 +63,7 @@ export type Cliente = {
   estado: EstadoCliente
   origen: string | null
   notas: string | null
+  drive_folder_id: string | null
   created_at: string
   updated_at: string
 }
@@ -80,6 +81,7 @@ export type Proyecto = {
   horas_reales: number | null
   monto_acordado: number | null
   moneda: Moneda | null
+  drive_folder_id: string | null
   created_at: string
   updated_at: string
 }
