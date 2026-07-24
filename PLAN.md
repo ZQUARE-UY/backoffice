@@ -190,12 +190,12 @@ ZQUARE (Unidad compartida del Workspace)
 - [x] Movimientos: ingresos, gastos, aportes y retiros, multi-moneda con TC (monto en moneda original + `monto_usd` calculado por la DB; alta/edición/borrado; verificado build el 2026-07-24, pendiente aplicar migración y probar end-to-end)
 - [x] Categorías de gasto/ingreso (catálogo sugerido con datalist, categoría libre)
 - [x] Balance entre socios (vista `balance_socios`: aporte neto por socio vs. promedio, quién está abajo y por cuánto)
-- [ ] Carga de movimientos históricos (diseñadora, dominio, Workspace)
+- [~] Carga de movimientos históricos: seña diseñadora cargada (gasto + aporte de Joaquín, 230 USD, 2026-07-24) vía `supabase/seeds/`. Pendiente: dominio + Workspace de Martín (montos a confirmar)
 
 ### Fase 3 — Dashboard *(1-2 sesiones)*
-- [ ] Métricas: facturación, gastos, resultado, clientes activos, proyectos por estado
-- [ ] Evolución mensual y por moneda
-- [ ] Vista de balance de socios
+- [x] Métricas en la home: ingresos, gastos, resultado (USD), clientes activos, proyectos en curso, y proyectos por estado (verificado build el 2026-07-24)
+- [x] Evolución mensual (ingresos vs. gastos últimos 6 meses, barras CSS sin librerías)
+- [x] Vista de balance de socios (componente compartido con Finanzas)
 
 ### Fase 4 — Herramientas con IA *(backlog, cuando haya datos)*
 - [ ] Generador de presupuestos: a partir del histórico de `presupuesto_items`, la IA sugiere ítems, horas y tarifas para un nuevo presupuesto
@@ -246,6 +246,10 @@ de Google en la consola del Workspace.
 - **2026-07-24** — Fase 2 etapa 1: módulo de Finanzas. Movimientos
   multi-moneda (ingreso/gasto/aporte/retiro) con tipo de cambio y consolidado
   en USD, categorías sugeridas, comprobante como link a Drive, y balance entre
-  socios (aporte neto vs. promedio). Pendiente: aplicar la migración
-  `20260724000001_movimientos.sql` en Supabase y cargar los movimientos
-  históricos conocidos (seña diseñadora, dominio, Workspace).
+  socios (aporte neto vs. promedio). Migración aplicada y desplegada a
+  producción (PR #1). Seña de la diseñadora cargada (gasto + aporte de Joaquín).
+  Pendiente: montos de Martín (dominio + Workspace) para completar históricos.
+- **2026-07-24** — Fase 3: Dashboard en la home. Métricas de ingresos/gastos/
+  resultado (USD), clientes activos, proyectos en curso y por estado; evolución
+  mensual (barras CSS, sin librerías de gráficos) y balance de socios (componente
+  compartido con Finanzas).
