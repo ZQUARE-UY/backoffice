@@ -73,11 +73,11 @@ export function BusquedaGlobal() {
       <button
         type="button"
         onClick={() => setAbierto(true)}
-        className="flex items-center gap-2 rounded-lg border border-input bg-background px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
+        className="flex w-full items-center gap-2 rounded-lg border border-input bg-background px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
       >
-        <SearchIcon className="size-4" />
-        <span className="hidden sm:inline">Buscar…</span>
-        <kbd className="ml-2 hidden rounded border bg-muted px-1.5 font-mono text-[10px] sm:inline">
+        <SearchIcon className="size-4 shrink-0" />
+        <span>Buscar…</span>
+        <kbd className="ml-auto hidden rounded border bg-muted px-1.5 font-mono text-[10px] sm:inline">
           ⌘K
         </kbd>
       </button>

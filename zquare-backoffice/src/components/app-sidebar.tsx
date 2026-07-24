@@ -10,6 +10,7 @@ import {
   WalletIcon,
 } from "lucide-react"
 
+import { BusquedaGlobal } from "@/components/busqueda-global"
 import {
   Sidebar,
   SidebarContent,
@@ -38,8 +39,9 @@ export function AppSidebar({ email }: { email: string }) {
 
   return (
     <Sidebar>
-      <SidebarHeader className="px-4 py-3">
+      <SidebarHeader className="gap-3 px-4 py-3">
         <span className="text-lg font-semibold tracking-tight">ZQUARE</span>
+        <BusquedaGlobal />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
