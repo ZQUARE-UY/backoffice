@@ -62,6 +62,34 @@ export async function crearCliente(formData: FormData) {
   redirect(`/clientes/${data.id}`)
 }
 
+// Crea la carpeta de Drive de un cliente que todavía no la tiene (clientes
+// dados de alta antes de que Drive quedara configurado). Guarda de socio
+// porque usa la cuenta de servicio (saltea RLS).
+export async function crearCarpetaClienteExistente(id: string) {
+  if (!(await idSocioActual())) throw new Error("No autorizado")
+  if (!driveConfigurado()) throw new Error("Drive no está configurado")
+
+  const supabase = await createClient()
+  const { data: cli, error: errSel } = await supabase
+    .from("clientes")
+    .select("nombre, drive_folder_id")
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle()
+  if (errSel) throw new Error(errSel.message)
+  if (!cli) throw new Error("Cliente no encontrado")
+  if (cli.drive_folder_id) return // ya tiene carpeta
+
+  const carpetaId = await crearCarpetaCliente(cli.nombre)
+  const { error } = await supabase
+    .from("clientes")
+    .update({ drive_folder_id: carpetaId })
+    .eq("id", id)
+  if (error) throw new Error(error.message)
+
+  revalidatePath(`/clientes/${id}`)
+}
+
 export async function actualizarCliente(id: string, formData: FormData) {
   const nombre = (formData.get("nombre") as string | null)?.trim()
   if (!nombre) throw new Error("El nombre es obligatorio")

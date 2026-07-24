@@ -50,8 +50,11 @@ import { Badge } from "@/components/ui/badge"
 import { BotonEliminar } from "@/components/boton-eliminar"
 import { Skeleton } from "@/components/ui/skeleton"
 
+import { driveConfigurado } from "@/lib/drive"
+
 import { eliminarCliente } from "../actions"
 import { ArchivosDrive, BotonAbrirCarpeta } from "./archivos-drive"
+import { CrearCarpetaDrive } from "./crear-carpeta-drive"
 import { DocumentoAcciones } from "./documento-acciones"
 import { SubirArchivo } from "./subir-archivo"
 import { EditarCliente } from "./editar-cliente"
@@ -172,23 +175,35 @@ export default async function ClientePage({
         </Card>
       </div>
 
-      {cliente.drive_folder_id && (
+      {(cliente.drive_folder_id || driveConfigurado()) && (
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold tracking-tight">
               Carpeta en Drive
             </h2>
-            <div className="flex items-center gap-2">
-              <SubirArchivo
-                carpetaPadreId={cliente.drive_folder_id}
-                subcarpetas={["Contrato", "Minutas", "Presupuestos"]}
-              />
-              <BotonAbrirCarpeta carpetaId={cliente.drive_folder_id} />
-            </div>
+            {cliente.drive_folder_id ? (
+              <div className="flex items-center gap-2">
+                <SubirArchivo
+                  carpetaPadreId={cliente.drive_folder_id}
+                  subcarpetas={["Contrato", "Minutas", "Presupuestos"]}
+                />
+                <BotonAbrirCarpeta carpetaId={cliente.drive_folder_id} />
+              </div>
+            ) : (
+              <CrearCarpetaDrive clienteId={cliente.id} />
+            )}
           </div>
-          <Suspense fallback={<Skeleton className="h-24 w-full rounded-lg" />}>
-            <ArchivosDrive carpetaId={cliente.drive_folder_id} />
-          </Suspense>
+          {cliente.drive_folder_id ? (
+            <Suspense fallback={<Skeleton className="h-24 w-full rounded-lg" />}>
+              <ArchivosDrive carpetaId={cliente.drive_folder_id} />
+            </Suspense>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Este cliente todavía no tiene carpeta en Drive (se creó antes de
+              activar la integración). Creala para poder subir y listar
+              archivos.
+            </p>
+          )}
         </div>
       )}
 
