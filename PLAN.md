@@ -187,9 +187,9 @@ ZQUARE (Unidad compartida del Workspace)
 - [ ] (Opcional) Google Picker para elegir archivos de Drive desde la app
 
 ### Fase 2 — Finanzas *(2 sesiones)*
-- [ ] Movimientos: ingresos, gastos, aportes y retiros, multi-moneda con TC
-- [ ] Categorías de gasto/ingreso
-- [ ] Balance entre socios (quién está abajo y por cuánto)
+- [x] Movimientos: ingresos, gastos, aportes y retiros, multi-moneda con TC (monto en moneda original + `monto_usd` calculado por la DB; alta/edición/borrado; verificado build el 2026-07-24, pendiente aplicar migración y probar end-to-end)
+- [x] Categorías de gasto/ingreso (catálogo sugerido con datalist, categoría libre)
+- [x] Balance entre socios (vista `balance_socios`: aporte neto por socio vs. promedio, quién está abajo y por cuánto)
 - [ ] Carga de movimientos históricos (diseñadora, dominio, Workspace)
 
 ### Fase 3 — Dashboard *(1-2 sesiones)*
@@ -243,3 +243,9 @@ de Google en la consola del Workspace.
   estructura real de "Cognitiva") y decisión de usar Drive como nube del
   sistema vía API (carpetas automáticas, listado en vivo, subida de archivos),
   con migración a Unidad compartida ZQUARE.
+- **2026-07-24** — Fase 2 etapa 1: módulo de Finanzas. Movimientos
+  multi-moneda (ingreso/gasto/aporte/retiro) con tipo de cambio y consolidado
+  en USD, categorías sugeridas, comprobante como link a Drive, y balance entre
+  socios (aporte neto vs. promedio). Pendiente: aplicar la migración
+  `20260724000001_movimientos.sql` en Supabase y cargar los movimientos
+  históricos conocidos (seña diseñadora, dominio, Workspace).
