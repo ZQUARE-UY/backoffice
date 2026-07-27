@@ -120,6 +120,75 @@ export function urlCarpeta(carpetaId: string): string {
   return `https://drive.google.com/drive/folders/${carpetaId}`
 }
 
+export type ArchivoDriveIndexable = {
+  id: string
+  nombre: string
+  mimeType: string
+  url: string
+  modificado: string
+  tamano: number
+}
+
+// Lista TODOS los archivos (no carpetas) de la unidad compartida en una sola
+// consulta paginada — para el índice de búsqueda semántica.
+export async function listarTodosLosArchivos(): Promise<
+  ArchivoDriveIndexable[]
+> {
+  const drive = driveClient()
+  const archivos: ArchivoDriveIndexable[] = []
+  let pageToken: string | undefined
+
+  do {
+    const { data } = await drive.files.list({
+      q: `mimeType != '${CARPETA_MIME}' and trashed = false`,
+      fields:
+        "nextPageToken, files(id, name, mimeType, webViewLink, modifiedTime, size)",
+      pageSize: 1000,
+      pageToken,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+      corpora: "drive",
+      driveId: sharedDriveId(),
+    })
+    for (const f of data.files ?? []) {
+      archivos.push({
+        id: f.id!,
+        nombre: f.name ?? "(sin nombre)",
+        mimeType: f.mimeType ?? "",
+        url: f.webViewLink ?? `https://drive.google.com/file/d/${f.id}/view`,
+        modificado: f.modifiedTime ?? new Date(0).toISOString(),
+        tamano: f.size ? Number(f.size) : 0,
+      })
+    }
+    pageToken = data.nextPageToken ?? undefined
+  } while (pageToken)
+
+  return archivos
+}
+
+// Exporta un archivo nativo de Google (Doc/Sheet/Slides) como texto plano.
+export async function exportarTextoDrive(
+  fileId: string,
+  mimeExport: string
+): Promise<string> {
+  const drive = driveClient()
+  const { data } = await drive.files.export(
+    { fileId, mimeType: mimeExport },
+    { responseType: "text" }
+  )
+  return typeof data === "string" ? data : String(data)
+}
+
+// Descarga el contenido binario de un archivo común (docx, pdf, txt...).
+export async function descargarArchivoDrive(fileId: string): Promise<Buffer> {
+  const drive = driveClient()
+  const { data } = await drive.files.get(
+    { fileId, alt: "media", supportsAllDrives: true },
+    { responseType: "arraybuffer" }
+  )
+  return Buffer.from(data as ArrayBuffer)
+}
+
 // Devuelve la carpeta destino de una subida: si se indica una subcarpeta, la
 // asegura (crea si no existe) dentro del padre; si no, sube al padre directo.
 export async function resolverCarpetaDestino(

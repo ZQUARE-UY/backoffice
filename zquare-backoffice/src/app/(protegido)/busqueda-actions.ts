@@ -1,9 +1,10 @@
 "use server"
 
+import { generarEmbeddings } from "@/lib/embeddings"
 import { createClient } from "@/lib/supabase/server"
 
 export type ResultadoBusqueda = {
-  kind: "cliente" | "proyecto" | "documento"
+  kind: "cliente" | "proyecto" | "documento" | "contenido"
   id: string
   titulo: string
   subtitulo: string | null
@@ -82,4 +83,54 @@ export async function buscar(query: string): Promise<ResultadoBusqueda[]> {
   }
 
   return resultados
+}
+
+// Umbral de similitud coseno (gte-small): por debajo el resultado suele ser ruido.
+const UMBRAL_SIMILITUD = 0.82
+
+type Fragmento = {
+  origen: "drive" | "decision"
+  origen_id: string
+  titulo: string
+  url: string | null
+  fragmento: string
+  similitud: number
+}
+
+// Búsqueda semántica sobre el contenido indexado (archivos de Drive y
+// decisiones). Devuelve [] si el índice está vacío o la Edge Function de
+// embeddings todavía no está deployada — el Cmd+K sigue funcionando igual.
+export async function buscarContenido(
+  query: string
+): Promise<ResultadoBusqueda[]> {
+  const q = query.trim()
+  if (q.length < 4) return []
+
+  try {
+    const [embedding] = await generarEmbeddings([q])
+    const supabase = await createClient()
+    const { data, error } = await supabase.rpc("buscar_fragmentos", {
+      consulta: JSON.stringify(embedding),
+      cantidad: 8,
+    })
+    if (error) return []
+
+    const vistos = new Set<string>()
+    const resultados: ResultadoBusqueda[] = []
+    for (const f of (data ?? []) as Fragmento[]) {
+      // Un resultado por documento (el fragmento más parecido llega primero).
+      if (f.similitud < UMBRAL_SIMILITUD || vistos.has(f.origen_id)) continue
+      vistos.add(f.origen_id)
+      resultados.push({
+        kind: "contenido",
+        id: f.origen_id,
+        titulo: f.titulo,
+        subtitulo: f.fragmento.slice(0, 80),
+        href: f.url ?? "/documentos",
+      })
+    }
+    return resultados.slice(0, 5)
+  } catch {
+    return []
+  }
 }
