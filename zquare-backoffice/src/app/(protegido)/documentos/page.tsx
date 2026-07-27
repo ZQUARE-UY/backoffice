@@ -19,8 +19,14 @@ import {
 } from "@/components/ui/table"
 import { TIPOS_DOCUMENTO, type Documento } from "@/lib/dominio"
 import { createClient } from "@/lib/supabase/server"
+import { estadoIndice } from "./indice-actions"
+import { IndiceBusqueda } from "./indice-busqueda"
 
 export const metadata = { title: "Documentos" }
+
+// La indexación semántica procesa lotes de archivos de Drive: le damos el
+// máximo de tiempo permitido en Vercel Hobby.
+export const maxDuration = 60
 
 type FilaCliente = { nombre: string } | { nombre: string }[] | null
 
@@ -31,11 +37,14 @@ function nombreCliente(rel: FilaCliente): string | null {
 
 export default async function DocumentosPage() {
   const supabase = await createClient()
-  const { data } = await supabase
-    .from("documentos")
-    .select("*, clientes(nombre)")
-    .is("deleted_at", null)
-    .order("fecha", { ascending: false })
+  const [{ data }, indice] = await Promise.all([
+    supabase
+      .from("documentos")
+      .select("*, clientes(nombre)")
+      .is("deleted_at", null)
+      .order("fecha", { ascending: false }),
+    estadoIndice(),
+  ])
 
   const documentos = (data ?? []) as (Documento & { clientes: FilaCliente })[]
 
@@ -112,6 +121,8 @@ export default async function DocumentosPage() {
           </Table>
         </div>
       )}
+
+      <IndiceBusqueda estado={indice} />
     </>
   )
 }

@@ -2,9 +2,19 @@
 
 import { useEffect, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { FileTextIcon, FolderIcon, SearchIcon, UsersIcon } from "lucide-react"
+import {
+  FileTextIcon,
+  FolderIcon,
+  SearchIcon,
+  SparklesIcon,
+  UsersIcon,
+} from "lucide-react"
 
-import { buscar, type ResultadoBusqueda } from "@/app/(protegido)/busqueda-actions"
+import {
+  buscar,
+  buscarContenido,
+  type ResultadoBusqueda,
+} from "@/app/(protegido)/busqueda-actions"
 import {
   Command,
   CommandDialog,
@@ -19,12 +29,14 @@ const ICONOS = {
   cliente: UsersIcon,
   proyecto: FolderIcon,
   documento: FileTextIcon,
+  contenido: SparklesIcon,
 }
 
 const GRUPOS: { kind: ResultadoBusqueda["kind"]; label: string }[] = [
   { kind: "cliente", label: "Clientes" },
   { kind: "proyecto", label: "Proyectos" },
   { kind: "documento", label: "Documentos" },
+  { kind: "contenido", label: "Contenido (semántico)" },
 ]
 
 export function BusquedaGlobal() {
@@ -48,14 +60,30 @@ export function BusquedaGlobal() {
 
   // Búsqueda con debounce. Solo dispara con 2+ caracteres; cuando la query es
   // corta no limpiamos estado acá (lo derivamos en el render con `activo`).
+  // La búsqueda literal llega primero; la semántica (más lenta) se agrega
+  // cuando responde, salvo que la query haya cambiado en el medio.
   useEffect(() => {
     if (query.trim().length < 2) return
+    let cancelada = false
     const t = setTimeout(() => {
       iniciarTransicion(async () => {
-        setResultados(await buscar(query))
+        const literales = await buscar(query)
+        if (cancelada) return
+        setResultados(literales)
+        const contenido = await buscarContenido(query)
+        if (cancelada || contenido.length === 0) return
+        // No duplicar documentos que ya aparecieron en la búsqueda literal.
+        const titulos = new Set(literales.map((r) => r.titulo.toLowerCase()))
+        setResultados([
+          ...literales,
+          ...contenido.filter((r) => !titulos.has(r.titulo.toLowerCase())),
+        ])
       })
     }, 200)
-    return () => clearTimeout(t)
+    return () => {
+      cancelada = true
+      clearTimeout(t)
+    }
   }, [query])
 
   const activo = query.trim().length >= 2
@@ -65,6 +93,11 @@ export function BusquedaGlobal() {
     setAbierto(false)
     setQuery("")
     setResultados([])
+    // Los resultados de contenido de Drive abren el archivo en Drive.
+    if (href.startsWith("http")) {
+      window.open(href, "_blank", "noopener,noreferrer")
+      return
+    }
     router.push(href)
   }
 

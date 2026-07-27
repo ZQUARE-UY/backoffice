@@ -167,7 +167,9 @@ ZQUARE (Unidad compartida del Workspace)
 - [x] OAuth de Google configurado (consentimiento Interno, solo cuentas @zquare.uy) — login probado con éxito el 2026-07-23
 - [x] Deploy en Vercel (Hobby) — repo público `github.com/ZQUARE-UY/backoffice`, producción en `https://backoffice-zeta-teal.vercel.app` (login end-to-end OK el 2026-07-23)
 - [x] DNS: subdominio `backoffice.zquare.uy` funcionando con SSL (verificado por TXT desde la cuenta Vercel de Martín, 2026-07-23)
-- [ ] Invitar a los 3 socios a la organización GitHub ZQUARE-UY
+- [x] Invitar a los 3 socios a la organización GitHub ZQUARE-UY (invitaciones
+  enviadas el 2026-07-27 a nicolas@, francisco@ y martin@zquare.uy; pendiente
+  que cada uno acepte)
 
 > **Notas de deploy (para no repetir tropiezos):**
 > - Vercel Hobby no deploya repos privados de una organización → el repo se dejó público (no contiene secretos; `.env.local` está en gitignore). Alternativa futura si se quiere privado: Cloudflare Pages (gratis) o Vercel Pro.
@@ -201,7 +203,7 @@ ZQUARE (Unidad compartida del Workspace)
 - [x] Movimientos: ingresos, gastos, aportes y retiros, multi-moneda con TC (monto en moneda original + `monto_usd` calculado por la DB; alta/edición/borrado; verificado build el 2026-07-24, pendiente aplicar migración y probar end-to-end)
 - [x] Categorías de gasto/ingreso (catálogo sugerido con datalist, categoría libre)
 - [x] Balance entre socios (vista `balance_socios`: aporte neto por socio vs. promedio, quién está abajo y por cuánto)
-- [~] Carga de movimientos históricos: seña diseñadora cargada (gasto + aporte de Joaquín, 230 USD, 2026-07-24) vía `supabase/seeds/`. Pendiente: dominio + Workspace de Martín (montos a confirmar)
+- [x] Carga de movimientos históricos: seña diseñadora (gasto + aporte de Joaquín, 230 USD) vía `supabase/seeds/`; dominio + Workspace cargados por Martín desde la app (2026-07-27)
 
 ### Fase 3 — Dashboard *(1-2 sesiones)*
 - [x] Métricas en la home: ingresos, gastos, resultado (USD), clientes activos, proyectos en curso, y proyectos por estado (verificado build el 2026-07-24)
@@ -214,15 +216,22 @@ ZQUARE (Unidad compartida del Workspace)
   servicio. Las invitaciones de Zoom/Teams/Meet que mandan los clientes llegan
   por mail, Google Calendar las agrega solo y el panel las muestra con botón
   para unirse (detecta el proveedor por el link). Eventos duplicados entre
-  calendarios se unifican por iCalUID. (Código deployado el 2026-07-24;
-  pendiente setup: habilitar Calendar API en el proyecto de la cuenta de
-  servicio y que cada socio comparta su calendario con ella.)
+  calendarios se unifican por iCalUID. (Código deployado el 2026-07-24.
+  Setup 2026-07-27: Calendar API habilitada y 3 de 4 calendarios compartidos;
+  falta solo que Nicolás comparta el suyo con la cuenta de servicio.)
 
 ### Fase 4 — Herramientas con IA *(backlog, cuando haya datos)*
 - [ ] Generador de presupuestos: a partir del histórico de `presupuesto_items`, la IA sugiere ítems, horas y tarifas para un nuevo presupuesto
 - [ ] Plantillas de contratos: base editable + generación de variantes
 - [ ] Estimador de alcance y tiempos: usa horas estimadas vs. reales de proyectos pasados
-- [ ] Búsqueda semántica sobre documentos y decisiones ("repositorio de información")
+- [~] Búsqueda semántica sobre documentos y decisiones ("repositorio de
+  información"): implementada el 2026-07-27 con pgvector + embeddings gte-small
+  (Edge Function de Supabase, costo cero). Indexa el contenido real de los
+  archivos de Drive (Google Docs/Sheets/Slides, docx, pdf, txt) y las
+  decisiones; resultados en el Cmd+K (grupo "Contenido") y gestión del índice
+  en /documentos. Pendiente setup: aplicar la migración
+  `20260727000001_busqueda_semantica.sql` y deployar la Edge Function
+  `embeddings` desde el dashboard de Supabase.
 
 ## 7. Seguridad y acceso
 
