@@ -36,6 +36,9 @@ export function IndiceBusqueda({ estado }: { estado: EstadoIndice }) {
           `Indexados ${total} documentos${r.pendientes > 0 ? `, faltan ${r.pendientes}…` : "."}`
         )
         if (r.pendientes === 0) break
+        // Sin avance en toda una pasada: cortar en vez de reintentar infinito
+        // (los errores acumulados se muestran abajo).
+        if (r.procesados === 0) break
       }
       if (errores.length > 0) {
         toast.error(`Índice actualizado con ${errores.length} errores`, {
