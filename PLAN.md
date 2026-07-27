@@ -221,6 +221,14 @@ ZQUARE (Unidad compartida del Workspace)
   falta solo que Nicolás comparta el suyo con la cuenta de servicio.)
 
 ### Fase 4 — Herramientas con IA *(backlog, cuando haya datos)*
+- [~] MCP server del backoffice (2026-07-27): endpoint remoto en
+  `/api/mcp/mcp` (Streamable HTTP vía mcp-handler) para hablar con los datos
+  desde Claude Code/Desktop. 8 herramientas: buscar (literal+semántica),
+  listar/ficha de clientes, resumen de finanzas, movimientos, decisiones, y
+  altas de decisión/movimiento (sin ediciones ni borrados). Auth por token
+  bearer por socio (`MCP_TOKENS`); usa la service role key. Pendiente setup:
+  cargar `SUPABASE_SERVICE_ROLE_KEY` y `MCP_TOKENS` en Vercel. Segunda etapa
+  posible: OAuth MCP para conectarlo desde claude.ai web/celular.
 - [ ] Generador de presupuestos: a partir del histórico de `presupuesto_items`, la IA sugiere ítems, horas y tarifas para un nuevo presupuesto
 - [ ] Plantillas de contratos: base editable + generación de variantes
 - [ ] Estimador de alcance y tiempos: usa horas estimadas vs. reales de proyectos pasados
