@@ -1,7 +1,9 @@
+import { Suspense } from "react"
 import Link from "next/link"
 
 import { BalanceSociosTabla } from "@/components/balance-socios-tabla"
 import { EvolucionMensual } from "@/components/evolucion-mensual"
+import { ProximasReuniones } from "@/components/proximas-reuniones"
 import { Badge } from "@/components/ui/badge"
 import {
   Card,
@@ -9,12 +11,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   ESTADOS_PROYECTO,
   formatearUsd,
   type BalanceSocio,
   type EstadoProyecto,
   type Movimiento,
+  type Socio,
 } from "@/lib/dominio"
 import { createClient } from "@/lib/supabase/server"
 
@@ -27,6 +31,7 @@ export default async function InicioPage() {
     { data: clientesData },
     { data: proyectosData },
     { data: balanceData },
+    { data: sociosData },
   ] = await Promise.all([
     supabase.auth.getUser(),
     supabase
@@ -36,6 +41,7 @@ export default async function InicioPage() {
     supabase.from("clientes").select("estado").is("deleted_at", null),
     supabase.from("proyectos").select("estado").is("deleted_at", null),
     supabase.from("balance_socios").select("*").order("nombre"),
+    supabase.from("socios").select("id, nombre, email").is("deleted_at", null),
   ])
 
   const user = userData.user
@@ -48,6 +54,7 @@ export default async function InicioPage() {
   const clientes = (clientesData ?? []) as { estado: string }[]
   const proyectos = (proyectosData ?? []) as { estado: EstadoProyecto }[]
   const balance = (balanceData ?? []) as BalanceSocio[]
+  const socios = (sociosData ?? []) as Socio[]
 
   const ingresos = movimientos
     .filter((m) => m.tipo === "ingreso")
@@ -116,6 +123,10 @@ export default async function InicioPage() {
           </Card>
         ))}
       </div>
+
+      <Suspense fallback={<Skeleton className="h-40 w-full rounded-xl" />}>
+        <ProximasReuniones socios={socios} />
+      </Suspense>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">

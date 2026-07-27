@@ -197,6 +197,16 @@ ZQUARE (Unidad compartida del Workspace)
 - [x] Evolución mensual (ingresos vs. gastos últimos 6 meses, barras CSS sin librerías)
 - [x] Vista de balance de socios (componente compartido con Finanzas)
 
+### Post-MVP — Calendario de reuniones
+- [x] Panel "Próximas reuniones" en el dashboard: agenda unificada de los 4
+  socios (próximos 7 días) leída de sus Google Calendars vía la cuenta de
+  servicio. Las invitaciones de Zoom/Teams/Meet que mandan los clientes llegan
+  por mail, Google Calendar las agrega solo y el panel las muestra con botón
+  para unirse (detecta el proveedor por el link). Eventos duplicados entre
+  calendarios se unifican por iCalUID. (Código deployado el 2026-07-24;
+  pendiente setup: habilitar Calendar API en el proyecto de la cuenta de
+  servicio y que cada socio comparta su calendario con ella.)
+
 ### Fase 4 — Herramientas con IA *(backlog, cuando haya datos)*
 - [ ] Generador de presupuestos: a partir del histórico de `presupuesto_items`, la IA sugiere ítems, horas y tarifas para un nuevo presupuesto
 - [ ] Plantillas de contratos: base editable + generación de variantes
