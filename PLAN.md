@@ -229,9 +229,13 @@ ZQUARE (Unidad compartida del Workspace)
   (Edge Function de Supabase, costo cero). Indexa el contenido real de los
   archivos de Drive (Google Docs/Sheets/Slides, docx, pdf, txt) y las
   decisiones; resultados en el Cmd+K (grupo "Contenido") y gestión del índice
-  en /documentos. Pendiente setup: aplicar la migración
-  `20260727000001_busqueda_semantica.sql` y deployar la Edge Function
-  `embeddings` desde el dashboard de Supabase.
+  en /documentos. Setup aplicado y corpus indexado el 2026-07-27.
+  **Limitación conocida:** gte-small es un modelo entrenado en inglés y
+  rankea mal el contenido en español (verificado: consultas de prueba no
+  distinguen el doc correcto de uno irrelevante, similitudes ~0.8 parejas).
+  Mejora pendiente decidida con Joaquín: migrar a un proveedor multilingüe
+  (OpenAI text-embedding-3-small recomendado, ~centavos; alternativas Voyage
+  o Gemini pago). Requiere: API key, migración a vector(1536) y reindexar.
 
 ## 7. Seguridad y acceso
 
