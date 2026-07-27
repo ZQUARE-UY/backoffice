@@ -180,10 +180,21 @@ ZQUARE (Unidad compartida del Workspace)
 - [x] Documentos: alta con link a Drive, tipos (incl. minuta) y tags, CRUD completo (verificado el 2026-07-23)
 - [x] Integración Drive etapa 1: carpetas automáticas al dar de alta cliente/proyecto + listado en vivo en las fichas (verificado end-to-end el 2026-07-23; env vars `GOOGLE_DRIVE_SHARED_ID` y `GOOGLE_SERVICE_ACCOUNT_KEY_B64` cargadas en Vercel el 2026-07-24 — pendiente confirmar con una alta de prueba en producción)
 - [x] Integración Drive etapa 2: subir archivos desde el backoffice (subida "resumable" directa navegador→Google, sin límite de tamaño; botón en la ficha del cliente con selección de subcarpeta y barra de progreso). **Verificado end-to-end en producción el 2026-07-24** (subida real OK, el PUT cross-origin/CORS funciona). Incluye botón "Crear carpeta en Drive" para clientes dados de alta antes de configurar Drive.
-- [ ] Migrar contenido de "Cognitiva" a la unidad compartida ZQUARE
+- [x] Migrar contenido de "Cognitiva" a la unidad compartida ZQUARE (hecho el
+  2026-07-27 vía API con la cuenta de servicio: 47 archivos copiados a la
+  estructura estándar, 1 duplicado descartado, 0 errores. Los Google Docs se
+  migraron por export+reimport porque el Gmail de Alan está sin cuota y Google
+  bloquea copiarlos — nota: por eso pierden historial/comentarios, solo
+  contenido. Los originales siguen en la cuenta de Alan; se pueden archivar
+  cuando quieran. Si joaco1119 tiene contenido aparte no incluido en la
+  carpeta compartida, repetir el proceso.)
 - [x] Búsqueda global (Cmd+K) sobre clientes, proyectos y documentos (verificado el 2026-07-23)
 - [x] Registro de decisiones (bitácora con participantes y vínculo opcional a cliente, verificado el 2026-07-23)
-- [ ] Carga de datos históricos (clientes y docs que ya tienen en Drive)
+- [x] Carga de datos históricos: seed `supabase/seeds/20260727_clientes_historicos.sql`
+  aplicado el 2026-07-27 (Iberpark + proyectos Modelo Sommelier y Sistema
+  contabilidad en propuesta; Pedro Montero con Voice to image cancelado;
+  proyecto PEO entregado bajo Punta Del Este Operadora; todos vinculados a sus
+  carpetas de Drive migradas).
 - [ ] (Opcional) Google Picker para elegir archivos de Drive desde la app
 
 ### Fase 2 — Finanzas *(2 sesiones)*
@@ -259,6 +270,14 @@ de Google en la consola del Workspace.
   socios (aporte neto vs. promedio). Migración aplicada y desplegada a
   producción (PR #1). Seña de la diseñadora cargada (gasto + aporte de Joaquín).
   Pendiente: montos de Martín (dominio + Workspace) para completar históricos.
+- **2026-07-27** — Migración de "Cognitiva" (carpeta "ZQUARE" de Alan) a la
+  unidad compartida, vía API con la cuenta de servicio. Mapeo: minutas →
+  Empresa/Minutas internas; plantillas de contrato → Empresa/Plantillas;
+  Iberpark (Presupuestos + proyectos Modelo Sommelier y Sistema contabilidad),
+  Punta Del Este Operadora (= PEO, proyecto PEO) y Pedro Montero (Voice to
+  image) → Clientes/ con estructura estándar.
+  LandingPage (web propia, vacía) → Empresa/. Google Docs migrados por
+  export+reimport (Gmail de Alan sin cuota).
 - **2026-07-24** — Fase 3: Dashboard en la home. Métricas de ingresos/gastos/
   resultado (USD), clientes activos, proyectos en curso y por estado; evolución
   mensual (barras CSS, sin librerías de gráficos) y balance de socios (componente
