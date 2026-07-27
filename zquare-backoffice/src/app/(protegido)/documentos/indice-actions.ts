@@ -9,7 +9,11 @@ import { createClient } from "@/lib/supabase/server"
 // pasarse del tiempo máximo de una server action en Vercel: el cliente vuelve
 // a llamar mientras queden pendientes.
 
-const LOTE_ARCHIVOS = 4
+// Presupuesto de fragmentos por pasada: con la Edge Function limitada a 2
+// textos por invocación (~1s c/u), ~40 fragmentos son ~25s — margen de sobra
+// dentro de los 60s de Vercel. Siempre se procesa al menos un archivo.
+const PRESUPUESTO_FRAGMENTOS = 40
+const MAX_ARCHIVOS_POR_PASADA = 8
 
 export type EstadoIndice = {
   fragmentos: number
@@ -153,10 +157,23 @@ export async function indexar(): Promise<ResultadoIndexacion> {
     return !previo || new Date(previo) < new Date(a.modificado)
   })
 
-  for (const archivo of pendientes.slice(0, LOTE_ARCHIVOS)) {
+  let fragmentosUsados = 0
+  let archivosEstaPasada = 0
+
+  for (const archivo of pendientes) {
+    // Cortar la pasada cuando se agota el presupuesto (pero al menos 1 archivo).
+    if (
+      archivosEstaPasada > 0 &&
+      (fragmentosUsados >= PRESUPUESTO_FRAGMENTOS ||
+        archivosEstaPasada >= MAX_ARCHIVOS_POR_PASADA)
+    ) {
+      break
+    }
+    archivosEstaPasada++
     try {
       const texto = await extraerTexto(archivo)
       const fragmentos = trocearTexto(texto ?? "")
+      fragmentosUsados += Math.max(1, fragmentos.length)
       const embeddings = await generarEmbeddings(fragmentos)
 
       await supabase
@@ -200,7 +217,7 @@ export async function indexar(): Promise<ResultadoIndexacion> {
 
   return {
     procesados,
-    pendientes: Math.max(0, pendientes.length - LOTE_ARCHIVOS),
+    pendientes: Math.max(0, pendientes.length - archivosEstaPasada),
     errores,
   }
 }

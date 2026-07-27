@@ -5,7 +5,10 @@ import { createClient } from "@/lib/supabase/server"
 // Genera embeddings llamando a la Edge Function `embeddings` (gte-small,
 // 384 dimensiones). La invocación viaja con el JWT del socio logueado.
 
-const LOTE_EDGE = 30 // máximo de textos por invocación (límite de la función)
+// Máximo de textos por invocación. El plan free de Supabase corta la Edge
+// Function por CPU (~2s por request): con gte-small entran 2-3 textos de
+// ~1200 caracteres por llamada; con 4+ devuelve WORKER_RESOURCE_LIMIT.
+const LOTE_EDGE = 2
 
 export async function generarEmbeddings(textos: string[]): Promise<number[][]> {
   if (textos.length === 0) return []
