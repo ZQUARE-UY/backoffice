@@ -6,16 +6,17 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { createClient } from "@/lib/supabase/client"
 
-export function BotonGoogle() {
+export function BotonGoogle({ next }: { next?: string }) {
   const [cargando, setCargando] = useState(false)
 
   async function iniciarSesion() {
     setCargando(true)
     const supabase = createClient()
+    const destino = next ? `?next=${encodeURIComponent(next)}` : ""
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback${destino}`,
         queryParams: {
           hd: "zquare.uy",
           prompt: "select_account",

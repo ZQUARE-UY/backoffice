@@ -35,11 +35,18 @@ export async function updateSession(request: NextRequest) {
   const esRutaPublica =
     path.startsWith("/login") ||
     path.startsWith("/auth") ||
-    path.startsWith("/acceso-denegado")
+    path.startsWith("/acceso-denegado") ||
+    // Endpoints OAuth del MCP: discovery, registro y token son públicos por
+    // protocolo (la página /oauth/autorizar sí exige sesión).
+    path.startsWith("/api/oauth") ||
+    path.startsWith("/.well-known")
 
   if (!user && !esRutaPublica) {
     const url = request.nextUrl.clone()
     url.pathname = "/login"
+    // Preservar el destino (ej. /oauth/autorizar?...) para volver tras el login.
+    url.search = ""
+    url.searchParams.set("next", request.nextUrl.pathname + request.nextUrl.search)
     return NextResponse.redirect(url)
   }
 
@@ -59,7 +66,15 @@ export async function updateSession(request: NextRequest) {
     (path.startsWith("/login") || path.startsWith("/acceso-denegado"))
   ) {
     const url = request.nextUrl.clone()
-    url.pathname = "/"
+    const next = request.nextUrl.searchParams.get("next")
+    if (next?.startsWith("/") && !next.startsWith("//")) {
+      const destino = new URL(next, request.nextUrl.origin)
+      url.pathname = destino.pathname
+      url.search = destino.search
+    } else {
+      url.pathname = "/"
+      url.search = ""
+    }
     return NextResponse.redirect(url)
   }
 

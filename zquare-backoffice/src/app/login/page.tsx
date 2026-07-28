@@ -11,9 +11,9 @@ import { BotonGoogle } from "./boton-google"
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; detalle?: string }>
+  searchParams: Promise<{ error?: string; detalle?: string; next?: string }>
 }) {
-  const { error, detalle } = await searchParams
+  const { error, detalle, next } = await searchParams
 
   return (
     <main className="flex min-h-svh items-center justify-center p-6">
@@ -25,7 +25,7 @@ export default async function LoginPage({
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <BotonGoogle />
+          <BotonGoogle next={next} />
           {error && (
             <div className="flex flex-col gap-1 text-center">
               <p className="text-sm text-destructive">
