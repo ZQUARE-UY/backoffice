@@ -220,15 +220,25 @@ ZQUARE (Unidad compartida del Workspace)
   Setup 2026-07-27: Calendar API habilitada y 3 de 4 calendarios compartidos;
   falta solo que Nicolás comparta el suyo con la cuenta de servicio.)
 
+### Pendiente — Identidad visual *(esperando a la diseñadora)*
+- [ ] Rediseño de la UI del backoffice: pedido explícito de Joaquín desde el
+  arranque — que NO se vea como una UI genérica generada por IA (hoy usa el
+  tema default de shadcn sin personalizar). Decisión 2026-07-27: esperar la
+  imagen de marca de la diseñadora (seña pagada, entrega pendiente) y aplicar
+  esa identidad (paleta, tipografías, logo) al backoffice y a la web pública
+  en un mismo pase, para que todo ZQUARE sea coherente.
+- [ ] Web pública zquare.uy: misma espera — arrancarla directo con el diseño
+  de marca, no con un diseño provisorio.
+
 ### Fase 4 — Herramientas con IA *(backlog, cuando haya datos)*
-- [~] MCP server del backoffice (2026-07-27): endpoint remoto en
+- [x] MCP server del backoffice (2026-07-27, funcionando en producción): endpoint remoto en
   `/api/mcp/mcp` (Streamable HTTP vía mcp-handler) para hablar con los datos
   desde Claude Code/Desktop. 8 herramientas: buscar (literal+semántica),
   listar/ficha de clientes, resumen de finanzas, movimientos, decisiones, y
   altas de decisión/movimiento (sin ediciones ni borrados). Auth por token
-  bearer por socio (`MCP_TOKENS`); usa la service role key. Pendiente setup:
-  cargar `SUPABASE_SERVICE_ROLE_KEY` y `MCP_TOKENS` en Vercel. Segunda etapa
-  posible: OAuth MCP para conectarlo desde claude.ai web/celular.
+  bearer por socio (`MCP_TOKENS`); usa la service role key. Env vars cargadas,
+  verificado end-to-end y tokens repartidos a los socios el 2026-07-27.
+  Segunda etapa posible: OAuth MCP para claude.ai web/celular.
 - [ ] Generador de presupuestos: a partir del histórico de `presupuesto_items`, la IA sugiere ítems, horas y tarifas para un nuevo presupuesto
 - [ ] Plantillas de contratos: base editable + generación de variantes
 - [ ] Estimador de alcance y tiempos: usa horas estimadas vs. reales de proyectos pasados
