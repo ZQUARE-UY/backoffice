@@ -309,6 +309,12 @@ de Google en la consola del Workspace.
   image) → Clientes/ con estructura estándar.
   LandingPage (web propia, vacía) → Empresa/. Google Docs migrados por
   export+reimport (Gmail de Alan sin cuota).
+- **2026-07-27 (2)** — Búsqueda semántica (Fase 4 etapa 1) con pgvector +
+  gte-small, operativa con limitación en español anotada. MCP server remoto
+  del backoffice (8 herramientas, tokens por socio) funcionando en producción
+  y repartido a los socios. Navegación de carpetas de Drive dentro de la app
+  y vista previa de documentos en modal (visor embebido de Google). Decisión:
+  identidad visual (backoffice + web) espera la entrega de la diseñadora.
 - **2026-07-24** — Fase 3: Dashboard en la home. Métricas de ingresos/gastos/
   resultado (USD), clientes activos, proyectos en curso y por estado; evolución
   mensual (barras CSS, sin librerías de gráficos) y balance de socios (componente
