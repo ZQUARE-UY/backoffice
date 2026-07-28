@@ -238,6 +238,12 @@ ZQUARE (Unidad compartida del Workspace)
   altas de decisión/movimiento (sin ediciones ni borrados). Auth por token
   bearer por socio (`MCP_TOKENS`); usa la service role key. Env vars cargadas,
   verificado end-to-end y tokens repartidos a los socios el 2026-07-27.
+  **Principio de desarrollo (2026-07-28):** las herramientas MCP se definen a
+  mano (qué se expone y qué se puede escribir es una decisión, no un reflejo
+  automático de la DB) → cada módulo nuevo del backoffice debe sumar su
+  herramienta MCP en el mismo PR, para que Claude nunca quede desactualizado
+  respecto de lo que el backoffice sabe hacer. Los datos y columnas nuevas de
+  entidades ya expuestas sí se ven solos, sin tocar nada.
 - [x] OAuth 2.1 para el MCP (2026-07-28): permite conectar el backoffice como
   conector en claude.ai web/celular (que no acepta tokens pegados a mano).
   El backoffice actúa de authorization server completo: discovery
