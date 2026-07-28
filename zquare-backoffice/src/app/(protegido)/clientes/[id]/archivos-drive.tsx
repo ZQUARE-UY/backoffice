@@ -9,8 +9,11 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { listarArchivos, urlCarpeta } from "@/lib/drive"
+import { NavegadorDrive } from "./navegador-drive"
 
-// Server component: lista en vivo los archivos de la carpeta de Drive.
+// Server component: trae el primer nivel de la carpeta de Drive y delega la
+// navegación (carpetas adentro del backoffice, archivos abren en Drive) al
+// navegador client-side.
 export async function ArchivosDrive({ carpetaId }: { carpetaId: string }) {
   let archivos
   try {
@@ -39,30 +42,7 @@ export async function ArchivosDrive({ carpetaId }: { carpetaId: string }) {
     )
   }
 
-  return (
-    <div className="flex flex-col divide-y rounded-lg border">
-      {archivos.map((a) => (
-        <a
-          key={a.id}
-          href={a.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-3 px-3 py-2 text-sm hover:bg-muted"
-        >
-          {a.iconUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={a.iconUrl} alt="" className="size-4 shrink-0" />
-          ) : (
-            <FolderIcon className="size-4 shrink-0 text-muted-foreground" />
-          )}
-          <span className="flex-1 truncate">{a.nombre}</span>
-          {a.esCarpeta && (
-            <span className="text-xs text-muted-foreground">carpeta</span>
-          )}
-        </a>
-      ))}
-    </div>
-  )
+  return <NavegadorDrive carpetaId={carpetaId} inicial={archivos} />
 }
 
 export function BotonAbrirCarpeta({ carpetaId }: { carpetaId: string }) {
