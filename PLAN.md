@@ -253,10 +253,15 @@ ZQUARE (Unidad compartida del Workspace)
   `/api/oauth/token` con PKCE S256 obligatorio y refresh tokens con rotación.
   Tokens opacos guardados hasheados (sha256) en `mcp_oauth_*`; los tokens
   estáticos de MCP_TOKENS siguen funcionando igual que antes.
-  **Para estrenarlo:** aplicar `supabase/migrations/20260728000001_mcp_oauth.sql`
-  en el SQL Editor y en claude.ai → Configuración → Conectores → "Agregar
-  conector personalizado" con la URL `https://backoffice.zquare.uy/api/mcp/mcp`:
-  pide autorizar con la cuenta @zquare.uy y listo.
+  **En producción desde el 2026-07-28:** migración aplicada, PR #12 mergeado
+  y Joaquín conectado desde claude.ai (PC y celular). Cada socio lo agrega en
+  su propia cuenta de claude.ai (requiere plan pago): Configuración →
+  Conectores → "Añadir conector personalizado", nombre libre, URL
+  `https://backoffice.zquare.uy/api/mcp/mcp`, campos de OAuth vacíos →
+  Conectar → autorizar con la cuenta @zquare.uy. En el celular aparece solo
+  (misma cuenta). Instrucciones repartidas a los 3 socios el 2026-07-28;
+  pendiente que cada uno se conecte. Quien use cuenta free de claude.ai
+  sigue con su token estático en Claude Code/Desktop.
 - [ ] Generador de presupuestos: a partir del histórico de `presupuesto_items`, la IA sugiere ítems, horas y tarifas para un nuevo presupuesto
 - [ ] Plantillas de contratos: base editable + generación de variantes
 - [ ] Estimador de alcance y tiempos: usa horas estimadas vs. reales de proyectos pasados
@@ -329,8 +334,10 @@ de Google en la consola del Workspace.
   export+reimport (Gmail de Alan sin cuota).
 - **2026-07-28** — OAuth 2.1 para el MCP server: conexión desde claude.ai
   web/celular vía conector personalizado, con consentimiento sobre la sesión
-  de Google de cada socio. Migración `20260728000001_mcp_oauth.sql` pendiente
-  de aplicar en producción al momento del PR.
+  de Google de cada socio. Desplegado y funcionando en producción el mismo
+  día (PR #12 mergeado, migración aplicada, Joaquín conectado desde PC y
+  celular, instrucciones repartidas a los otros 3 socios). Además: principio
+  de desarrollo "módulo nuevo → herramienta MCP en el mismo PR".
 - **2026-07-24** — Fase 3: Dashboard en la home. Métricas de ingresos/gastos/
   resultado (USD), clientes activos, proyectos en curso y por estado; evolución
   mensual (barras CSS, sin librerías de gráficos) y balance de socios (componente
