@@ -1,9 +1,16 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { ChevronRightIcon, FolderIcon } from "lucide-react"
+import { ChevronRightIcon, ExternalLinkIcon, FolderIcon } from "lucide-react"
 import { toast } from "sonner"
 
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Spinner } from "@/components/ui/spinner"
 import type { ArchivoDrive } from "@/lib/drive"
 import { listarCarpetaDrive } from "./archivos-drive-actions"
@@ -21,6 +28,7 @@ export function NavegadorDrive({
 }) {
   const [ruta, setRuta] = useState<Nivel[]>([{ id: carpetaId, nombre: "Drive" }])
   const [archivos, setArchivos] = useState(inicial)
+  const [vistaPrevia, setVistaPrevia] = useState<ArchivoDrive | null>(null)
   const [cargando, iniciarTransicion] = useTransition()
 
   function cargar(nuevaRuta: Nivel[]) {
@@ -91,12 +99,11 @@ export function NavegadorDrive({
               <ChevronRightIcon className="size-4 text-muted-foreground" />
             </button>
           ) : (
-            <a
+            <button
               key={a.id}
-              href={a.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-3 px-3 py-2 text-sm hover:bg-muted"
+              type="button"
+              onClick={() => setVistaPrevia(a)}
+              className="flex items-center gap-3 px-3 py-2 text-left text-sm hover:bg-muted"
             >
               {a.iconUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -105,10 +112,48 @@ export function NavegadorDrive({
                 <FolderIcon className="size-4 shrink-0 text-muted-foreground" />
               )}
               <span className="flex-1 truncate">{a.nombre}</span>
-            </a>
+            </button>
           )
         )}
       </div>
+
+      {/* Vista previa embebida con el visor de Google (usa la sesión de
+          Google del navegador; si no hay acceso, queda el botón a Drive). */}
+      <Dialog
+        open={vistaPrevia !== null}
+        onOpenChange={(abierto) => !abierto && setVistaPrevia(null)}
+      >
+        <DialogContent className="flex h-[85vh] flex-col gap-3 sm:max-w-4xl">
+          <DialogHeader className="flex-row items-center justify-between gap-3 space-y-0 pr-8">
+            <DialogTitle className="truncate text-base">
+              {vistaPrevia?.nombre}
+            </DialogTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              nativeButton={false}
+              render={
+                <a
+                  href={vistaPrevia?.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                />
+              }
+            >
+              Abrir en Drive
+              <ExternalLinkIcon data-icon="inline-end" />
+            </Button>
+          </DialogHeader>
+          {vistaPrevia && (
+            <iframe
+              src={`https://drive.google.com/file/d/${vistaPrevia.id}/preview`}
+              title={vistaPrevia.nombre}
+              className="w-full flex-1 rounded-md border"
+              allow="autoplay"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
