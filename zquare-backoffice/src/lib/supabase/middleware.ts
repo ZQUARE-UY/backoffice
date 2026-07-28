@@ -39,7 +39,9 @@ export async function updateSession(request: NextRequest) {
     // Endpoints OAuth del MCP: discovery, registro y token son públicos por
     // protocolo (la página /oauth/autorizar sí exige sesión).
     path.startsWith("/api/oauth") ||
-    path.startsWith("/.well-known")
+    path.startsWith("/.well-known") ||
+    // Cron de Vercel: se autentica por CRON_SECRET, no por sesión.
+    path.startsWith("/api/cron")
 
   if (!user && !esRutaPublica) {
     const url = request.nextUrl.clone()
