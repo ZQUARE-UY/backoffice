@@ -5,7 +5,10 @@ import { createClient } from "@/lib/supabase/server"
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get("code")
-  const next = searchParams.get("next") ?? "/"
+  // Solo rutas internas: evita que un `next` manipulado redirija afuera.
+  const nextCrudo = searchParams.get("next") ?? "/"
+  const next =
+    nextCrudo.startsWith("/") && !nextCrudo.startsWith("//") ? nextCrudo : "/"
 
   // Detrás del proxy de Vercel, `origin` puede no reflejar el host público.
   const forwardedHost = request.headers.get("x-forwarded-host")

@@ -5,7 +5,7 @@
 > **Documento vivo.** Esto es la versión 1 de una idea que va a evolucionar:
 > nada de lo escrito acá es definitivo. Cualquier módulo, prioridad o decisión
 > se puede cambiar en cualquier momento — se actualiza este documento y se
-> registra en el historial de cambios al final. Última actualización: 2026-07-22.
+> registra en el historial de cambios al final. Última actualización: 2026-07-28.
 
 ## 1. Objetivo
 
@@ -238,7 +238,25 @@ ZQUARE (Unidad compartida del Workspace)
   altas de decisión/movimiento (sin ediciones ni borrados). Auth por token
   bearer por socio (`MCP_TOKENS`); usa la service role key. Env vars cargadas,
   verificado end-to-end y tokens repartidos a los socios el 2026-07-27.
-  Segunda etapa posible: OAuth MCP para claude.ai web/celular.
+  **Principio de desarrollo (2026-07-28):** las herramientas MCP se definen a
+  mano (qué se expone y qué se puede escribir es una decisión, no un reflejo
+  automático de la DB) → cada módulo nuevo del backoffice debe sumar su
+  herramienta MCP en el mismo PR, para que Claude nunca quede desactualizado
+  respecto de lo que el backoffice sabe hacer. Los datos y columnas nuevas de
+  entidades ya expuestas sí se ven solos, sin tocar nada.
+- [x] OAuth 2.1 para el MCP (2026-07-28): permite conectar el backoffice como
+  conector en claude.ai web/celular (que no acepta tokens pegados a mano).
+  El backoffice actúa de authorization server completo: discovery
+  (`/.well-known/oauth-authorization-server` y `oauth-protected-resource`),
+  registro dinámico de clientes (RFC 7591), consentimiento en
+  `/oauth/autorizar` (usa la sesión de Google + allowlist de socios) y
+  `/api/oauth/token` con PKCE S256 obligatorio y refresh tokens con rotación.
+  Tokens opacos guardados hasheados (sha256) en `mcp_oauth_*`; los tokens
+  estáticos de MCP_TOKENS siguen funcionando igual que antes.
+  **Para estrenarlo:** aplicar `supabase/migrations/20260728000001_mcp_oauth.sql`
+  en el SQL Editor y en claude.ai → Configuración → Conectores → "Agregar
+  conector personalizado" con la URL `https://backoffice.zquare.uy/api/mcp/mcp`:
+  pide autorizar con la cuenta @zquare.uy y listo.
 - [ ] Generador de presupuestos: a partir del histórico de `presupuesto_items`, la IA sugiere ítems, horas y tarifas para un nuevo presupuesto
 - [ ] Plantillas de contratos: base editable + generación de variantes
 - [ ] Estimador de alcance y tiempos: usa horas estimadas vs. reales de proyectos pasados
@@ -309,6 +327,10 @@ de Google en la consola del Workspace.
   image) → Clientes/ con estructura estándar.
   LandingPage (web propia, vacía) → Empresa/. Google Docs migrados por
   export+reimport (Gmail de Alan sin cuota).
+- **2026-07-28** — OAuth 2.1 para el MCP server: conexión desde claude.ai
+  web/celular vía conector personalizado, con consentimiento sobre la sesión
+  de Google de cada socio. Migración `20260728000001_mcp_oauth.sql` pendiente
+  de aplicar en producción al momento del PR.
 - **2026-07-24** — Fase 3: Dashboard en la home. Métricas de ingresos/gastos/
   resultado (USD), clientes activos, proyectos en curso y por estado; evolución
   mensual (barras CSS, sin librerías de gráficos) y balance de socios (componente

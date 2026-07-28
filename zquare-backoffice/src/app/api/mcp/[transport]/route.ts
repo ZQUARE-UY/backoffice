@@ -1,13 +1,17 @@
 import { createMcpHandler, withMcpAuth } from "mcp-handler"
 import { z } from "zod"
 
+import { socioDelAccessToken } from "@/lib/mcp-oauth"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 // MCP server del backoffice: expone los datos de la empresa a Claude
-// (Claude Code / Desktop) vía Streamable HTTP en /api/mcp/mcp.
+// (Claude Code / Desktop / claude.ai) vía Streamable HTTP en /api/mcp/mcp.
 //
-// Auth: token bearer por socio. MCP_TOKENS = "email:token,email:token,..."
-// (los tokens se generan con `openssl rand -hex 24` y viven en Vercel).
+// Auth, dos vías equivalentes:
+// - Token estático por socio: MCP_TOKENS = "email:token,..." en Vercel
+//   (Claude Code / Desktop, pegando el token a mano).
+// - OAuth 2.1 (claude.ai web/celular): tokens emitidos en /oauth/autorizar,
+//   guardados hasheados en mcp_oauth_tokens.
 // El endpoint usa la service role key de Supabase (el control de acceso es
 // el token, no RLS), por eso las escrituras registran created_by del socio.
 
@@ -425,14 +429,17 @@ const handler = createMcpHandler(
   { basePath: "/api/mcp", maxDuration: 60, disableSse: true }
 )
 
-// Autenticación: bearer token por socio (MCP_TOKENS). Sin token válido → 401.
+// Autenticación: token estático (MCP_TOKENS) u OAuth (mcp_oauth_tokens).
+// Sin token válido → 401 con WWW-Authenticate apuntando al discovery, que es
+// lo que dispara el flujo OAuth en claude.ai.
 const handlerConAuth = withMcpAuth(
   handler,
-  (_req, bearer) => {
-    const email = socioDelToken(bearer)
+  async (_req, bearer) => {
+    if (!bearer) return undefined
+    const email = socioDelToken(bearer) ?? (await socioDelAccessToken(bearer))
     if (!email) return undefined
     return {
-      token: bearer!,
+      token: bearer,
       clientId: email,
       scopes: ["backoffice"],
       extra: { email },
