@@ -281,6 +281,11 @@ ZQUARE (Unidad compartida del Workspace)
   `embeddings` quedó obsoleta (borrada del repo; se puede eliminar del
   dashboard de Supabase). Requiere migración `20260728000002` + reindexar
   desde /documentos.
+  **Reindexado automático (2026-07-28):** cron diario de Vercel (6:00 UTC,
+  `vercel.json`) que llama a `/api/cron/reindexar` (auth por `CRON_SECRET`
+  en Vercel) y reindexa solo lo modificado en Drive y decisiones — el Cmd+K
+  se mantiene al día sin tocar "Actualizar índice" (el botón sigue para
+  reindexar al instante).
 
 ## 7. Seguridad y acceso
 
@@ -336,6 +341,8 @@ de Google en la consola del Workspace.
   image) → Clientes/ con estructura estándar.
   LandingPage (web propia, vacía) → Empresa/. Google Docs migrados por
   export+reimport (Gmail de Alan sin cuota).
+- **2026-07-28** — Reindexado automático: cron diario de Vercel que mantiene
+  el índice de búsqueda al día (solo procesa lo modificado).
 - **2026-07-28** — Embeddings multilingües: la búsqueda semántica pasa de
   gte-small a bge-m3 (Cloudflare Workers AI, capa gratis). Verificado con el
   corpus real: consultas en español ahora rankean el doc correcto primero.
