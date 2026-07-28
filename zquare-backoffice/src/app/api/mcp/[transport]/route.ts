@@ -56,6 +56,50 @@ async function socioIdPorEmail(email: string): Promise<string | null> {
   return data?.id ?? null
 }
 
+const ESTADOS_TAREA = ["backlog", "en_curso", "en_revision", "hecho"] as const
+const PRIORIDADES_TAREA = ["baja", "media", "alta", "urgente"] as const
+
+// Las tarjetas se referencian por número ("ZQ-12" o 12): es el identificador
+// corto que ven los socios en el tablero.
+function numeroDeTarea(referencia: string | number): number | null {
+  const n = Number(String(referencia).replace(/^zq-?/i, "").trim())
+  return Number.isInteger(n) && n > 0 ? n : null
+}
+
+// Una tarjeta movida o creada por un agente entra arriba de su columna, donde
+// se ve sin scrollear. `orden` es numeric a propósito (ver la migración).
+async function ordenAlTopeDeColumna(estado: string): Promise<number> {
+  const supabase = createAdminClient()
+  const { data } = await supabase
+    .from("tareas")
+    .select("orden")
+    .eq("estado", estado)
+    .is("deleted_at", null)
+    .order("orden", { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  return Number(data?.orden ?? 0) - 1
+}
+
+// Resuelve un cliente/proyecto/socio por nombre aproximado. Devuelve undefined
+// si no hay que tocar el campo, o null si se pidió pero no existe.
+async function idPorNombre(
+  tabla: "clientes" | "proyectos",
+  nombre: string | undefined
+): Promise<string | null | undefined> {
+  if (nombre === undefined) return undefined
+  if (nombre === "") return null
+  const supabase = createAdminClient()
+  const { data } = await supabase
+    .from(tabla)
+    .select("id")
+    .is("deleted_at", null)
+    .ilike("nombre", `%${nombre.trim()}%`)
+    .limit(1)
+    .maybeSingle()
+  return data?.id ?? null
+}
+
 // Embedding de la consulta (Workers AI bge-m3). Null si falla: la búsqueda
 // literal sigue funcionando sin la parte semántica.
 async function embeddingConsulta(consulta: string): Promise<number[] | null> {
@@ -75,13 +119,13 @@ const handler = createMcpHandler(
       {
         title: "Buscar en el backoffice",
         description:
-          "Busca clientes, proyectos y documentos por nombre (literal) y contenido de documentos de Drive y decisiones (semántico, multilingüe).",
+          "Busca clientes, proyectos, documentos y tarjetas del tablero por nombre (literal) y contenido de documentos de Drive y decisiones (semántico, multilingüe).",
         inputSchema: { consulta: z.string().min(2) },
       },
       async ({ consulta }) => {
         const supabase = createAdminClient()
         const like = `%${consulta.replace(/[(),*%_]/g, " ").trim()}%`
-        const [clientes, proyectos, documentos] = await Promise.all([
+        const [clientes, proyectos, documentos, tareas] = await Promise.all([
           supabase
             .from("clientes")
             .select("id, nombre, estado")
@@ -97,6 +141,12 @@ const handler = createMcpHandler(
           supabase
             .from("documentos")
             .select("titulo, tipo, drive_url, clientes(nombre)")
+            .is("deleted_at", null)
+            .ilike("titulo", like)
+            .limit(5),
+          supabase
+            .from("tareas")
+            .select("numero, titulo, estado, prioridad")
             .is("deleted_at", null)
             .ilike("titulo", like)
             .limit(5),
@@ -123,6 +173,10 @@ const handler = createMcpHandler(
           clientes: clientes.data ?? [],
           proyectos: proyectos.data ?? [],
           documentos: documentos.data ?? [],
+          tareas: (tareas.data ?? []).map(({ numero, ...t }) => ({
+            codigo: `ZQ-${numero}`,
+            ...t,
+          })),
           contenido_semantico: contenido,
         })
       }
@@ -153,7 +207,7 @@ const handler = createMcpHandler(
       {
         title: "Ficha de un cliente",
         description:
-          "Devuelve la ficha completa de un cliente (por nombre, no hace falta exacto): proyectos, presupuestos, documentos, decisiones y movimientos asociados.",
+          "Devuelve la ficha completa de un cliente (por nombre, no hace falta exacto): proyectos, presupuestos, documentos, decisiones, movimientos y tarjetas del tablero asociadas.",
         inputSchema: { nombre: z.string().min(2) },
       },
       async ({ nombre }) => {
@@ -167,7 +221,7 @@ const handler = createMcpHandler(
           .maybeSingle()
         if (!cliente) return texto(`No encontré un cliente que matchee "${nombre}".`)
 
-        const [proyectos, presupuestos, documentos, decisiones, movimientos] =
+        const [proyectos, presupuestos, documentos, decisiones, movimientos, tareas] =
           await Promise.all([
             supabase
               .from("proyectos")
@@ -202,6 +256,12 @@ const handler = createMcpHandler(
               .select("tipo, fecha, moneda, monto, monto_usd, categoria, descripcion")
               .eq("cliente_id", cliente.id)
               .is("deleted_at", null),
+            supabase
+              .from("tareas")
+              .select("numero, titulo, estado, prioridad, fecha_limite")
+              .eq("cliente_id", cliente.id)
+              .is("deleted_at", null)
+              .order("orden"),
           ])
 
         return texto({
@@ -211,6 +271,10 @@ const handler = createMcpHandler(
           documentos: documentos.data ?? [],
           decisiones: decisiones.data ?? [],
           movimientos: movimientos.data ?? [],
+          tareas: (tareas.data ?? []).map(({ numero, ...t }) => ({
+            codigo: `ZQ-${numero}`,
+            ...t,
+          })),
         })
       }
     )
@@ -302,6 +366,326 @@ const handler = createMcpHandler(
           .limit(limite ?? 30)
         if (error) throw new Error(error.message)
         return texto(data)
+      }
+    )
+
+    // ── Tablero de tareas ─────────────────────────────────────────────────
+    // A diferencia del resto, acá sí hay ediciones: el tablero está pensado
+    // para que un agente lo opere (crear, mover, comentar). El borrado sigue
+    // siendo solo de la UI.
+    server.registerTool(
+      "listar_tareas",
+      {
+        title: "Listar tareas del tablero",
+        description:
+          "Tarjetas del tablero de la empresa, agrupadas por columna. Por defecto omite las que están en 'hecho'.",
+        inputSchema: {
+          estado: z.enum(ESTADOS_TAREA).optional(),
+          asignado_email: z.string().optional(),
+          cliente_nombre: z.string().optional(),
+          incluir_hechas: z.boolean().optional(),
+          limite: z.number().int().min(1).max(200).optional(),
+        },
+      },
+      async ({ estado, asignado_email, cliente_nombre, incluir_hechas, limite }) => {
+        const supabase = createAdminClient()
+        let q = supabase
+          .from("tareas")
+          .select(
+            // `tareas` tiene dos FK a socios (asignado_a y created_by): sin el
+            // hint del constraint, PostgREST no sabe cuál embeber.
+            "numero, titulo, descripcion, estado, prioridad, etiquetas, fecha_limite, orden, asignado:socios!tareas_asignado_a_fkey(nombre, email), clientes(nombre), proyectos(nombre)"
+          )
+          .is("deleted_at", null)
+          .order("estado")
+          .order("orden")
+          .limit(limite ?? 100)
+
+        if (estado) q = q.eq("estado", estado)
+        else if (!incluir_hechas) q = q.neq("estado", "hecho")
+
+        if (asignado_email) {
+          const socioId = await socioIdPorEmail(asignado_email)
+          if (!socioId) return texto(`No encontré un socio con email ${asignado_email}.`)
+          q = q.eq("asignado_a", socioId)
+        }
+        if (cliente_nombre) {
+          const clienteId = await idPorNombre("clientes", cliente_nombre)
+          if (!clienteId) return texto(`No encontré el cliente "${cliente_nombre}".`)
+          q = q.eq("cliente_id", clienteId)
+        }
+
+        const { data, error } = await q
+        if (error) throw new Error(error.message)
+
+        const porColumna: Record<string, unknown[]> = {}
+        for (const t of data ?? []) {
+          const { numero, orden, ...resto } = t
+          void orden
+          ;(porColumna[t.estado] ??= []).push({ codigo: `ZQ-${numero}`, ...resto })
+        }
+        return texto({ columnas: porColumna })
+      }
+    )
+
+    server.registerTool(
+      "ficha_tarea",
+      {
+        title: "Ficha de una tarjeta",
+        description:
+          "Detalle completo de una tarjeta del tablero, con sus comentarios. Se identifica por número o código (12 o ZQ-12).",
+        inputSchema: { tarea: z.union([z.string(), z.number()]) },
+      },
+      async ({ tarea }) => {
+        const numero = numeroDeTarea(tarea)
+        if (!numero) return texto(`"${tarea}" no parece un número de tarjeta (ej. ZQ-12).`)
+
+        const supabase = createAdminClient()
+        const { data } = await supabase
+          .from("tareas")
+          .select(
+            "id, numero, titulo, descripcion, estado, prioridad, etiquetas, fecha_limite, created_at, updated_at, asignado:socios!tareas_asignado_a_fkey(nombre, email), clientes(nombre), proyectos(nombre)"
+          )
+          .eq("numero", numero)
+          .is("deleted_at", null)
+          .maybeSingle()
+        if (!data) return texto(`No existe la tarjeta ZQ-${numero}.`)
+
+        const { data: comentarios } = await supabase
+          .from("tareas_comentarios")
+          .select("autor, cuerpo, created_at")
+          .eq("tarea_id", data.id)
+          .is("deleted_at", null)
+          .order("created_at")
+
+        const { id, ...tarjeta } = data
+        void id
+        return texto({
+          tarjeta: { codigo: `ZQ-${data.numero}`, ...tarjeta },
+          comentarios: comentarios ?? [],
+        })
+      }
+    )
+
+    server.registerTool(
+      "crear_tarea",
+      {
+        title: "Crear una tarjeta",
+        description:
+          "Crea una tarjeta en el tablero. Entra arriba de su columna (por defecto 'backlog'). Cliente y proyecto se resuelven por nombre aproximado.",
+        inputSchema: {
+          titulo: z.string().min(3),
+          descripcion: z.string().optional(),
+          estado: z.enum(ESTADOS_TAREA).optional(),
+          prioridad: z.enum(PRIORIDADES_TAREA).optional(),
+          asignado_email: z
+            .string()
+            .describe("socio responsable; omitir para dejarla sin asignar")
+            .optional(),
+          cliente_nombre: z.string().optional(),
+          proyecto_nombre: z.string().optional(),
+          etiquetas: z.array(z.string()).optional(),
+          fecha_limite: z.string().describe("YYYY-MM-DD").optional(),
+        },
+      },
+      async (entrada, extra) => {
+        const email = extra.authInfo?.extra?.email as string | undefined
+        const actorId = email ? await socioIdPorEmail(email) : null
+
+        const asignadoId = entrada.asignado_email
+          ? await socioIdPorEmail(entrada.asignado_email)
+          : null
+        if (entrada.asignado_email && !asignadoId) {
+          return texto(`No encontré un socio con email ${entrada.asignado_email}.`)
+        }
+        const clienteId = await idPorNombre("clientes", entrada.cliente_nombre)
+        if (entrada.cliente_nombre && !clienteId) {
+          return texto(
+            `No encontré el cliente "${entrada.cliente_nombre}"; no creé nada. Probá sin cliente o con otro nombre.`
+          )
+        }
+        const proyectoId = await idPorNombre("proyectos", entrada.proyecto_nombre)
+        if (entrada.proyecto_nombre && !proyectoId) {
+          return texto(
+            `No encontré el proyecto "${entrada.proyecto_nombre}"; no creé nada.`
+          )
+        }
+
+        const estado = entrada.estado ?? "backlog"
+        const supabase = createAdminClient()
+        const { data, error } = await supabase
+          .from("tareas")
+          .insert({
+            titulo: entrada.titulo,
+            descripcion: entrada.descripcion ?? null,
+            estado,
+            prioridad: entrada.prioridad ?? "media",
+            asignado_a: asignadoId,
+            cliente_id: clienteId ?? null,
+            proyecto_id: proyectoId ?? null,
+            etiquetas: entrada.etiquetas ?? [],
+            fecha_limite: entrada.fecha_limite ?? null,
+            orden: await ordenAlTopeDeColumna(estado),
+            created_by: actorId,
+            metadata: { origen: "mcp" },
+          })
+          .select("numero, titulo, estado, prioridad")
+          .single()
+        if (error) throw new Error(error.message)
+        return texto({ creada: { codigo: `ZQ-${data.numero}`, ...data }, ver: "/tareas" })
+      }
+    )
+
+    server.registerTool(
+      "actualizar_tarea",
+      {
+        title: "Actualizar una tarjeta",
+        description:
+          "Cambia campos de una tarjeta existente. Solo se tocan los campos que se pasan. Para cliente/proyecto/responsable, pasar string vacío desvincula.",
+        inputSchema: {
+          tarea: z.union([z.string(), z.number()]),
+          titulo: z.string().min(3).optional(),
+          descripcion: z.string().optional(),
+          estado: z.enum(ESTADOS_TAREA).optional(),
+          prioridad: z.enum(PRIORIDADES_TAREA).optional(),
+          asignado_email: z.string().optional(),
+          cliente_nombre: z.string().optional(),
+          proyecto_nombre: z.string().optional(),
+          etiquetas: z.array(z.string()).optional(),
+          fecha_limite: z.string().describe("YYYY-MM-DD").optional(),
+        },
+      },
+      async (entrada) => {
+        const numero = numeroDeTarea(entrada.tarea)
+        if (!numero) return texto(`"${entrada.tarea}" no parece un número de tarjeta.`)
+
+        const supabase = createAdminClient()
+        const { data: actual } = await supabase
+          .from("tareas")
+          .select("id, estado")
+          .eq("numero", numero)
+          .is("deleted_at", null)
+          .maybeSingle()
+        if (!actual) return texto(`No existe la tarjeta ZQ-${numero}.`)
+
+        const cambios: Record<string, unknown> = {}
+        if (entrada.titulo !== undefined) cambios.titulo = entrada.titulo
+        if (entrada.descripcion !== undefined)
+          cambios.descripcion = entrada.descripcion || null
+        if (entrada.prioridad !== undefined) cambios.prioridad = entrada.prioridad
+        if (entrada.etiquetas !== undefined) cambios.etiquetas = entrada.etiquetas
+        if (entrada.fecha_limite !== undefined)
+          cambios.fecha_limite = entrada.fecha_limite || null
+
+        if (entrada.estado !== undefined && entrada.estado !== actual.estado) {
+          cambios.estado = entrada.estado
+          cambios.orden = await ordenAlTopeDeColumna(entrada.estado)
+        }
+
+        if (entrada.asignado_email !== undefined) {
+          if (entrada.asignado_email === "") cambios.asignado_a = null
+          else {
+            const socioId = await socioIdPorEmail(entrada.asignado_email)
+            if (!socioId)
+              return texto(`No encontré un socio con email ${entrada.asignado_email}.`)
+            cambios.asignado_a = socioId
+          }
+        }
+        const clienteId = await idPorNombre("clientes", entrada.cliente_nombre)
+        if (clienteId !== undefined) {
+          if (entrada.cliente_nombre && !clienteId)
+            return texto(`No encontré el cliente "${entrada.cliente_nombre}".`)
+          cambios.cliente_id = clienteId
+        }
+        const proyectoId = await idPorNombre("proyectos", entrada.proyecto_nombre)
+        if (proyectoId !== undefined) {
+          if (entrada.proyecto_nombre && !proyectoId)
+            return texto(`No encontré el proyecto "${entrada.proyecto_nombre}".`)
+          cambios.proyecto_id = proyectoId
+        }
+
+        if (Object.keys(cambios).length === 0) {
+          return texto(`No pasaste ningún cambio para ZQ-${numero}.`)
+        }
+
+        const { data, error } = await supabase
+          .from("tareas")
+          .update(cambios)
+          .eq("id", actual.id)
+          .select("numero, titulo, estado, prioridad")
+          .single()
+        if (error) throw new Error(error.message)
+        return texto({ actualizada: { codigo: `ZQ-${data.numero}`, ...data } })
+      }
+    )
+
+    server.registerTool(
+      "mover_tarea",
+      {
+        title: "Mover una tarjeta de columna",
+        description:
+          "Atajo para cambiar la columna de una tarjeta (backlog, en_curso, en_revision, hecho). Queda arriba de la columna destino.",
+        inputSchema: {
+          tarea: z.union([z.string(), z.number()]),
+          estado: z.enum(ESTADOS_TAREA),
+        },
+      },
+      async ({ tarea, estado }) => {
+        const numero = numeroDeTarea(tarea)
+        if (!numero) return texto(`"${tarea}" no parece un número de tarjeta.`)
+
+        const supabase = createAdminClient()
+        const { data, error } = await supabase
+          .from("tareas")
+          .update({ estado, orden: await ordenAlTopeDeColumna(estado) })
+          .eq("numero", numero)
+          .is("deleted_at", null)
+          .select("numero, titulo, estado")
+          .maybeSingle()
+        if (error) throw new Error(error.message)
+        if (!data) return texto(`No existe la tarjeta ZQ-${numero}.`)
+        return texto({ movida: { codigo: `ZQ-${data.numero}`, ...data } })
+      }
+    )
+
+    server.registerTool(
+      "comentar_tarea",
+      {
+        title: "Comentar una tarjeta",
+        description:
+          "Agrega un comentario al hilo de una tarjeta. El autor queda registrado como el socio dueño del token, aclarando que vino por MCP.",
+        inputSchema: {
+          tarea: z.union([z.string(), z.number()]),
+          cuerpo: z.string().min(2),
+        },
+      },
+      async ({ tarea, cuerpo }, extra) => {
+        const numero = numeroDeTarea(tarea)
+        if (!numero) return texto(`"${tarea}" no parece un número de tarjeta.`)
+
+        const supabase = createAdminClient()
+        const { data: tarjeta } = await supabase
+          .from("tareas")
+          .select("id")
+          .eq("numero", numero)
+          .is("deleted_at", null)
+          .maybeSingle()
+        if (!tarjeta) return texto(`No existe la tarjeta ZQ-${numero}.`)
+
+        const email = extra.authInfo?.extra?.email as string | undefined
+        const socioId = email ? await socioIdPorEmail(email) : null
+        const { data: socio } = socioId
+          ? await supabase.from("socios").select("nombre").eq("id", socioId).maybeSingle()
+          : { data: null }
+
+        const { error } = await supabase.from("tareas_comentarios").insert({
+          tarea_id: tarjeta.id,
+          cuerpo,
+          autor: `${socio?.nombre ?? email ?? "Agente"} (Claude)`,
+          autor_socio_id: socioId,
+        })
+        if (error) throw new Error(error.message)
+        return texto({ comentado: `ZQ-${numero}` })
       }
     )
 

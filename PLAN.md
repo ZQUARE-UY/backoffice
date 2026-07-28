@@ -210,6 +210,31 @@ ZQUARE (Unidad compartida del Workspace)
 - [x] Evolución mensual (ingresos vs. gastos últimos 6 meses, barras CSS sin librerías)
 - [x] Vista de balance de socios (componente compartido con Finanzas)
 
+### Post-MVP — Tablero de tareas *(kanban propio, sin Jira)*
+- [x] Decisión 2026-07-28: tablero **propio** en el backoffice en lugar de
+  integrar Jira. El Jira disponible es una cuenta personal (joaco1119), no de
+  ZQUARE, e integrarlo dejaría dos fuentes de verdad y una dependencia de su
+  API justo en la parte que más importa: que los LLM operen las tarjetas. Con
+  tablero propio las tarjetas viven en Supabase, se vinculan a clientes y
+  proyectos, y se exponen por el MCP que ya está en producción. Arranca vacío
+  (sin importar los issues de Jira).
+- [x] Migración `20260728000003_tareas.sql`: tablas `tareas` (columnas backlog /
+  en_curso / en_revision / hecho, prioridad, responsable, cliente, proyecto,
+  etiquetas, fecha límite) y `tareas_comentarios`. Dos detalles de diseño:
+  `numero` da un código corto y estable (`ZQ-12`) para referenciar una tarjeta
+  en lenguaje natural, y `orden` es numeric para que mover una tarjeta escriba
+  UNA sola fila (el punto medio entre sus vecinas).
+- [x] Tablero en `/tareas`: 4 columnas, drag & drop entre columnas y dentro de
+  cada una (optimista), alta desde el header o desde cada columna, y ficha de la
+  tarjeta en diálogo con edición, comentarios y borrado.
+- [x] Home: métrica "Tareas abiertas" y tarjeta "Mis tareas" (lo asignado al
+  socio logueado). La búsqueda global (Cmd+K) encuentra tarjetas por título.
+- [x] MCP (mismo PR, por el principio "módulo nuevo → herramienta MCP"):
+  `listar_tareas`, `ficha_tarea`, `crear_tarea`, `actualizar_tarea`,
+  `mover_tarea` y `comentar_tarea`, más las tarjetas en `buscar`. Es el primer
+  módulo donde el MCP puede **editar** (el tablero está pensado para que lo
+  opere un agente); el borrado sigue siendo solo de la UI.
+
 ### Post-MVP — Calendario de reuniones
 - [x] Panel "Próximas reuniones" en el dashboard: agenda unificada de los 4
   socios (próximos 7 días) leída de sus Google Calendars vía la cuenta de
@@ -356,3 +381,7 @@ de Google en la consola del Workspace.
   resultado (USD), clientes activos, proyectos en curso y por estado; evolución
   mensual (barras CSS, sin librerías de gráficos) y balance de socios (componente
   compartido con Finanzas).
+- **2026-07-28** — Tablero de tareas propio (kanban) en lugar de integrar Jira:
+  tarjetas en Supabase con código corto `ZQ-N`, drag & drop, comentarios, y 6
+  herramientas MCP para que los LLM lean, creen, editen, muevan y comenten
+  tarjetas. Ver la sección "Post-MVP — Tablero de tareas".

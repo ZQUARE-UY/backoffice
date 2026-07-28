@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import {
   FileTextIcon,
   HomeIcon,
+  KanbanIcon,
   ScrollTextIcon,
   UsersIcon,
   WalletIcon,
@@ -30,6 +31,7 @@ import { UserMenu } from "@/components/user-menu"
 const secciones = [
   { titulo: "Inicio", href: "/", icono: HomeIcon, disponible: true },
   { titulo: "Clientes", href: "/clientes", icono: UsersIcon, disponible: true },
+  { titulo: "Tareas", href: "/tareas", icono: KanbanIcon, disponible: true },
   { titulo: "Decisiones", href: "/decisiones", icono: ScrollTextIcon, disponible: true },
   { titulo: "Documentos", href: "/documentos", icono: FileTextIcon, disponible: true },
   { titulo: "Finanzas", href: "/finanzas", icono: WalletIcon, disponible: true },
