@@ -265,18 +265,22 @@ ZQUARE (Unidad compartida del Workspace)
 - [ ] Generador de presupuestos: a partir del histórico de `presupuesto_items`, la IA sugiere ítems, horas y tarifas para un nuevo presupuesto
 - [ ] Plantillas de contratos: base editable + generación de variantes
 - [ ] Estimador de alcance y tiempos: usa horas estimadas vs. reales de proyectos pasados
-- [~] Búsqueda semántica sobre documentos y decisiones ("repositorio de
-  información"): implementada el 2026-07-27 con pgvector + embeddings gte-small
-  (Edge Function de Supabase, costo cero). Indexa el contenido real de los
-  archivos de Drive (Google Docs/Sheets/Slides, docx, pdf, txt) y las
-  decisiones; resultados en el Cmd+K (grupo "Contenido") y gestión del índice
-  en /documentos. Setup aplicado y corpus indexado el 2026-07-27.
-  **Limitación conocida:** gte-small es un modelo entrenado en inglés y
-  rankea mal el contenido en español (verificado: consultas de prueba no
-  distinguen el doc correcto de uno irrelevante, similitudes ~0.8 parejas).
-  Mejora pendiente decidida con Joaquín: migrar a un proveedor multilingüe
-  (OpenAI text-embedding-3-small recomendado, ~centavos; alternativas Voyage
-  o Gemini pago). Requiere: API key, migración a vector(1536) y reindexar.
+- [x] Búsqueda semántica sobre documentos y decisiones ("repositorio de
+  información"): implementada el 2026-07-27 con pgvector; indexa el contenido
+  real de los archivos de Drive (Google Docs/Sheets/Slides, docx, pdf, txt) y
+  las decisiones; resultados en el Cmd+K (grupo "Contenido") y gestión del
+  índice en /documentos.
+  **Embeddings multilingües (2026-07-28):** migrada de gte-small (Edge
+  Function de Supabase, solo inglés — rankeaba mal el español) a **bge-m3
+  vía Cloudflare Workers AI** (1024 dims, multilingüe, capa gratis de 10k
+  neurons/día — costo cero a nuestro volumen). Verificado con el corpus real:
+  el doc correcto rankea primero en consultas en español (antes similitudes
+  ~0.8 parejas; ahora aciertos ~0.47-0.61 vs ruido ~0.41-0.54, umbral del
+  Cmd+K calibrado en 0.45). Env vars: `CLOUDFLARE_ACCOUNT_ID` +
+  `CLOUDFLARE_AI_TOKEN` (cuenta gratis de Cloudflare). La Edge Function
+  `embeddings` quedó obsoleta (borrada del repo; se puede eliminar del
+  dashboard de Supabase). Requiere migración `20260728000002` + reindexar
+  desde /documentos.
 
 ## 7. Seguridad y acceso
 
@@ -332,6 +336,9 @@ de Google en la consola del Workspace.
   image) → Clientes/ con estructura estándar.
   LandingPage (web propia, vacía) → Empresa/. Google Docs migrados por
   export+reimport (Gmail de Alan sin cuota).
+- **2026-07-28** — Embeddings multilingües: la búsqueda semántica pasa de
+  gte-small a bge-m3 (Cloudflare Workers AI, capa gratis). Verificado con el
+  corpus real: consultas en español ahora rankean el doc correcto primero.
 - **2026-07-28** — OAuth 2.1 para el MCP server: conexión desde claude.ai
   web/celular vía conector personalizado, con consentimiento sobre la sesión
   de Google de cada socio. Desplegado y funcionando en producción el mismo
