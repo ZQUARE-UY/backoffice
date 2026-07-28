@@ -85,8 +85,12 @@ export async function buscar(query: string): Promise<ResultadoBusqueda[]> {
   return resultados
 }
 
-// Umbral de similitud coseno (gte-small): por debajo el resultado suele ser ruido.
-const UMBRAL_SIMILITUD = 0.82
+// Umbral de similitud coseno (bge-m3): por debajo el resultado suele ser
+// ruido. Calibrado con el corpus real en español al migrar (2026-07-28):
+// los aciertos caen entre ~0.47 y ~0.61, el ruido entre ~0.41 y ~0.54 —
+// 0.45 prioriza no ocultar el doc correcto a costa de algún resultado de
+// más, que en una búsqueda es el trade-off correcto.
+const UMBRAL_SIMILITUD = 0.45
 
 type Fragmento = {
   origen: "drive" | "decision"
@@ -98,8 +102,8 @@ type Fragmento = {
 }
 
 // Búsqueda semántica sobre el contenido indexado (archivos de Drive y
-// decisiones). Devuelve [] si el índice está vacío o la Edge Function de
-// embeddings todavía no está deployada — el Cmd+K sigue funcionando igual.
+// decisiones). Devuelve [] si el índice está vacío o Workers AI no está
+// configurado — el Cmd+K sigue funcionando igual.
 export async function buscarContenido(
   query: string
 ): Promise<ResultadoBusqueda[]> {

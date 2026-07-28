@@ -1,6 +1,7 @@
 import { createMcpHandler, withMcpAuth } from "mcp-handler"
 import { z } from "zod"
 
+import { generarEmbeddings } from "@/lib/embeddings"
 import { socioDelAccessToken } from "@/lib/mcp-oauth"
 import { createAdminClient } from "@/lib/supabase/admin"
 
@@ -55,22 +56,12 @@ async function socioIdPorEmail(email: string): Promise<string | null> {
   return data?.id ?? null
 }
 
-// Embeddings de la consulta vía la Edge Function (autenticada con la service key).
+// Embedding de la consulta (Workers AI bge-m3). Null si falla: la búsqueda
+// literal sigue funcionando sin la parte semántica.
 async function embeddingConsulta(consulta: string): Promise<number[] | null> {
   try {
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/embeddings`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ textos: [consulta] }),
-      }
-    )
-    if (!res.ok) return null
-    return (await res.json()).embeddings[0] as number[]
+    const [embedding] = await generarEmbeddings([consulta])
+    return embedding ?? null
   } catch {
     return null
   }
@@ -84,7 +75,7 @@ const handler = createMcpHandler(
       {
         title: "Buscar en el backoffice",
         description:
-          "Busca clientes, proyectos y documentos por nombre (literal) y contenido de documentos de Drive y decisiones (semántico). Nota: el ranking semántico en español es aproximado.",
+          "Busca clientes, proyectos y documentos por nombre (literal) y contenido de documentos de Drive y decisiones (semántico, multilingüe).",
         inputSchema: { consulta: z.string().min(2) },
       },
       async ({ consulta }) => {

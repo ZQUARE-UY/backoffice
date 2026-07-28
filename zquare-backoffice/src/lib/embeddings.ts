@@ -1,38 +1,69 @@
 import "server-only"
 
-import { createClient } from "@/lib/supabase/server"
+// Genera embeddings con Cloudflare Workers AI (@cf/baai/bge-m3, 1024
+// dimensiones, multilingüe — rankea bien el español, a diferencia del
+// gte-small que usábamos antes). Capa gratis: 10k neurons/día, de sobra
+// para nuestro volumen.
+//
+// Env vars (en .env.local y Vercel):
+//   CLOUDFLARE_ACCOUNT_ID — dashboard → Workers & Pages, columna derecha.
+//   CLOUDFLARE_AI_TOKEN   — API token con la plantilla "Workers AI".
 
-// Genera embeddings llamando a la Edge Function `embeddings` (gte-small,
-// 384 dimensiones). La invocación viaja con el JWT del socio logueado.
+const MODELO = "@cf/baai/bge-m3"
 
-// Máximo de textos por invocación. El plan free de Supabase corta la Edge
-// Function por CPU (~2s por request): con gte-small entran 2-3 textos de
-// ~1200 caracteres por llamada; con 4+ devuelve WORKER_RESOURCE_LIMIT.
-const LOTE_EDGE = 2
+// Textos por request: lotes chicos para no pasarnos del límite de payload
+// y que un lote caído no tire un reindexado entero.
+const LOTE = 20
 
 export async function generarEmbeddings(textos: string[]): Promise<number[][]> {
   if (textos.length === 0) return []
-  const supabase = await createClient()
+
+  const cuenta = process.env.CLOUDFLARE_ACCOUNT_ID
+  const token = process.env.CLOUDFLARE_AI_TOKEN
+  if (!cuenta || !token) {
+    throw new Error(
+      "Faltan CLOUDFLARE_ACCOUNT_ID o CLOUDFLARE_AI_TOKEN (Workers AI, modelo bge-m3)"
+    )
+  }
 
   const resultado: number[][] = []
-  for (let i = 0; i < textos.length; i += LOTE_EDGE) {
-    const lote = textos.slice(i, i + LOTE_EDGE)
-    const { data, error } = await supabase.functions.invoke("embeddings", {
-      body: { textos: lote },
-    })
-    if (error) {
+  for (let i = 0; i < textos.length; i += LOTE) {
+    const lote = textos.slice(i, i + LOTE)
+    const res = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${cuenta}/ai/run/${MODELO}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ text: lote, truncate_inputs: true }),
+      }
+    )
+    if (!res.ok) {
       throw new Error(
-        `No se pudieron generar embeddings (¿está deployada la Edge Function "embeddings"?): ${error.message}`
+        `Workers AI respondió ${res.status}: ${(await res.text()).slice(0, 300)}`
       )
     }
-    resultado.push(...(data.embeddings as number[][]))
+    const json = (await res.json()) as {
+      success: boolean
+      result?: { data?: number[][] }
+      errors?: { message: string }[]
+    }
+    const data = json.result?.data
+    if (!json.success || !Array.isArray(data) || data.length !== lote.length) {
+      throw new Error(
+        `Workers AI devolvió una respuesta inesperada: ${JSON.stringify(json).slice(0, 300)}`
+      )
+    }
+    resultado.push(...data)
   }
   return resultado
 }
 
 // Trocea un texto largo en fragmentos de ~1200 caracteres cortando por
-// párrafos (gte-small procesa hasta ~512 tokens; 1200 caracteres en español
-// entran cómodos). Devuelve fragmentos no vacíos y normalizados.
+// párrafos. bge-m3 acepta hasta 8k tokens, pero fragmentos chicos dan
+// mejor granularidad de búsqueda. Devuelve fragmentos no vacíos.
 const TAMANO_FRAGMENTO = 1200
 const MAX_FRAGMENTOS = 60 // tope por documento, por si aparece un monstruo
 
