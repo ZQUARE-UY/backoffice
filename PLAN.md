@@ -220,6 +220,16 @@ ZQUARE (Unidad compartida del Workspace)
   Setup 2026-07-27: Calendar API habilitada y 3 de 4 calendarios compartidos;
   falta solo que Nicolás comparta el suyo con la cuenta de servicio.)
 
+### Pendiente — Identidad visual *(esperando a la diseñadora)*
+- [ ] Rediseño de la UI del backoffice: pedido explícito de Joaquín desde el
+  arranque — que NO se vea como una UI genérica generada por IA (hoy usa el
+  tema default de shadcn sin personalizar). Decisión 2026-07-27: esperar la
+  imagen de marca de la diseñadora (seña pagada, entrega pendiente) y aplicar
+  esa identidad (paleta, tipografías, logo) al backoffice y a la web pública
+  en un mismo pase, para que todo ZQUARE sea coherente.
+- [ ] Web pública zquare.uy: misma espera — arrancarla directo con el diseño
+  de marca, no con un diseño provisorio.
+
 ### Fase 4 — Herramientas con IA *(backlog, cuando haya datos)*
 - [x] MCP server del backoffice (2026-07-27, funcionando en producción): endpoint remoto en
   `/api/mcp/mcp` (Streamable HTTP vía mcp-handler) para hablar con los datos
