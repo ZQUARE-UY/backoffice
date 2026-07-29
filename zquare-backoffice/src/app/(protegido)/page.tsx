@@ -70,7 +70,9 @@ export default async function InicioPage() {
   const balance = (balanceData ?? []) as BalanceSocio[]
   const socios = (sociosData ?? []) as Socio[]
 
-  // Tareas abiertas (todo lo que no está en 'hecho') y, de esas, las mías.
+  // Tareas abiertas (todo lo que no está en 'hecho', incluyendo backlog y
+  // por_hacer: el backlog es trabajo abierto sin comprometer) y, de esas, las
+  // mías.
   const tareasAbiertas = (tareasData ?? []) as Tarea[]
   const misTareas = tareasAbiertas.filter((t) => t.asignado_a === socioId)
 
@@ -204,7 +206,7 @@ export default async function InicioPage() {
             misTareas.slice(0, 6).map((t) => (
               <Link
                 key={t.id}
-                href="/tareas"
+                href={`/tareas?tarea=${codigoTarea(t.numero)}`}
                 className="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 hover:bg-muted"
               >
                 <span className="flex min-w-0 items-center gap-2 text-sm">

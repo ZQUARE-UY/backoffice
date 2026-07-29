@@ -3,9 +3,11 @@ import {
   ESTADOS_CLIENTE,
   ESTADOS_PRESUPUESTO,
   ESTADOS_PROYECTO,
+  ESTADOS_TAREA,
   type EstadoCliente,
   type EstadoPresupuesto,
   type EstadoProyecto,
+  type EstadoTarea,
 } from "@/lib/dominio"
 
 export function EstadoClienteBadge({ estado }: { estado: EstadoCliente }) {
@@ -24,5 +26,10 @@ export function EstadoPresupuestoBadge({
   estado: EstadoPresupuesto
 }) {
   const info = ESTADOS_PRESUPUESTO[estado]
+  return <Badge variant={info.variant}>{info.label}</Badge>
+}
+
+export function EstadoTareaBadge({ estado }: { estado: EstadoTarea }) {
+  const info = ESTADOS_TAREA[estado]
   return <Badge variant={info.variant}>{info.label}</Badge>
 }

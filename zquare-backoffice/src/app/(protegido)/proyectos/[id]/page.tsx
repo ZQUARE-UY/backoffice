@@ -3,6 +3,10 @@ import { notFound } from "next/navigation"
 import { ArrowLeftIcon } from "lucide-react"
 
 import { BotonEliminar } from "@/components/boton-eliminar"
+import {
+  TareasRelacionadas,
+  type TareaRelacionada,
+} from "@/components/tareas-relacionadas"
 
 import { eliminarProyecto } from "@/app/(protegido)/clientes/actions"
 import { EditarProyecto } from "./editar-proyecto"
@@ -50,11 +54,25 @@ export default async function ProyectoPage({
 
   if (!proyecto) notFound()
 
-  const { data: cliente } = await supabase
-    .from("clientes")
-    .select("*")
-    .eq("id", proyecto.cliente_id)
-    .maybeSingle<Cliente>()
+  const [{ data: cliente }, { data: tareasData }] = await Promise.all([
+    supabase
+      .from("clientes")
+      .select("*")
+      .eq("id", proyecto.cliente_id)
+      .maybeSingle<Cliente>(),
+    supabase
+      .from("tareas")
+      .select("id, numero, titulo, estado, prioridad, fecha_limite")
+      .eq("proyecto_id", id)
+      .neq("estado", "hecho")
+      .is("deleted_at", null)
+      .order("estado")
+      .order("orden"),
+  ])
+
+  const tareas = (tareasData ?? []) as TareaRelacionada[]
+  // Ambos params para que la cascada de filtros del tablero quede coherente.
+  const hrefTablero = `/tareas?cliente=${proyecto.cliente_id}&proyecto=${proyecto.id}`
 
   return (
     <>
@@ -122,6 +140,8 @@ export default async function ProyectoPage({
           valor={formatearMonto(proyecto.monto_acordado, proyecto.moneda)}
         />
       </div>
+
+      <TareasRelacionadas tareas={tareas} hrefTablero={hrefTablero} />
     </>
   )
 }

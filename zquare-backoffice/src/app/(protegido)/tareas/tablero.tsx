@@ -8,8 +8,8 @@ import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import {
   codigoTarea,
+  ESTADOS_TABLERO,
   ESTADOS_TAREA,
-  ESTADOS_TAREA_ORDEN,
   PRIORIDADES_TAREA,
   type ComentarioTarea,
   type EstadoTarea,
@@ -21,17 +21,9 @@ import { moverTarea } from "./actions"
 import { type ClienteOpcion, type ProyectoOpcion } from "./campos-tarea"
 import { DetalleTarea } from "./detalle-tarea"
 import { NuevaTarea } from "./nueva-tarea"
+import { ordenEntre } from "./orden"
 
 type Movimiento = { id: string; estado: EstadoTarea; orden: number }
-
-// `orden` es numeric justamente para esto: al soltar entre dos tarjetas se
-// guarda el punto medio de sus `orden` y solo se escribe la fila movida.
-function ordenEntre(anterior: Tarea | undefined, siguiente: Tarea | undefined) {
-  if (anterior && siguiente) return (Number(anterior.orden) + Number(siguiente.orden)) / 2
-  if (anterior) return Number(anterior.orden) + 1
-  if (siguiente) return Number(siguiente.orden) - 1
-  return 0
-}
 
 export function Tablero({
   tareas,
@@ -39,12 +31,14 @@ export function Tablero({
   socios,
   clientes,
   proyectos,
+  tareaAbierta,
 }: {
   tareas: Tarea[]
   comentarios: ComentarioTarea[]
   socios: Socio[]
   clientes: ClienteOpcion[]
   proyectos: ProyectoOpcion[]
+  tareaAbierta?: number
 }) {
   const [, iniciarTransicion] = useTransition()
   const [vista, moverOptimista] = useOptimistic(
@@ -89,7 +83,7 @@ export function Tablero({
 
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-      {ESTADOS_TAREA_ORDEN.map((estado) => {
+      {ESTADOS_TABLERO.map((estado) => {
         const items = columna(estado)
         return (
           <div
@@ -161,6 +155,7 @@ export function Tablero({
                   socios={socios}
                   clientes={clientes}
                   proyectos={proyectos}
+                  abiertoInicial={tarea.numero === tareaAbierta}
                 >
                   <Card className="gap-2 p-3 hover:border-primary/50">
                     <div className="flex items-start justify-between gap-2">

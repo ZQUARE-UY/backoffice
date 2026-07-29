@@ -102,13 +102,14 @@ export async function buscar(query: string): Promise<ResultadoBusqueda[]> {
     })
   }
   for (const t of tareas.data ?? []) {
-    // Las tarjetas se abren desde el tablero; no tienen ruta propia.
+    // Deep link: el tablero abre el diálogo de la tarjeta (y fuerza la vista
+    // Backlog si corresponde).
     resultados.push({
       kind: "tarea",
       id: t.id,
       titulo: t.titulo,
       subtitulo: `${codigoTarea(t.numero)} · ${ESTADOS_TAREA[t.estado as EstadoTarea]?.label ?? t.estado}`,
-      href: "/tareas",
+      href: `/tareas?tarea=${codigoTarea(t.numero)}`,
     })
   }
   for (const i of ideas.data ?? []) {

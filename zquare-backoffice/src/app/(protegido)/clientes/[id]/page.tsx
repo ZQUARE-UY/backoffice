@@ -49,6 +49,10 @@ import { createClient } from "@/lib/supabase/server"
 import { Badge } from "@/components/ui/badge"
 import { BotonEliminar } from "@/components/boton-eliminar"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  TareasRelacionadas,
+  type TareaRelacionada,
+} from "@/components/tareas-relacionadas"
 
 import { driveConfigurado } from "@/lib/drive"
 
@@ -83,6 +87,7 @@ export default async function ClientePage({
     { data: proyectosData },
     { data: presupuestosData },
     { data: documentosData },
+    { data: tareasData },
   ] = await Promise.all([
       supabase
         .from("proyectos")
@@ -102,11 +107,20 @@ export default async function ClientePage({
         .eq("cliente_id", id)
         .is("deleted_at", null)
         .order("fecha", { ascending: false }),
+      supabase
+        .from("tareas")
+        .select("id, numero, titulo, estado, prioridad, fecha_limite")
+        .eq("cliente_id", id)
+        .neq("estado", "hecho")
+        .is("deleted_at", null)
+        .order("estado")
+        .order("orden"),
     ])
 
   const proyectos = (proyectosData ?? []) as Proyecto[]
   const presupuestos = (presupuestosData ?? []) as Presupuesto[]
   const documentos = (documentosData ?? []) as Documento[]
+  const tareas = (tareasData ?? []) as TareaRelacionada[]
   const proyectosMini = proyectos.map((p) => ({ id: p.id, nombre: p.nombre }))
 
   return (
@@ -261,6 +275,11 @@ export default async function ClientePage({
           </Table>
         </div>
       )}
+
+      <TareasRelacionadas
+        tareas={tareas}
+        hrefTablero={`/tareas?cliente=${cliente.id}`}
+      />
 
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold tracking-tight">Presupuestos</h2>

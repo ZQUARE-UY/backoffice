@@ -56,7 +56,13 @@ async function socioIdPorEmail(email: string): Promise<string | null> {
   return data?.id ?? null
 }
 
-const ESTADOS_TAREA = ["backlog", "en_curso", "en_revision", "hecho"] as const
+const ESTADOS_TAREA = [
+  "backlog",
+  "por_hacer",
+  "en_curso",
+  "en_revision",
+  "hecho",
+] as const
 const PRIORIDADES_TAREA = ["baja", "media", "alta", "urgente"] as const
 const ESTADOS_IDEA = [
   "semilla",
@@ -429,16 +435,24 @@ const handler = createMcpHandler(
       {
         title: "Listar tareas del tablero",
         description:
-          "Tarjetas del tablero de la empresa, agrupadas por columna. Por defecto omite las que están en 'hecho'.",
+          "Tarjetas del tablero de la empresa, agrupadas por columna. 'backlog' es la lista priorizada fuera del tablero (ideas sin comprometer); el tablero va de 'por_hacer' a 'hecho'. Por defecto omite las que están en 'hecho'.",
         inputSchema: {
           estado: z.enum(ESTADOS_TAREA).optional(),
           asignado_email: z.string().optional(),
           cliente_nombre: z.string().optional(),
+          proyecto_nombre: z.string().optional(),
           incluir_hechas: z.boolean().optional(),
           limite: z.number().int().min(1).max(200).optional(),
         },
       },
-      async ({ estado, asignado_email, cliente_nombre, incluir_hechas, limite }) => {
+      async ({
+        estado,
+        asignado_email,
+        cliente_nombre,
+        proyecto_nombre,
+        incluir_hechas,
+        limite,
+      }) => {
         const supabase = createAdminClient()
         let q = supabase
           .from("tareas")
@@ -464,6 +478,11 @@ const handler = createMcpHandler(
           const clienteId = await idPorNombre("clientes", cliente_nombre)
           if (!clienteId) return texto(`No encontré el cliente "${cliente_nombre}".`)
           q = q.eq("cliente_id", clienteId)
+        }
+        if (proyecto_nombre) {
+          const proyectoId = await idPorNombre("proyectos", proyecto_nombre)
+          if (!proyectoId) return texto(`No encontré el proyecto "${proyecto_nombre}".`)
+          q = q.eq("proyecto_id", proyectoId)
         }
 
         const { data, error } = await q
@@ -523,7 +542,7 @@ const handler = createMcpHandler(
       {
         title: "Crear una tarjeta",
         description:
-          "Crea una tarjeta en el tablero. Entra arriba de su columna (por defecto 'backlog'). Cliente y proyecto se resuelven por nombre aproximado.",
+          "Crea una tarjeta. Entra arriba de su columna (por defecto 'backlog', la lista de ideas fuera del tablero; usá 'por_hacer' para que entre directo al tablero). Cliente y proyecto se resuelven por nombre aproximado.",
         inputSchema: {
           titulo: z.string().min(3),
           descripcion: z.string().optional(),
@@ -675,7 +694,7 @@ const handler = createMcpHandler(
       {
         title: "Mover una tarjeta de columna",
         description:
-          "Atajo para cambiar la columna de una tarjeta (backlog, en_curso, en_revision, hecho). Queda arriba de la columna destino.",
+          "Atajo para cambiar la columna de una tarjeta (backlog, por_hacer, en_curso, en_revision, hecho). 'por_hacer' es la columna de entrada al tablero; 'backlog' queda fuera del tablero. Queda arriba de la columna destino; para reordenar dentro de una columna usá priorizar_tarea.",
         inputSchema: {
           tarea: z.union([z.string(), z.number()]),
           estado: z.enum(ESTADOS_TAREA),
@@ -696,6 +715,102 @@ const handler = createMcpHandler(
         if (error) throw new Error(error.message)
         if (!data) return texto(`No existe la tarjeta ZQ-${numero}.`)
         return texto({ movida: { codigo: `ZQ-${data.numero}`, ...data } })
+      }
+    )
+
+    server.registerTool(
+      "priorizar_tarea",
+      {
+        title: "Priorizar una tarjeta dentro de su columna",
+        description:
+          "Reordena una tarjeta dentro de su columna sin cambiarla de estado (típicamente para priorizar el backlog). Indicá antes de qué tarjeta va (antes_de), después de cuál (despues_de), o posicion tope/fondo.",
+        inputSchema: {
+          tarea: z.union([z.string(), z.number()]),
+          antes_de: z.union([z.string(), z.number()]).optional(),
+          despues_de: z.union([z.string(), z.number()]).optional(),
+          posicion: z.enum(["tope", "fondo"]).optional(),
+        },
+      },
+      async ({ tarea, antes_de, despues_de, posicion }) => {
+        const numero = numeroDeTarea(tarea)
+        if (!numero) return texto(`"${tarea}" no parece un número de tarjeta.`)
+        const referencia = antes_de ?? despues_de
+        if (referencia === undefined && !posicion) {
+          return texto(
+            "Decime dónde va: antes_de/despues_de otra tarjeta, o posicion tope/fondo."
+          )
+        }
+
+        const supabase = createAdminClient()
+        const { data: tarjeta } = await supabase
+          .from("tareas")
+          .select("id, estado, titulo")
+          .eq("numero", numero)
+          .is("deleted_at", null)
+          .maybeSingle()
+        if (!tarjeta) return texto(`No existe la tarjeta ZQ-${numero}.`)
+
+        let orden: number
+        let donde: string
+        if (referencia !== undefined) {
+          const numeroRef = numeroDeTarea(referencia)
+          if (!numeroRef)
+            return texto(`"${referencia}" no parece un número de tarjeta.`)
+          // La columna completa ordenada: la vecina del otro lado de la
+          // referencia define el punto medio (mismo principio que el drag de
+          // la UI: se escribe una sola fila).
+          const { data: columna } = await supabase
+            .from("tareas")
+            .select("numero, orden")
+            .eq("estado", tarjeta.estado)
+            .is("deleted_at", null)
+            .order("orden", { ascending: true })
+          const filas = (columna ?? []).filter((t) => t.numero !== numero)
+          const i = filas.findIndex((t) => t.numero === numeroRef)
+          if (i === -1) {
+            return texto(
+              `ZQ-${numeroRef} no está en la columna '${tarjeta.estado}' de ZQ-${numero}. Para cambiarla de columna usá mover_tarea; no reordené nada.`
+            )
+          }
+          const [anterior, siguiente] =
+            antes_de !== undefined ? [filas[i - 1], filas[i]] : [filas[i], filas[i + 1]]
+          if (anterior && siguiente)
+            orden = (Number(anterior.orden) + Number(siguiente.orden)) / 2
+          else if (anterior) orden = Number(anterior.orden) + 1
+          else orden = Number(siguiente.orden) - 1
+          donde =
+            antes_de !== undefined
+              ? `antes de ZQ-${numeroRef}`
+              : `después de ZQ-${numeroRef}`
+        } else if (posicion === "tope") {
+          orden = await ordenAlTopeDeColumna(tarjeta.estado)
+          donde = "al tope de la columna"
+        } else {
+          const { data: ultima } = await supabase
+            .from("tareas")
+            .select("orden")
+            .eq("estado", tarjeta.estado)
+            .is("deleted_at", null)
+            .order("orden", { ascending: false })
+            .limit(1)
+            .maybeSingle()
+          orden = Number(ultima?.orden ?? 0) + 1
+          donde = "al fondo de la columna"
+        }
+
+        const { error } = await supabase
+          .from("tareas")
+          .update({ orden })
+          .eq("id", tarjeta.id)
+        if (error) throw new Error(error.message)
+        return texto({
+          priorizada: {
+            codigo: `ZQ-${numero}`,
+            titulo: tarjeta.titulo,
+            estado: tarjeta.estado,
+            quedo: donde,
+          },
+        })
       }
     )
 

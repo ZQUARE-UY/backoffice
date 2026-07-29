@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react"
 import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import { PencilIcon, SendIcon } from "lucide-react"
 
 import { BotonEliminar } from "@/components/boton-eliminar"
@@ -50,6 +51,7 @@ export function DetalleTarea({
   clientes,
   proyectos,
   children,
+  abiertoInicial,
 }: {
   tarea: Tarea
   comentarios: ComentarioTarea[]
@@ -57,8 +59,12 @@ export function DetalleTarea({
   clientes: ClienteOpcion[]
   proyectos: ProyectoOpcion[]
   children: React.ReactNode
+  // Deep link `?tarea=ZQ-N`: la tarjeta llega ya abierta desde el server.
+  abiertoInicial?: boolean
 }) {
-  const [abierto, setAbierto] = useState(false)
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const [abierto, setAbierto] = useState(abiertoInicial ?? false)
   const [editando, setEditando] = useState(false)
   const [pendiente, iniciarTransicion] = useTransition()
   const [comentando, iniciarComentario] = useTransition()
@@ -85,7 +91,16 @@ export function DetalleTarea({
       open={abierto}
       onOpenChange={(v) => {
         setAbierto(v)
-        if (!v) setEditando(false)
+        if (!v) {
+          setEditando(false)
+          // Al cerrar se limpia el deep link, para que un refresh no reabra.
+          if (searchParams.get("tarea")) {
+            const params = new URLSearchParams(searchParams)
+            params.delete("tarea")
+            const qs = params.toString()
+            router.replace(`/tareas${qs ? `?${qs}` : ""}`, { scroll: false })
+          }
+        }
       }}
     >
       <DialogTrigger

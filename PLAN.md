@@ -244,6 +244,38 @@ ZQUARE (Unidad compartida del Workspace)
   el cliente lista las herramientas del server **al conectarse**, así que las 6
   nuevas no aparecen hasta reconectar el conector o abrir sesión nueva.
 
+#### Tablero v2 — Backlog separado y vistas por cliente/proyecto (2026-07-29)
+
+Decidido tras evaluar (de nuevo) un Jira real para desarrollo de producto: la
+fricción no era "falta Jira" sino dos features — el backlog mezclado con el
+tablero y la falta de vistas por cliente/proyecto. Se agregaron al tablero
+propio en lugar de partir la gestión en dos herramientas.
+
+- [x] Estado nuevo `por_hacer` (migración `20260729000001_tarea_por_hacer.sql`,
+  solo amplía el check constraint; las tarjetas en `backlog` no se migran). El
+  tablero pasa a Por hacer / En curso / En revisión / Hecho.
+- [x] Vista Backlog (`/tareas?vista=backlog`): lista priorizada con drag para
+  reordenar y botón "Al tablero" (manda a `por_hacer`, al tope). Estilo Jira:
+  el backlog son ideas sin comprometer, el tablero es trabajo comprometido.
+- [x] Filtros por cliente, proyecto (cascada) y responsable, en la URL
+  (compartible) y aplicados en la query del server (los índices parciales ya
+  existían). La columna Hecho muestra solo los últimos 14 días.
+- [x] Cascada cliente → proyecto también en el formulario de tarjeta (antes se
+  podía guardar un proyecto de otro cliente).
+- [x] Deep link `?tarea=ZQ-N`: abre el diálogo de la tarjeta (y fuerza la
+  vista Backlog si corresponde). Lo usan la búsqueda global, "Mis tareas" del
+  home y las fichas.
+- [x] Fichas de cliente y proyecto: sección "Tareas" con las abiertas y link
+  "Ver en tablero" ya filtrado.
+- [x] Fix: editar la columna desde el diálogo ahora recalcula `orden` (antes
+  la tarjeta heredaba el orden de la columna vieja; el MCP ya lo hacía bien).
+- [x] MCP (mismo PR): `por_hacer` en los enums, `listar_tareas` acepta
+  `proyecto_nombre`, y tool nueva `priorizar_tarea` (reordena dentro de la
+  columna: `antes_de`/`despues_de` otra tarjeta o `posicion` tope/fondo) —
+  antes un agente solo podía mandar al tope con `mover_tarea`.
+- [ ] Release: PR abierto → merge → migración en SQL Editor (Joaquín) →
+  verificación en prod (UI + tools nuevas desde sesión/conector nuevo).
+
 ### Post-MVP — Calendario de reuniones
 - [x] Panel "Próximas reuniones" en el dashboard: agenda unificada de los 4
   socios (próximos 7 días) leída de sus Google Calendars vía la cuenta de
@@ -442,3 +474,9 @@ de Google en la consola del Workspace.
   Mergeado (PR #15) y deployado el 2026-07-29 con la migración aplicada; queda
   la verificación end-to-end de UI y MCP. Ver la sección "Post-MVP — Tablero de
   tareas".
+- **2026-07-29** — Tablero v2: backlog separado del tablero (estado nuevo
+  `por_hacer` + vista Backlog priorizable), filtros por cliente/proyecto/
+  responsable en la URL, tareas en las fichas de cliente y proyecto, deep link
+  `?tarea=ZQ-N`, y `priorizar_tarea` en el MCP. Se reevaluó usar un Jira real
+  para producto y se ratificó el tablero propio: lo que faltaba eran estas dos
+  features, no otra herramienta.
