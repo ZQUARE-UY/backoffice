@@ -7,6 +7,9 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
+  BRIEF_TAREA,
+  briefVacio,
+  CAMPOS_BRIEF,
   ESTADOS_TAREA,
   ESTADOS_TAREA_ORDEN,
   PRIORIDADES_TAREA,
@@ -65,10 +68,35 @@ export function CamposTarea({
           id="descripcion"
           name="descripcion"
           rows={4}
-          placeholder="Contexto, criterios de aceptación, links"
+          placeholder="Notas rápidas; el detalle va en el brief de abajo"
           defaultValue={tarea?.descripcion ?? ""}
         />
       </Field>
+      {/* Colapsado por defecto: el brief normalmente lo completa Claude, no se
+          tipea a mano. Los campos de un <details> cerrado igual viajan en el
+          FormData. */}
+      <details open={tarea ? !briefVacio(tarea) : undefined} className="group">
+        <summary className="cursor-pointer text-sm font-medium select-none">
+          Brief de desarrollo
+          <span className="ml-2 text-xs font-normal text-muted-foreground">
+            Normalmente lo completa Claude («desarrollá ZQ-N» con el conector)
+          </span>
+        </summary>
+        <div className="flex flex-col gap-4 pt-4">
+          {CAMPOS_BRIEF.map((campo) => (
+            <Field key={campo}>
+              <FieldLabel htmlFor={campo}>{BRIEF_TAREA[campo].label}</FieldLabel>
+              <Textarea
+                id={campo}
+                name={campo}
+                rows={3}
+                placeholder={BRIEF_TAREA[campo].placeholder}
+                defaultValue={tarea?.[campo] ?? ""}
+              />
+            </Field>
+          ))}
+        </div>
+      </details>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field>
           <FieldLabel htmlFor="estado">Columna</FieldLabel>

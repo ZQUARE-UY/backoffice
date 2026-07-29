@@ -99,6 +99,25 @@ const CAMPOS_IDEA = [
   "etiquetas",
 ] as const
 
+// Campos del contenido de una tarjeta (brief incluido), compartidos entre
+// crear/actualizar y el snapshot que se guarda en tareas_versiones.
+const CAMPOS_TAREA = [
+  "titulo",
+  "descripcion",
+  "contexto",
+  "resultado",
+  "recursos",
+  "plan",
+  "estado",
+  "prioridad",
+  "etiquetas",
+  "fecha_limite",
+] as const
+
+// Brief de desarrollo: si los cuatro están vacíos, la tarjeta está "sin
+// desarrollar" y conviene pasarla por el prompt `desarrollar_tarea`.
+const CAMPOS_BRIEF = ["contexto", "resultado", "recursos", "plan"] as const
+
 // Quién opera vía MCP: socio dueño del token, con la marca "(Claude)" para
 // atribuir versiones y comentarios (mismo criterio que comentar_tarea).
 async function actorMcp(
@@ -435,7 +454,7 @@ const handler = createMcpHandler(
       {
         title: "Listar tareas del tablero",
         description:
-          "Tarjetas del tablero de la empresa, agrupadas por columna. 'backlog' es la lista priorizada fuera del tablero (ideas sin comprometer); el tablero va de 'por_hacer' a 'hecho'. Por defecto omite las que están en 'hecho'.",
+          "Tarjetas del tablero de la empresa, agrupadas por columna. 'backlog' es la lista priorizada fuera del tablero (ideas sin comprometer); el tablero va de 'por_hacer' a 'hecho'. Por defecto omite las que están en 'hecho'. `desarrollada` indica si la tarjeta tiene brief: las que no, necesitan una pasada por el prompt `desarrollar_tarea` antes de que un agente las resuelva (el brief completo se ve con `ficha_tarea`).",
         inputSchema: {
           estado: z.enum(ESTADOS_TAREA).optional(),
           asignado_email: z.string().optional(),
@@ -459,7 +478,7 @@ const handler = createMcpHandler(
           .select(
             // `tareas` tiene dos FK a socios (asignado_a y created_by): sin el
             // hint del constraint, PostgREST no sabe cuál embeber.
-            "numero, titulo, descripcion, estado, prioridad, etiquetas, fecha_limite, orden, asignado:socios!tareas_asignado_a_fkey(nombre, email), clientes(nombre), proyectos(nombre)"
+            "numero, titulo, descripcion, contexto, resultado, recursos, plan, estado, prioridad, etiquetas, fecha_limite, orden, asignado:socios!tareas_asignado_a_fkey(nombre, email), clientes(nombre), proyectos(nombre)"
           )
           .is("deleted_at", null)
           .order("estado")
@@ -490,9 +509,16 @@ const handler = createMcpHandler(
 
         const porColumna: Record<string, unknown[]> = {}
         for (const t of data ?? []) {
-          const { numero, orden, ...resto } = t
+          // El texto del brief se descarta (inflaría la respuesta): queda el
+          // flag `desarrollada`; el contenido se pide con ficha_tarea.
+          const { numero, orden, contexto, resultado, recursos, plan, ...resto } = t
           void orden
-          ;(porColumna[t.estado] ??= []).push({ codigo: `ZQ-${numero}`, ...resto })
+          const desarrollada = Boolean(contexto || resultado || recursos || plan)
+          ;(porColumna[t.estado] ??= []).push({
+            codigo: `ZQ-${numero}`,
+            desarrollada,
+            ...resto,
+          })
         }
         return texto({ columnas: porColumna })
       }
@@ -503,7 +529,7 @@ const handler = createMcpHandler(
       {
         title: "Ficha de una tarjeta",
         description:
-          "Detalle completo de una tarjeta del tablero, con sus comentarios. Se identifica por número o código (12 o ZQ-12).",
+          "Detalle completo de una tarjeta, con su brief de desarrollo (contexto / resultado / recursos / plan), comentarios e historial de versiones. Se identifica por número o código (12 o ZQ-12). Para resolver una tarjeta: si tiene brief, seguí su `plan` y verificá lo hecho contra `resultado` antes de darla por terminada; si no lo tiene, conviene desarrollarla primero (prompt `desarrollar_tarea`).",
         inputSchema: { tarea: z.union([z.string(), z.number()]) },
       },
       async ({ tarea }) => {
@@ -514,25 +540,33 @@ const handler = createMcpHandler(
         const { data } = await supabase
           .from("tareas")
           .select(
-            "id, numero, titulo, descripcion, estado, prioridad, etiquetas, fecha_limite, created_at, updated_at, asignado:socios!tareas_asignado_a_fkey(nombre, email), clientes(nombre), proyectos(nombre)"
+            "id, numero, titulo, descripcion, contexto, resultado, recursos, plan, estado, prioridad, etiquetas, fecha_limite, created_at, updated_at, asignado:socios!tareas_asignado_a_fkey(nombre, email), clientes(nombre), proyectos(nombre)"
           )
           .eq("numero", numero)
           .is("deleted_at", null)
           .maybeSingle()
         if (!data) return texto(`No existe la tarjeta ZQ-${numero}.`)
 
-        const { data: comentarios } = await supabase
-          .from("tareas_comentarios")
-          .select("autor, cuerpo, created_at")
-          .eq("tarea_id", data.id)
-          .is("deleted_at", null)
-          .order("created_at")
+        const [{ data: comentarios }, { data: versiones }] = await Promise.all([
+          supabase
+            .from("tareas_comentarios")
+            .select("autor, cuerpo, created_at")
+            .eq("tarea_id", data.id)
+            .is("deleted_at", null)
+            .order("created_at"),
+          supabase
+            .from("tareas_versiones")
+            .select("autor, created_at")
+            .eq("tarea_id", data.id)
+            .order("created_at"),
+        ])
 
         const { id, ...tarjeta } = data
         void id
         return texto({
           tarjeta: { codigo: `ZQ-${data.numero}`, ...tarjeta },
           comentarios: comentarios ?? [],
+          versiones: versiones ?? [],
         })
       }
     )
@@ -542,7 +576,7 @@ const handler = createMcpHandler(
       {
         title: "Crear una tarjeta",
         description:
-          "Crea una tarjeta. Entra arriba de su columna (por defecto 'backlog', la lista de ideas fuera del tablero; usá 'por_hacer' para que entre directo al tablero). Cliente y proyecto se resuelven por nombre aproximado.",
+          "Crea una tarjeta. Entra arriba de su columna (por defecto 'backlog', la lista de ideas fuera del tablero; usá 'por_hacer' para que entre directo al tablero). Cliente y proyecto se resuelven por nombre aproximado. Alcanza con el título: el brief (contexto/resultado/recursos/plan) se completa después con el prompt `desarrollar_tarea`.",
         inputSchema: {
           titulo: z.string().min(3),
           descripcion: z.string().optional(),
@@ -556,11 +590,26 @@ const handler = createMcpHandler(
           proyecto_nombre: z.string().optional(),
           etiquetas: z.array(z.string()).optional(),
           fecha_limite: z.string().describe("YYYY-MM-DD").optional(),
+          contexto: z
+            .string()
+            .describe("brief: ¿por qué existe? qué problema o pedido la origina y qué se sabe ya")
+            .optional(),
+          resultado: z
+            .string()
+            .describe("brief: ¿qué tiene que ser verdad al terminar? criterios de aceptación verificables")
+            .optional(),
+          recursos: z
+            .string()
+            .describe("brief: links, documentos, repos, accesos y personas, con URLs concretas")
+            .optional(),
+          plan: z
+            .string()
+            .describe("brief: pasos sugeridos en orden, cada uno accionable por sí solo")
+            .optional(),
         },
       },
       async (entrada, extra) => {
-        const email = extra.authInfo?.extra?.email as string | undefined
-        const actorId = email ? await socioIdPorEmail(email) : null
+        const { socioId: actorId, autor } = await actorMcp(extra)
 
         const asignadoId = entrada.asignado_email
           ? await socioIdPorEmail(entrada.asignado_email)
@@ -583,26 +632,42 @@ const handler = createMcpHandler(
 
         const estado = entrada.estado ?? "backlog"
         const supabase = createAdminClient()
+        const contenido = {
+          titulo: entrada.titulo,
+          descripcion: entrada.descripcion ?? null,
+          contexto: entrada.contexto ?? null,
+          resultado: entrada.resultado ?? null,
+          recursos: entrada.recursos ?? null,
+          plan: entrada.plan ?? null,
+          estado,
+          prioridad: entrada.prioridad ?? "media",
+          etiquetas: entrada.etiquetas ?? [],
+          fecha_limite: entrada.fecha_limite ?? null,
+        }
         const { data, error } = await supabase
           .from("tareas")
           .insert({
-            titulo: entrada.titulo,
-            descripcion: entrada.descripcion ?? null,
-            estado,
-            prioridad: entrada.prioridad ?? "media",
+            ...contenido,
             asignado_a: asignadoId,
             cliente_id: clienteId ?? null,
             proyecto_id: proyectoId ?? null,
-            etiquetas: entrada.etiquetas ?? [],
-            fecha_limite: entrada.fecha_limite ?? null,
             orden: await ordenAlTopeDeColumna(estado),
             created_by: actorId,
             metadata: { origen: "mcp" },
           })
-          .select("numero, titulo, estado, prioridad")
+          .select("id, numero, titulo, estado, prioridad")
           .single()
         if (error) throw new Error(error.message)
-        return texto({ creada: { codigo: `ZQ-${data.numero}`, ...data }, ver: "/tareas" })
+        // Primer snapshot del historial, atribuido al agente.
+        await supabase.from("tareas_versiones").insert({
+          tarea_id: data.id,
+          snapshot: contenido,
+          autor,
+          autor_socio_id: actorId,
+        })
+        const { id: _id, ...creada } = data
+        void _id
+        return texto({ creada: { codigo: `ZQ-${data.numero}`, ...creada }, ver: "/tareas" })
       }
     )
 
@@ -611,11 +676,27 @@ const handler = createMcpHandler(
       {
         title: "Actualizar una tarjeta",
         description:
-          "Cambia campos de una tarjeta existente. Solo se tocan los campos que se pasan. Para cliente/proyecto/responsable, pasar string vacío desvincula.",
+          "Cambia campos de una tarjeta existente, incluido su brief de desarrollo (contexto / resultado / recursos / plan). Solo se tocan los campos que se pasan; string vacío limpia el campo (y desvincula cliente/proyecto/responsable). Cada edición queda en el historial de versiones.",
         inputSchema: {
           tarea: z.union([z.string(), z.number()]),
           titulo: z.string().min(3).optional(),
           descripcion: z.string().optional(),
+          contexto: z
+            .string()
+            .describe("brief: por qué existe, qué la origina y qué se sabe ya")
+            .optional(),
+          resultado: z
+            .string()
+            .describe("brief: criterios de aceptación verificables")
+            .optional(),
+          recursos: z
+            .string()
+            .describe("brief: links, docs, repos, accesos y personas")
+            .optional(),
+          plan: z
+            .string()
+            .describe("brief: pasos sugeridos en orden")
+            .optional(),
           estado: z.enum(ESTADOS_TAREA).optional(),
           prioridad: z.enum(PRIORIDADES_TAREA).optional(),
           asignado_email: z.string().optional(),
@@ -625,7 +706,7 @@ const handler = createMcpHandler(
           fecha_limite: z.string().describe("YYYY-MM-DD").optional(),
         },
       },
-      async (entrada) => {
+      async (entrada, extra) => {
         const numero = numeroDeTarea(entrada.tarea)
         if (!numero) return texto(`"${entrada.tarea}" no parece un número de tarjeta.`)
 
@@ -642,6 +723,9 @@ const handler = createMcpHandler(
         if (entrada.titulo !== undefined) cambios.titulo = entrada.titulo
         if (entrada.descripcion !== undefined)
           cambios.descripcion = entrada.descripcion || null
+        for (const campo of CAMPOS_BRIEF) {
+          if (entrada[campo] !== undefined) cambios[campo] = entrada[campo] || null
+        }
         if (entrada.prioridad !== undefined) cambios.prioridad = entrada.prioridad
         if (entrada.etiquetas !== undefined) cambios.etiquetas = entrada.etiquetas
         if (entrada.fecha_limite !== undefined)
@@ -682,10 +766,29 @@ const handler = createMcpHandler(
           .from("tareas")
           .update(cambios)
           .eq("id", actual.id)
-          .select("numero, titulo, estado, prioridad")
+          .select("*")
           .single()
         if (error) throw new Error(error.message)
-        return texto({ actualizada: { codigo: `ZQ-${data.numero}`, ...data } })
+
+        // Snapshot completo post-edición (no un delta), atribuido al agente.
+        const { autor, socioId } = await actorMcp(extra)
+        const snapshot: Record<string, unknown> = {}
+        for (const campo of CAMPOS_TAREA) snapshot[campo] = data[campo]
+        await supabase.from("tareas_versiones").insert({
+          tarea_id: actual.id,
+          snapshot,
+          autor,
+          autor_socio_id: socioId,
+        })
+
+        return texto({
+          actualizada: {
+            codigo: `ZQ-${data.numero}`,
+            titulo: data.titulo,
+            estado: data.estado,
+            prioridad: data.prioridad,
+          },
+        })
       }
     )
 
@@ -1223,6 +1326,51 @@ const handler = createMcpHandler(
                   ? "Al cerrar cada parte, guardá el avance con `actualizar_idea` (así queda el historial de versiones)."
                   : "Cuando tengamos el título y el problema, guardala con `crear_idea` en estado `en_exploracion` y seguí actualizándola con `actualizar_idea` a medida que avanzamos.",
                 "Cuando el one-pager esté completo y yo esté conforme, pasala a estado `lista` y cerrá con un resumen del one-pager.",
+              ].join("\n"),
+            },
+          },
+        ],
+      })
+    )
+
+    // Prompt guía: la entrevista estándar para desarrollar una tarjeta del
+    // tablero hasta que cualquier persona o agente pueda resolverla sin más
+    // contexto. Espejo de bajar_idea_a_tierra, pero siempre parte de una
+    // tarjeta existente.
+    server.registerPrompt(
+      "desarrollar_tarea",
+      {
+        title: "Desarrollar una tarjeta del tablero",
+        description:
+          "Entrevista guiada para completar el brief de una tarjeta (contexto, resultado, recursos, plan) y dejarla lista para que cualquier persona o agente la resuelva.",
+        argsSchema: {
+          tarea: z.string().describe("código de la tarjeta a desarrollar (ZQ-12 o 12)"),
+        },
+      },
+      ({ tarea }) => ({
+        messages: [
+          {
+            role: "user" as const,
+            content: {
+              type: "text" as const,
+              text: [
+                "Ayudame a desarrollar una tarjeta del tablero de ZQUARE: dejarla con un brief tan completo que cualquiera —incluido otro agente de IA sin este contexto— pueda agarrarla y resolverla.",
+                "",
+                `La tarjeta es ${tarea}: traé su ficha con \`ficha_tarea\` y leé título, descripción y comentarios antes de preguntarme nada. Si ya tiene parte del brief, retomá desde lo que hay en vez de repetir preguntas.`,
+                "",
+                "Antes de entrevistarme, buscá contexto real en el backoffice: usá `buscar` con el tema de la tarjeta (y `ficha_cliente` si tiene cliente asociado) para traer decisiones, documentos, proyectos o tareas relacionadas. Contame lo que encontraste: no me preguntes lo que el backoffice ya sabe.",
+                "",
+                "Después entrevistame para completar el brief, de a UNA pregunta por vez, escuchando la respuesta antes de pasar a la siguiente:",
+                "1. **Contexto**: ¿por qué existe esta tarea? ¿Qué problema o pedido la origina y qué se sabe ya? Sumá lo que encontraste con `buscar`.",
+                "2. **Resultado**: ¿qué tiene que ser verdad cuando esté terminada? Empujá hacia criterios de aceptación verificables: que un tercero pueda chequearlos sin preguntar nada.",
+                "3. **Recursos**: ¿qué links, documentos, repos, accesos o personas hacen falta? Anotá URLs concretas, no descripciones vagas.",
+                "4. **Plan**: proponé vos los pasos en orden a partir de todo lo anterior y ajustalos con mi feedback. Cada paso debería ser accionable por sí solo.",
+                "",
+                "Sé crítico, no un escriba: si la tarea es ambigua o el resultado no se puede verificar, decilo antes de rellenar campos por rellenar. Si es demasiado grande para una sola tarjeta, proponé cómo partirla; si estoy de acuerdo, creá las tarjetas nuevas con `crear_tarea` (cada una con su propio brief mínimo) y referenciá sus códigos en el plan de esta.",
+                "",
+                "Guardá el avance con `actualizar_tarea` al cerrar cada campo, no todo junto al final: así queda el historial de versiones.",
+                "",
+                "Cuando el brief esté completo y yo esté conforme: dejá un comentario resumen con `comentar_tarea` (una o dos líneas: qué quedó definido y qué falta decidir, si algo), y si la tarjeta está en `backlog` preguntame si la pasamos a `por_hacer` con `mover_tarea` — no la muevas sin preguntar. Cerrá mostrándome el brief final.",
               ].join("\n"),
             },
           },

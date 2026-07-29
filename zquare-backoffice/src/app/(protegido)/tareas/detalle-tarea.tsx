@@ -17,15 +17,20 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
+import { cn } from "@/lib/utils"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import {
+  BRIEF_TAREA,
+  briefVacio,
+  CAMPOS_BRIEF,
   codigoTarea,
   ESTADOS_TAREA,
   PRIORIDADES_TAREA,
   type ComentarioTarea,
   type Socio,
   type Tarea,
+  type VersionTarea,
 } from "@/lib/dominio"
 
 import { actualizarTarea, comentarTarea, eliminarTarea } from "./actions"
@@ -47,6 +52,7 @@ function Dato({ label, children }: { label: string; children: React.ReactNode })
 export function DetalleTarea({
   tarea,
   comentarios,
+  versiones,
   socios,
   clientes,
   proyectos,
@@ -55,6 +61,7 @@ export function DetalleTarea({
 }: {
   tarea: Tarea
   comentarios: ComentarioTarea[]
+  versiones: VersionTarea[]
   socios: Socio[]
   clientes: ClienteOpcion[]
   proyectos: ProyectoOpcion[]
@@ -186,6 +193,34 @@ export function DetalleTarea({
               <p className="text-sm whitespace-pre-wrap">{tarea.descripcion}</p>
             )}
 
+            {briefVacio(tarea) ? (
+              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                El brief está vacío. Pedile a Claude &quot;desarrollá{" "}
+                {codigoTarea(tarea.numero)}&quot; desde claude.ai (con el
+                conector del backoffice) para completarlo entrevistándote, o
+                editá la tarjeta a mano.
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {CAMPOS_BRIEF.map((campo) =>
+                  tarea[campo] ? (
+                    <div
+                      key={campo}
+                      className={cn(
+                        "flex flex-col gap-1 rounded-lg border p-3",
+                        campo === "plan" && "sm:col-span-2"
+                      )}
+                    >
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {BRIEF_TAREA[campo].label}
+                      </span>
+                      <p className="text-sm whitespace-pre-wrap">{tarea[campo]}</p>
+                    </div>
+                  ) : null
+                )}
+              </div>
+            )}
+
             {tarea.etiquetas.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {tarea.etiquetas.map((e) => (
@@ -238,6 +273,27 @@ export function DetalleTarea({
                 </Button>
               </form>
             </div>
+
+            {versiones.length > 0 && (
+              <details>
+                <summary className="cursor-pointer text-xs text-muted-foreground select-none">
+                  Historial ({versiones.length}{" "}
+                  {versiones.length === 1 ? "versión" : "versiones"})
+                </summary>
+                <div className="flex flex-col gap-1.5 pt-2">
+                  {versiones.map((v, i) => (
+                    <div
+                      key={v.id}
+                      className="flex items-center gap-2 text-xs text-muted-foreground"
+                    >
+                      <span className="font-mono">v{versiones.length - i}</span>
+                      <span className="text-foreground">{v.autor}</span>
+                      <span className="ml-auto">{v.created_at.slice(0, 10)}</span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
 
             <DialogFooter>
               <BotonEliminar
