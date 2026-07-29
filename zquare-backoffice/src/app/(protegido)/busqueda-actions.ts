@@ -1,10 +1,15 @@
 "use server"
 
+import {
+  codigoTarea,
+  ESTADOS_TAREA,
+  type EstadoTarea,
+} from "@/lib/dominio"
 import { generarEmbeddings } from "@/lib/embeddings"
 import { createClient } from "@/lib/supabase/server"
 
 export type ResultadoBusqueda = {
-  kind: "cliente" | "proyecto" | "documento" | "contenido"
+  kind: "cliente" | "proyecto" | "documento" | "tarea" | "contenido"
   id: string
   titulo: string
   subtitulo: string | null
@@ -30,7 +35,7 @@ export async function buscar(query: string): Promise<ResultadoBusqueda[]> {
 
   const supabase = await createClient()
 
-  const [clientes, proyectos, documentos] = await Promise.all([
+  const [clientes, proyectos, documentos, tareas] = await Promise.all([
     supabase
       .from("clientes")
       .select("id, nombre, empresa")
@@ -46,6 +51,12 @@ export async function buscar(query: string): Promise<ResultadoBusqueda[]> {
     supabase
       .from("documentos")
       .select("id, titulo, cliente_id, clientes(nombre)")
+      .is("deleted_at", null)
+      .ilike("titulo", like)
+      .limit(6),
+    supabase
+      .from("tareas")
+      .select("id, numero, titulo, estado")
       .is("deleted_at", null)
       .ilike("titulo", like)
       .limit(6),
@@ -79,6 +90,16 @@ export async function buscar(query: string): Promise<ResultadoBusqueda[]> {
       titulo: d.titulo,
       subtitulo: nombreCliente(d.clientes as FilaCliente),
       href: `/clientes/${d.cliente_id}`,
+    })
+  }
+  for (const t of tareas.data ?? []) {
+    // Las tarjetas se abren desde el tablero; no tienen ruta propia.
+    resultados.push({
+      kind: "tarea",
+      id: t.id,
+      titulo: t.titulo,
+      subtitulo: `${codigoTarea(t.numero)} · ${ESTADOS_TAREA[t.estado as EstadoTarea]?.label ?? t.estado}`,
+      href: "/tareas",
     })
   }
 

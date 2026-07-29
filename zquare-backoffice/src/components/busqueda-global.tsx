@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import {
   FileTextIcon,
   FolderIcon,
+  KanbanIcon,
   SearchIcon,
   SparklesIcon,
   UsersIcon,
@@ -29,6 +30,7 @@ const ICONOS = {
   cliente: UsersIcon,
   proyecto: FolderIcon,
   documento: FileTextIcon,
+  tarea: KanbanIcon,
   contenido: SparklesIcon,
 }
 
@@ -36,6 +38,7 @@ const GRUPOS: { kind: ResultadoBusqueda["kind"]; label: string }[] = [
   { kind: "cliente", label: "Clientes" },
   { kind: "proyecto", label: "Proyectos" },
   { kind: "documento", label: "Documentos" },
+  { kind: "tarea", label: "Tareas" },
   { kind: "contenido", label: "Contenido (semántico)" },
 ]
 

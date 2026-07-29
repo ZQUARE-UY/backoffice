@@ -29,6 +29,34 @@ export const ESTADOS_PRESUPUESTO = {
 
 export type EstadoPresupuesto = keyof typeof ESTADOS_PRESUPUESTO
 
+// Columnas del tablero de tareas. El orden de las claves es el orden en que se
+// muestran las columnas.
+export const ESTADOS_TAREA = {
+  backlog: { label: "Backlog", variant: "outline" as const },
+  en_curso: { label: "En curso", variant: "default" as const },
+  en_revision: { label: "En revisión", variant: "secondary" as const },
+  hecho: { label: "Hecho", variant: "outline" as const },
+}
+
+export type EstadoTarea = keyof typeof ESTADOS_TAREA
+
+export const ESTADOS_TAREA_ORDEN = Object.keys(ESTADOS_TAREA) as EstadoTarea[]
+
+export const PRIORIDADES_TAREA = {
+  baja: { label: "Baja", variant: "outline" as const },
+  media: { label: "Media", variant: "secondary" as const },
+  alta: { label: "Alta", variant: "default" as const },
+  urgente: { label: "Urgente", variant: "destructive" as const },
+}
+
+export type PrioridadTarea = keyof typeof PRIORIDADES_TAREA
+
+// Identificador corto para hablar de una tarjeta ("ZQ-12"), el mismo que se
+// muestra en el tablero y devuelve el MCP.
+export function codigoTarea(numero: number): string {
+  return `ZQ-${numero}`
+}
+
 export const TIPOS_DOCUMENTO = {
   analisis: { label: "Análisis" },
   propuesta: { label: "Propuesta" },
@@ -167,6 +195,32 @@ export type Decision = {
   proyecto_id: string | null
   created_at: string
   updated_at: string
+}
+
+export type Tarea = {
+  id: string
+  numero: number
+  titulo: string
+  descripcion: string | null
+  estado: EstadoTarea
+  prioridad: PrioridadTarea
+  asignado_a: string | null
+  cliente_id: string | null
+  proyecto_id: string | null
+  etiquetas: string[]
+  fecha_limite: string | null
+  orden: number
+  created_at: string
+  updated_at: string
+}
+
+export type ComentarioTarea = {
+  id: string
+  tarea_id: string
+  cuerpo: string
+  autor: string
+  autor_socio_id: string | null
+  created_at: string
 }
 
 export type Socio = {
