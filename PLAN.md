@@ -234,6 +234,15 @@ ZQUARE (Unidad compartida del Workspace)
   `mover_tarea` y `comentar_tarea`, más las tarjetas en `buscar`. Es el primer
   módulo donde el MCP puede **editar** (el tablero está pensado para que lo
   opere un agente); el borrado sigue siendo solo de la UI.
+- [x] En producción (2026-07-29): PR #15 mergeado (`66e5305`), deploy de Vercel
+  en verde y migración aplicada en el SQL Editor. Verificado contra la base
+  real: `tareas` y `tareas_comentarios` existen con todas sus columnas y RLS
+  activa (con la anon key sin sesión devuelven `[]`); `/tareas` en producción
+  redirige a login.
+- [ ] Verificación end-to-end pendiente: crear una tarjeta desde la UI y otra
+  por MCP. Lo segundo no se pudo hacer en la sesión que escribió las tools —
+  el cliente lista las herramientas del server **al conectarse**, así que las 6
+  nuevas no aparecen hasta reconectar el conector o abrir sesión nueva.
 
 ### Post-MVP — Calendario de reuniones
 - [x] Panel "Próximas reuniones" en el dashboard: agenda unificada de los 4
@@ -381,7 +390,10 @@ de Google en la consola del Workspace.
   resultado (USD), clientes activos, proyectos en curso y por estado; evolución
   mensual (barras CSS, sin librerías de gráficos) y balance de socios (componente
   compartido con Finanzas).
-- **2026-07-28** — Tablero de tareas propio (kanban) en lugar de integrar Jira:
-  tarjetas en Supabase con código corto `ZQ-N`, drag & drop, comentarios, y 6
-  herramientas MCP para que los LLM lean, creen, editen, muevan y comenten
-  tarjetas. Ver la sección "Post-MVP — Tablero de tareas".
+- **2026-07-28/29** — Tablero de tareas propio (kanban) en lugar de integrar
+  Jira: tarjetas en Supabase con código corto `ZQ-N`, drag & drop, comentarios,
+  y 6 herramientas MCP para que los LLM lean, creen, editen, muevan y comenten
+  tarjetas — el primer módulo donde el MCP escribe sobre datos existentes.
+  Mergeado (PR #15) y deployado el 2026-07-29 con la migración aplicada; queda
+  la verificación end-to-end de UI y MCP. Ver la sección "Post-MVP — Tablero de
+  tareas".
