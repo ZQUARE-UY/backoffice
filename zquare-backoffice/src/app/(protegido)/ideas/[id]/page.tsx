@@ -112,13 +112,23 @@ export default async function IdeaPage({
               ))}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <VotarIdea
-              ideaId={idea.id}
-              votos={votos.length}
-              yaVote={votos.some((v) => v.socio_id === socioActual)}
-            />
-            <IdeaAcciones idea={idea} />
+          <div className="flex flex-col items-end gap-1.5">
+            <div className="flex items-center gap-2">
+              <VotarIdea
+                ideaId={idea.id}
+                votos={votos.length}
+                yaVote={votos.some((v) => v.socio_id === socioActual)}
+              />
+              <IdeaAcciones idea={idea} />
+            </div>
+            {votos.length > 0 && (
+              <span className="text-xs text-muted-foreground">
+                Votada por{" "}
+                {votos
+                  .map((v) => nombreSocio.get(v.socio_id) ?? "?")
+                  .join(", ")}
+              </span>
+            )}
           </div>
         </div>
       </div>
