@@ -4,7 +4,6 @@ import { ArrowLeftIcon, HistoryIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import {
   codigoIdea,
@@ -133,39 +132,36 @@ export default async function IdeaPage({
         </div>
       </div>
 
-      {idea.descripcion && (
-        <p className="text-sm whitespace-pre-wrap text-muted-foreground">
-          {idea.descripcion}
-        </p>
-      )}
+      {/* El one-pager se lee como documento, no como dashboard: una sola
+          columna con ancho de lectura y secciones sin cajas. */}
+      <div className="flex max-w-3xl flex-col gap-8">
+        {idea.descripcion && (
+          <p className="text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">
+            {idea.descripcion}
+          </p>
+        )}
 
-      {onePagerVacio ? (
-        <Card>
-          <CardContent className="text-sm text-muted-foreground">
+        {onePagerVacio ? (
+          <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
             El one-pager está vacío. Pedile a Claude &quot;bajá a tierra{" "}
             {codigoIdea(idea.numero)}&quot; desde claude.ai (con el conector
             del backoffice) para completarlo iterando, o editalo a mano.
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {camposOnePager.map((campo) =>
+          </div>
+        ) : (
+          camposOnePager.map((campo) =>
             idea[campo] ? (
-              <Card
-                key={campo}
-                className={campo === "proximos_pasos" ? "lg:col-span-2" : ""}
-              >
-                <CardContent className="flex flex-col gap-2">
-                  <h2 className="text-sm font-medium text-muted-foreground">
-                    {ONE_PAGER_IDEA[campo].label}
-                  </h2>
-                  <p className="text-sm whitespace-pre-wrap">{idea[campo]}</p>
-                </CardContent>
-              </Card>
+              <section key={campo} className="flex flex-col gap-1.5">
+                <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                  {ONE_PAGER_IDEA[campo].label}
+                </h2>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                  {idea[campo]}
+                </p>
+              </section>
             ) : null
-          )}
-        </div>
-      )}
+          )
+        )}
+      </div>
 
       <Separator />
 

@@ -319,6 +319,13 @@ propio en lugar de partir la gestión en dos herramientas.
   límite conocido: las tools nuevas recién aparecen al reconectar): IDEA-1
   capturada desde la UI y leída por MCP con `listar_ideas` y `ficha_idea`,
   con snapshot v1 en el historial y autor atribuido.
+- [x] Mejora 2026-07-29 (pedida por Joaquín tras la primera entrevista real):
+  **análisis de competencia** como sección propia del one-pager — en IDEA-1
+  la competencia apareció igual pero quedó mezclada dentro del problema.
+  Migración `20260729000002` (columna `competencia`), campo en UI y MCP, y
+  paso 2 nuevo en la entrevista del prompt: Claude investiga quién lo
+  resuelve hoy (con búsqueda web si está disponible), qué cobran, y el campo
+  cierra con nuestro diferencial — o la advertencia honesta de que no lo hay.
 - [ ] Etapa 3 — graduación: `graduar_idea` (aprueba y crea proyecto o tareas
   vinculadas en la misma operación) + botón equivalente en la UI.
 - [ ] Etapa 4 — matriz impacto × esfuerzo para priorizar de un vistazo, y

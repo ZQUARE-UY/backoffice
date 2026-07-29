@@ -18,6 +18,7 @@ function datosDesde(formData: FormData) {
     titulo,
     descripcion: textoOpcional(formData.get("descripcion")),
     problema: textoOpcional(formData.get("problema")),
+    competencia: textoOpcional(formData.get("competencia")),
     solucion: textoOpcional(formData.get("solucion")),
     esfuerzo: textoOpcional(formData.get("esfuerzo")),
     impacto: textoOpcional(formData.get("impacto")),
