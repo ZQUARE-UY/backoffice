@@ -273,13 +273,20 @@ ZQUARE (Unidad compartida del Workspace)
     con autor — socio o Claude).
   - **Prompt MCP `bajar_idea_a_tierra`:** entrevista estándar servida por el
     server MCP para que los 4 socios iteren igual sin saber "cómo preguntar".
-- [ ] Etapa 1 — migración `ideas` (+ versiones, comentarios, votos) y página
+- [x] Etapa 1 — migración `ideas` (+ versiones, comentarios, votos) y página
   `/ideas`: lista por estado, captura rápida, detalle con one-pager,
-  comentarios, votos e historial.
-- [ ] Etapa 2 — MCP en el mismo PR (principio "módulo nuevo → herramienta
+  comentarios, votos e historial. **En producción el 2026-07-29** (PR #17
+  mergeado, migración `20260729000001_ideas.sql` aplicada en el SQL Editor;
+  verificado contra la base real: las 4 tablas responden 200+`[]` con la anon
+  key — esquema completo y RLS activa — y `/ideas` redirige a login).
+- [x] Etapa 2 — MCP en el mismo PR (principio "módulo nuevo → herramienta
   MCP"): `listar_ideas`, `ficha_idea`, `crear_idea`, `actualizar_idea`,
   `comentar_idea`, `votar_idea` + prompt `bajar_idea_a_tierra`. Ideas en
   `buscar`, en el Cmd+K y en el índice semántico (origen `idea`).
+  **Verificado end-to-end el 2026-07-29** tras reconectar el conector (el
+  límite conocido: las tools nuevas recién aparecen al reconectar): IDEA-1
+  capturada desde la UI y leída por MCP con `listar_ideas` y `ficha_idea`,
+  con snapshot v1 en el historial y autor atribuido.
 - [ ] Etapa 3 — graduación: `graduar_idea` (aprueba y crea proyecto o tareas
   vinculadas en la misma operación) + botón equivalente en la UI.
 - [ ] Etapa 4 — matriz impacto × esfuerzo para priorizar de un vistazo, y
@@ -425,7 +432,9 @@ de Google en la consola del Workspace.
   prompt guía, one-pager estructurado, ciclo de vida con graduación a
   proyecto/tareas, comentarios + votos + co-edición con historial) e
   implementación de las etapas 1 y 2 (migración, página /ideas y herramientas
-  MCP). Ver la sección "Post-MVP — Banco de ideas".
+  MCP). Mergeado (PR #17), migración aplicada y verificado end-to-end el
+  mismo día — primera idea real cargada (IDEA-1). Ver la sección "Post-MVP —
+  Banco de ideas".
 - **2026-07-28/29** — Tablero de tareas propio (kanban) en lugar de integrar
   Jira: tarjetas en Supabase con código corto `ZQ-N`, drag & drop, comentarios,
   y 6 herramientas MCP para que los LLM lean, creen, editen, muevan y comenten
