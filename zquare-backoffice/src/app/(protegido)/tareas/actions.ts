@@ -60,10 +60,33 @@ export async function crearTarea(formData: FormData) {
 }
 
 export async function actualizarTarea(id: string, formData: FormData) {
+  const datos = datosDesde(formData)
+  const supabase = await createClient()
+  // Si la edición cambia la columna, la tarjeta entra al tope de la nueva (igual
+  // que el MCP); si no, conserva su posición: sin esto heredaría un `orden` de
+  // otra columna y aterrizaría en cualquier lado.
+  const { data: actual } = await supabase
+    .from("tareas")
+    .select("estado")
+    .eq("id", id)
+    .maybeSingle()
+  const cambios =
+    actual && actual.estado !== datos.estado
+      ? { ...datos, orden: await ordenAlTope(datos.estado) }
+      : datos
+  const { error } = await supabase.from("tareas").update(cambios).eq("id", id)
+  if (error) throw new Error(error.message)
+  revalidatePath("/tareas")
+}
+
+// "Pasar al tablero" desde la vista Backlog: la tarjeta se compromete y entra
+// arriba de Por hacer. Server-side porque el backlog no conoce los `orden` de
+// esa columna.
+export async function pasarAlTablero(id: string) {
   const supabase = await createClient()
   const { error } = await supabase
     .from("tareas")
-    .update(datosDesde(formData))
+    .update({ estado: "por_hacer", orden: await ordenAlTope("por_hacer") })
     .eq("id", id)
   if (error) throw new Error(error.message)
   revalidatePath("/tareas")

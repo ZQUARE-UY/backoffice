@@ -1,5 +1,7 @@
 "use client"
 
+import { useState } from "react"
+
 import { SelectCampo } from "@/components/select-campo"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -13,7 +15,12 @@ import {
   type Tarea,
 } from "@/lib/dominio"
 
-export type ProyectoOpcion = { id: string; nombre: string; cliente: string }
+export type ProyectoOpcion = {
+  id: string
+  nombre: string
+  cliente: string
+  cliente_id: string | null
+}
 export type ClienteOpcion = { id: string; nombre: string }
 
 export function CamposTarea({
@@ -29,6 +36,17 @@ export function CamposTarea({
   clientes: ClienteOpcion[]
   proyectos: ProyectoOpcion[]
 }) {
+  // Cascada cliente → proyecto: con un cliente elegido solo se ofrecen sus
+  // proyectos (evita guardar un proyecto de otro cliente); sin cliente se ven
+  // todos, etiquetados con su cliente.
+  const [clienteSel, setClienteSel] = useState(tarea?.cliente_id ?? "")
+  const proyectosVisibles = clienteSel
+    ? proyectos.filter((p) => p.cliente_id === clienteSel)
+    : proyectos
+  const proyectoActual = proyectosVisibles.some((p) => p.id === tarea?.proyecto_id)
+    ? tarea?.proyecto_id ?? ""
+    : ""
+
   return (
     <FieldGroup className="py-4">
       <Field>
@@ -103,6 +121,7 @@ export function CamposTarea({
             id="cliente_id"
             name="cliente_id"
             defaultValue={tarea?.cliente_id ?? ""}
+            onValueChange={setClienteSel}
             opciones={[
               { valor: "", label: "Sin cliente (tarea de empresa)" },
               ...clientes.map((c) => ({ valor: c.id, label: c.nombre })),
@@ -111,15 +130,18 @@ export function CamposTarea({
         </Field>
         <Field>
           <FieldLabel htmlFor="proyecto_id">Proyecto</FieldLabel>
+          {/* key: al cambiar el cliente se remonta el select para que el
+              defaultValue vuelva a una opción válida. */}
           <SelectCampo
+            key={clienteSel}
             id="proyecto_id"
             name="proyecto_id"
-            defaultValue={tarea?.proyecto_id ?? ""}
+            defaultValue={proyectoActual}
             opciones={[
               { valor: "", label: "Sin proyecto" },
-              ...proyectos.map((p) => ({
+              ...proyectosVisibles.map((p) => ({
                 valor: p.id,
-                label: `${p.cliente} — ${p.nombre}`,
+                label: clienteSel ? p.nombre : `${p.cliente} — ${p.nombre}`,
               })),
             ]}
           />

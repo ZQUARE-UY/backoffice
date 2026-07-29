@@ -33,6 +33,7 @@ export type EstadoPresupuesto = keyof typeof ESTADOS_PRESUPUESTO
 // muestran las columnas.
 export const ESTADOS_TAREA = {
   backlog: { label: "Backlog", variant: "outline" as const },
+  por_hacer: { label: "Por hacer", variant: "secondary" as const },
   en_curso: { label: "En curso", variant: "default" as const },
   en_revision: { label: "En revisión", variant: "secondary" as const },
   hecho: { label: "Hecho", variant: "outline" as const },
@@ -41,6 +42,10 @@ export const ESTADOS_TAREA = {
 export type EstadoTarea = keyof typeof ESTADOS_TAREA
 
 export const ESTADOS_TAREA_ORDEN = Object.keys(ESTADOS_TAREA) as EstadoTarea[]
+
+// Columnas visibles en el tablero: todo menos backlog, que tiene vista propia
+// (lista priorizada, estilo Jira).
+export const ESTADOS_TABLERO = ESTADOS_TAREA_ORDEN.filter((e) => e !== "backlog")
 
 export const PRIORIDADES_TAREA = {
   baja: { label: "Baja", variant: "outline" as const },

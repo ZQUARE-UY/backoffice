@@ -1,38 +1,99 @@
+import Link from "next/link"
+
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import { type ComentarioTarea, type Socio, type Tarea } from "@/lib/dominio"
 import { createClient } from "@/lib/supabase/server"
 
+import { Backlog } from "./backlog"
 import { type ProyectoOpcion } from "./campos-tarea"
+import { FiltrosTareas } from "./filtros-tareas"
 import { NuevaTarea } from "./nueva-tarea"
 import { Tablero } from "./tablero"
 
 export const metadata = { title: "Tareas" }
 
+// La columna Hecho es un registro reciente, no un archivo histórico: lo más
+// viejo que esto deja de mostrarse (sigue en la base y en el MCP con
+// `incluir_hechas`).
+const DIAS_HECHAS_VISIBLES = 14
+
 type ProyectoConCliente = {
   id: string
   nombre: string
+  cliente_id: string | null
   clientes: { nombre: string } | null
 }
 
-export default async function TareasPage() {
+type Filtros = {
+  vista?: string
+  cliente?: string
+  proyecto?: string
+  socio?: string
+  tarea?: string
+}
+
+// Mismo parseo que el MCP: acepta "12", "ZQ-12", "zq12".
+function numeroDeParam(param: string | undefined): number | undefined {
+  if (!param) return undefined
+  const numero = Number(param.replace(/^zq-?/i, ""))
+  return Number.isInteger(numero) && numero > 0 ? numero : undefined
+}
+
+// Fuera del componente por la regla de pureza del render (es un server
+// component: acá el "ahora" por request es exactamente lo que se quiere).
+function corteHechasVisibles(): string {
+  return new Date(Date.now() - DIAS_HECHAS_VISIBLES * 86_400_000).toISOString()
+}
+
+export default async function TareasPage({
+  searchParams,
+}: {
+  searchParams: Promise<Filtros>
+}) {
+  const params = await searchParams
   const supabase = await createClient()
+  const tareaAbierta = numeroDeParam(params.tarea)
+
+  // Un deep link a una tarjeta del backlog debe abrirse en la vista Backlog
+  // aunque la URL no lo pida: una query liviana solo cuando hay deep link.
+  let vistaBacklog = params.vista === "backlog"
+  if (tareaAbierta !== undefined && !vistaBacklog) {
+    const { data } = await supabase
+      .from("tareas")
+      .select("estado")
+      .eq("numero", tareaAbierta)
+      .is("deleted_at", null)
+      .maybeSingle()
+    if (data?.estado === "backlog") vistaBacklog = true
+  }
+
+  // El filtrado va en la query (no en el cliente): los índices parciales por
+  // cliente/proyecto/responsable ya existen y el payload baja de "toda la base"
+  // a lo que se ve.
+  let tareasQuery = supabase
+    .from("tareas")
+    .select("*")
+    .is("deleted_at", null)
+    .order("orden", { ascending: true })
+  if (vistaBacklog) {
+    tareasQuery = tareasQuery.eq("estado", "backlog")
+  } else {
+    tareasQuery = tareasQuery
+      .neq("estado", "backlog")
+      .or(`estado.neq.hecho,updated_at.gte.${corteHechasVisibles()}`)
+  }
+  if (params.cliente) tareasQuery = tareasQuery.eq("cliente_id", params.cliente)
+  if (params.proyecto) tareasQuery = tareasQuery.eq("proyecto_id", params.proyecto)
+  if (params.socio) tareasQuery = tareasQuery.eq("asignado_a", params.socio)
 
   const [
     { data: tareasData },
-    { data: comentariosData },
     { data: sociosData },
     { data: clientesData },
     { data: proyectosData },
   ] = await Promise.all([
-    supabase
-      .from("tareas")
-      .select("*")
-      .is("deleted_at", null)
-      .order("orden", { ascending: true }),
-    supabase
-      .from("tareas_comentarios")
-      .select("id, tarea_id, cuerpo, autor, autor_socio_id, created_at")
-      .is("deleted_at", null)
-      .order("created_at", { ascending: true }),
+    tareasQuery,
     supabase
       .from("socios")
       .select("id, nombre, email")
@@ -45,12 +106,27 @@ export default async function TareasPage() {
       .order("nombre"),
     supabase
       .from("proyectos")
-      .select("id, nombre, clientes(nombre)")
+      .select("id, nombre, cliente_id, clientes(nombre)")
       .is("deleted_at", null)
       .order("nombre"),
   ])
 
   const tareas = (tareasData ?? []) as Tarea[]
+
+  // Solo los comentarios de las tarjetas visibles (depende del resultado de
+  // arriba, por eso va después del Promise.all).
+  const { data: comentariosData } = tareas.length
+    ? await supabase
+        .from("tareas_comentarios")
+        .select("id, tarea_id, cuerpo, autor, autor_socio_id, created_at")
+        .in(
+          "tarea_id",
+          tareas.map((t) => t.id)
+        )
+        .is("deleted_at", null)
+        .order("created_at", { ascending: true })
+    : { data: [] }
+
   const comentarios = (comentariosData ?? []) as ComentarioTarea[]
   const socios = (sociosData ?? []) as Socio[]
   const clientes = (clientesData ?? []) as { id: string; nombre: string }[]
@@ -60,7 +136,18 @@ export default async function TareasPage() {
     id: p.id,
     nombre: p.nombre,
     cliente: p.clientes?.nombre ?? "Sin cliente",
+    cliente_id: p.cliente_id,
   }))
+
+  // El toggle de vistas preserva los filtros activos.
+  const filtros = new URLSearchParams()
+  if (params.cliente) filtros.set("cliente", params.cliente)
+  if (params.proyecto) filtros.set("proyecto", params.proyecto)
+  if (params.socio) filtros.set("socio", params.socio)
+  const qs = filtros.toString()
+  const hrefTablero = `/tareas${qs ? `?${qs}` : ""}`
+  filtros.set("vista", "backlog")
+  const hrefBacklog = `/tareas?${filtros.toString()}`
 
   return (
     <>
@@ -68,20 +155,62 @@ export default async function TareasPage() {
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-semibold tracking-tight">Tareas</h1>
           <p className="text-muted-foreground">
-            Tablero de la empresa. Arrastrá las tarjetas entre columnas o
-            editalas para cambiarles el estado.
+            {vistaBacklog
+              ? "Backlog: ideas y pendientes priorizados. Arrastrá para priorizar y pasá al tablero lo que se encara."
+              : "Tablero de la empresa. Arrastrá las tarjetas entre columnas o editalas para cambiarles el estado."}
           </p>
         </div>
-        <NuevaTarea socios={socios} clientes={clientes} proyectos={proyectos} />
+        <NuevaTarea
+          socios={socios}
+          clientes={clientes}
+          proyectos={proyectos}
+          estadoInicial={vistaBacklog ? "backlog" : "por_hacer"}
+        />
       </div>
 
-      <Tablero
-        tareas={tareas}
-        comentarios={comentarios}
-        socios={socios}
-        clientes={clientes}
-        proyectos={proyectos}
-      />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex rounded-lg border p-0.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            nativeButton={false}
+            render={<Link href={hrefTablero} />}
+            className={cn(!vistaBacklog && "bg-muted")}
+          >
+            Tablero
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            nativeButton={false}
+            render={<Link href={hrefBacklog} />}
+            className={cn(vistaBacklog && "bg-muted")}
+          >
+            Backlog
+          </Button>
+        </div>
+        <FiltrosTareas clientes={clientes} proyectos={proyectos} socios={socios} />
+      </div>
+
+      {vistaBacklog ? (
+        <Backlog
+          tareas={tareas}
+          comentarios={comentarios}
+          socios={socios}
+          clientes={clientes}
+          proyectos={proyectos}
+          tareaAbierta={tareaAbierta}
+        />
+      ) : (
+        <Tablero
+          tareas={tareas}
+          comentarios={comentarios}
+          socios={socios}
+          clientes={clientes}
+          proyectos={proyectos}
+          tareaAbierta={tareaAbierta}
+        />
+      )}
     </>
   )
 }

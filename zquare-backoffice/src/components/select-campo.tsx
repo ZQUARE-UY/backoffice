@@ -11,13 +11,17 @@ export function SelectCampo({
   name,
   opciones,
   defaultValue,
+  value,
   id,
   triggerClassName,
   onValueChange,
 }: {
   name: string
   opciones: Opcion[]
-  defaultValue: string
+  // `defaultValue` para formularios (no controlado); `value` cuando el valor
+  // vive afuera, p. ej. en la URL (filtros del tablero). Pasar uno de los dos.
+  defaultValue?: string
+  value?: string
   id?: string
   triggerClassName?: string
   onValueChange?: (valor: string) => void
@@ -27,7 +31,7 @@ export function SelectCampo({
       <select
         id={id}
         name={name}
-        defaultValue={defaultValue}
+        {...(value !== undefined ? { value } : { defaultValue: defaultValue ?? "" })}
         onChange={
           onValueChange ? (e) => onValueChange(e.target.value) : undefined
         }
