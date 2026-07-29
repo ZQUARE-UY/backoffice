@@ -107,7 +107,7 @@ export async function indexar(
   const { data: ideas } = await supabase
     .from("ideas")
     .select(
-      "id, titulo, descripcion, problema, solucion, esfuerzo, impacto, proximos_pasos, etiquetas, updated_at"
+      "id, titulo, descripcion, problema, competencia, solucion, esfuerzo, impacto, proximos_pasos, etiquetas, updated_at"
     )
     .is("deleted_at", null)
 
@@ -121,6 +121,7 @@ export async function indexar(
       i.titulo,
       i.descripcion,
       i.problema,
+      i.competencia,
       i.solucion,
       i.esfuerzo,
       i.impacto,

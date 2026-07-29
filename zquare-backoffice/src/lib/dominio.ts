@@ -80,6 +80,7 @@ export const ESTADOS_IDEA_ORDEN = Object.keys(ESTADOS_IDEA) as EstadoIdea[]
 // (detalle y formulario) y el snapshot de versiones.
 export const ONE_PAGER_IDEA = {
   problema: { label: "Problema", placeholder: "Qué problema real resuelve y a quién le duele" },
+  competencia: { label: "Competencia", placeholder: "Quién lo resuelve hoy, a qué precio, y cuál sería nuestro diferencial" },
   solucion: { label: "Solución propuesta", placeholder: "Cómo se resuelve, versión mínima primero" },
   esfuerzo: { label: "Esfuerzo estimado", placeholder: "Qué implica construirla (tiempo, plata, dependencias)" },
   impacto: { label: "Impacto esperado", placeholder: "Qué cambia si funciona, cómo se mide" },
@@ -266,6 +267,7 @@ export type Idea = {
   titulo: string
   descripcion: string | null
   problema: string | null
+  competencia: string | null
   solucion: string | null
   esfuerzo: string | null
   impacto: string | null

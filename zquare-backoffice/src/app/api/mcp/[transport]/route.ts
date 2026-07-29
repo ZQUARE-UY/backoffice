@@ -91,6 +91,7 @@ const CAMPOS_IDEA = [
   "titulo",
   "descripcion",
   "problema",
+  "competencia",
   "solucion",
   "esfuerzo",
   "impacto",
@@ -878,7 +879,7 @@ const handler = createMcpHandler(
         let q = supabase
           .from("ideas")
           .select(
-            "id, numero, titulo, descripcion, problema, solucion, esfuerzo, impacto, proximos_pasos, estado, etiquetas, creador:socios!ideas_created_by_fkey(nombre), created_at"
+            "id, numero, titulo, descripcion, problema, competencia, solucion, esfuerzo, impacto, proximos_pasos, estado, etiquetas, creador:socios!ideas_created_by_fkey(nombre), created_at"
           )
           .is("deleted_at", null)
           .order("created_at", { ascending: false })
@@ -926,7 +927,7 @@ const handler = createMcpHandler(
         const { data } = await supabase
           .from("ideas")
           .select(
-            "id, numero, titulo, descripcion, problema, solucion, esfuerzo, impacto, proximos_pasos, estado, etiquetas, creador:socios!ideas_created_by_fkey(nombre), created_at, updated_at"
+            "id, numero, titulo, descripcion, problema, competencia, solucion, esfuerzo, impacto, proximos_pasos, estado, etiquetas, creador:socios!ideas_created_by_fkey(nombre), created_at, updated_at"
           )
           .eq("numero", numero)
           .is("deleted_at", null)
@@ -976,6 +977,7 @@ const handler = createMcpHandler(
           titulo: z.string().min(3),
           descripcion: z.string().describe("contexto libre: de dónde salió").optional(),
           problema: z.string().describe("qué problema real resuelve y a quién le duele").optional(),
+          competencia: z.string().describe("quién lo resuelve hoy, a qué precio, y nuestro diferencial").optional(),
           solucion: z.string().describe("cómo se resuelve, versión mínima primero").optional(),
           esfuerzo: z.string().describe("qué implica construirla: tiempo, plata, dependencias").optional(),
           impacto: z.string().describe("qué cambia si funciona y cómo se mide").optional(),
@@ -992,6 +994,7 @@ const handler = createMcpHandler(
           titulo: entrada.titulo,
           descripcion: entrada.descripcion ?? null,
           problema: entrada.problema ?? null,
+          competencia: entrada.competencia ?? null,
           solucion: entrada.solucion ?? null,
           esfuerzo: entrada.esfuerzo ?? null,
           impacto: entrada.impacto ?? null,
@@ -1030,6 +1033,7 @@ const handler = createMcpHandler(
           titulo: z.string().min(3).optional(),
           descripcion: z.string().optional(),
           problema: z.string().optional(),
+          competencia: z.string().optional(),
           solucion: z.string().optional(),
           esfuerzo: z.string().optional(),
           impacto: z.string().optional(),
@@ -1056,6 +1060,7 @@ const handler = createMcpHandler(
         for (const campo of [
           "descripcion",
           "problema",
+          "competencia",
           "solucion",
           "esfuerzo",
           "impacto",
@@ -1187,7 +1192,7 @@ const handler = createMcpHandler(
       {
         title: "Bajar una idea a tierra",
         description:
-          "Entrevista guiada para madurar una idea del banco: problema, solución mínima, esfuerzo, impacto y próximos pasos. Termina guardándola con crear_idea o actualizar_idea.",
+          "Entrevista guiada para madurar una idea del banco: problema, competencia, solución mínima, esfuerzo, impacto y próximos pasos. Termina guardándola con crear_idea o actualizar_idea.",
         argsSchema: {
           idea: z
             .string()
@@ -1212,10 +1217,11 @@ const handler = createMcpHandler(
                 "",
                 "Entrevistame para completar el one-pager, de a UNA pregunta por vez, escuchando antes de pasar a la siguiente:",
                 "1. **Problema**: ¿qué problema real resuelve y a quién le duele? Si no hay un dolor concreto, decímelo sin vueltas.",
-                "2. **Solución**: ¿cuál es la versión mínima que lo resuelve? Empujá hacia lo más chico que sirva.",
-                "3. **Esfuerzo**: ¿qué implica construirla (tiempo, plata, dependencias)? Usá el contexto del backoffice si ayuda (clientes, finanzas, proyectos).",
-                "4. **Impacto**: ¿qué cambia si funciona y cómo lo mediríamos?",
-                "5. **Próximos pasos**: ¿qué es lo primero que habría que hacer para validarla?",
+                "2. **Competencia**: ¿quién resuelve esto hoy? Acá el trabajo es tuyo, no mío: si tenés búsqueda web disponible, investigá qué productos existen (globales y de la región), qué cobran y qué les falta; si no, usá lo que sepas y marcá qué falta verificar. Presentame lo que encuentres y preguntame contra quién creo que competimos de verdad. El campo `competencia` debe cerrar con nuestro diferencial — y si el diferencial no aparece, decímelo sin vueltas.",
+                "3. **Solución**: ¿cuál es la versión mínima que lo resuelve? Empujá hacia lo más chico que sirva, diferenciado de lo que ya existe (punto 2).",
+                "4. **Esfuerzo**: ¿qué implica construirla (tiempo, plata, dependencias)? Usá el contexto del backoffice si ayuda (clientes, finanzas, proyectos).",
+                "5. **Impacto**: ¿qué cambia si funciona y cómo lo mediríamos? Contrastá los números con los precios de la competencia relevados.",
+                "6. **Próximos pasos**: ¿qué es lo primero que habría que hacer para validarla?",
                 "",
                 "Sé crítico pero constructivo: cuestioná supuestos, señalá riesgos, y si la idea se solapa con algo que ZQUARE ya tiene o decidió, decilo.",
                 "",
