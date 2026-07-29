@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { ArrowLeftIcon, HistoryIcon } from "lucide-react"
+import { ArrowLeftIcon, HistoryIcon, MessageCircleIcon, SparklesIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -19,6 +19,7 @@ import {
 import { idSocioActual } from "@/lib/socio-actual"
 import { createClient } from "@/lib/supabase/server"
 
+import { urlIterarIdea, urlIterarSeccion } from "../chat-claude"
 import { ComentariosIdea } from "./comentarios-idea"
 import { IdeaAcciones, VotarIdea } from "./idea-acciones"
 
@@ -113,6 +114,21 @@ export default async function IdeaPage({
           </div>
           <div className="flex flex-col items-end gap-1.5">
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                nativeButton={false}
+                render={
+                  <a
+                    href={urlIterarIdea(idea)}
+                    target="_blank"
+                    rel="noreferrer"
+                  />
+                }
+              >
+                <SparklesIcon data-icon="inline-start" />
+                Iterar con Claude
+              </Button>
               <VotarIdea
                 ideaId={idea.id}
                 votos={votos.length}
@@ -146,10 +162,27 @@ export default async function IdeaPage({
                 {idea.descripcion}
               </p>
             )}
-            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              El one-pager está vacío. Pedile a Claude &quot;bajá a tierra{" "}
-              {codigoIdea(idea.numero)}&quot; desde claude.ai (con el conector
-              del backoffice) para completarlo iterando, o editalo a mano.
+            <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              <p>
+                El one-pager está vacío: la idea todavía es una semilla.
+                Madurala iterando con Claude (usa el conector del backoffice)
+                o editala a mano.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                nativeButton={false}
+                render={
+                  <a
+                    href={urlIterarIdea(idea)}
+                    target="_blank"
+                    rel="noreferrer"
+                  />
+                }
+              >
+                <SparklesIcon data-icon="inline-start" />
+                Bajarla a tierra con Claude
+              </Button>
             </div>
           </>
         ) : (
@@ -157,9 +190,20 @@ export default async function IdeaPage({
             {camposOnePager.map((campo) =>
               idea[campo] ? (
                 <section key={campo} className="flex flex-col gap-1.5">
-                  <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-                    {ONE_PAGER_IDEA[campo].label}
-                  </h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                      {ONE_PAGER_IDEA[campo].label}
+                    </h2>
+                    <a
+                      href={urlIterarSeccion(idea, campo)}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={`Trabajar "${ONE_PAGER_IDEA[campo].label}" con Claude`}
+                      className="text-muted-foreground/60 transition-colors hover:text-foreground"
+                    >
+                      <MessageCircleIcon className="size-3.5" />
+                    </a>
+                  </div>
                   <p className="text-sm leading-relaxed whitespace-pre-wrap">
                     {idea[campo]}
                   </p>
