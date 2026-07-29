@@ -8,11 +8,13 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import {
+  briefVacio,
   codigoTarea,
   PRIORIDADES_TAREA,
   type ComentarioTarea,
   type Socio,
   type Tarea,
+  type VersionTarea,
 } from "@/lib/dominio"
 
 import { moverTarea, pasarAlTablero } from "./actions"
@@ -29,6 +31,7 @@ type Cambio = { id: string; orden: number } | { id: string; quitar: true }
 export function Backlog({
   tareas,
   comentarios,
+  versiones,
   socios,
   clientes,
   proyectos,
@@ -36,6 +39,7 @@ export function Backlog({
 }: {
   tareas: Tarea[]
   comentarios: ComentarioTarea[]
+  versiones: VersionTarea[]
   socios: Socio[]
   clientes: ClienteOpcion[]
   proyectos: ProyectoOpcion[]
@@ -132,14 +136,22 @@ export function Backlog({
             <DetalleTarea
               tarea={tarea}
               comentarios={comentarios.filter((c) => c.tarea_id === tarea.id)}
+              versiones={versiones.filter((v) => v.tarea_id === tarea.id)}
               socios={socios}
               clientes={clientes}
               proyectos={proyectos}
               abiertoInicial={tarea.numero === tareaAbierta}
             >
               <Card className="flex-row items-center gap-3 p-3 hover:border-primary/50">
-                <span className="font-mono text-xs text-muted-foreground">
+                <span className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
                   {codigoTarea(tarea.numero)}
+                  {briefVacio(tarea) && (
+                    // Punto ámbar: la tarjeta todavía no tiene brief.
+                    <span
+                      title="Sin desarrollar"
+                      className="size-1.5 rounded-full bg-amber-500"
+                    />
+                  )}
                 </span>
                 <span className="min-w-0 flex-1 truncate text-sm font-medium">
                   {tarea.titulo}

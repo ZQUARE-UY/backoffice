@@ -62,6 +62,39 @@ export function codigoTarea(numero: number): string {
   return `ZQ-${numero}`
 }
 
+// Brief de desarrollo de una tarjeta: campo de la tabla → label. Compartido
+// entre la UI (detalle y formulario) y el snapshot de versiones. Los
+// placeholders son las preguntas que responde cada campo, pensadas para que
+// otro agente pueda resolver la tarjeta sin más contexto.
+export const BRIEF_TAREA = {
+  contexto: {
+    label: "Contexto",
+    placeholder: "Por qué existe: qué problema o pedido la origina y qué se sabe ya",
+  },
+  resultado: {
+    label: "Resultado esperado",
+    placeholder: "Qué tiene que ser verdad al terminar: criterios de aceptación verificables",
+  },
+  recursos: {
+    label: "Recursos",
+    placeholder: "Links, documentos, repos, accesos y personas a consultar",
+  },
+  plan: {
+    label: "Plan sugerido",
+    placeholder: "Pasos en orden para resolverla; quien la agarre puede ajustarlos",
+  },
+}
+
+export type CampoBrief = keyof typeof BRIEF_TAREA
+
+export const CAMPOS_BRIEF = Object.keys(BRIEF_TAREA) as CampoBrief[]
+
+// Una tarjeta "sin desarrollar" es la que todavía no tiene brief: el tablero
+// la marca y el MCP la reporta como `desarrollada: false`.
+export function briefVacio(tarea: Pick<Tarea, CampoBrief>): boolean {
+  return CAMPOS_BRIEF.every((campo) => !tarea[campo])
+}
+
 // Ciclo de vida de una idea del banco. El orden de las claves es el orden en
 // que se muestran las secciones en /ideas.
 export const ESTADOS_IDEA = {
@@ -240,6 +273,10 @@ export type Tarea = {
   numero: number
   titulo: string
   descripcion: string | null
+  contexto: string | null
+  resultado: string | null
+  recursos: string | null
+  plan: string | null
   estado: EstadoTarea
   prioridad: PrioridadTarea
   asignado_a: string | null
@@ -258,6 +295,13 @@ export type ComentarioTarea = {
   cuerpo: string
   autor: string
   autor_socio_id: string | null
+  created_at: string
+}
+
+export type VersionTarea = {
+  id: string
+  tarea_id: string
+  autor: string
   created_at: string
 }
 

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import {
+  briefVacio,
   codigoTarea,
   ESTADOS_TABLERO,
   ESTADOS_TAREA,
@@ -15,6 +16,7 @@ import {
   type EstadoTarea,
   type Socio,
   type Tarea,
+  type VersionTarea,
 } from "@/lib/dominio"
 
 import { moverTarea } from "./actions"
@@ -28,6 +30,7 @@ type Movimiento = { id: string; estado: EstadoTarea; orden: number }
 export function Tablero({
   tareas,
   comentarios,
+  versiones,
   socios,
   clientes,
   proyectos,
@@ -35,6 +38,7 @@ export function Tablero({
 }: {
   tareas: Tarea[]
   comentarios: ComentarioTarea[]
+  versiones: VersionTarea[]
   socios: Socio[]
   clientes: ClienteOpcion[]
   proyectos: ProyectoOpcion[]
@@ -152,6 +156,7 @@ export function Tablero({
                 <DetalleTarea
                   tarea={tarea}
                   comentarios={comentarios.filter((c) => c.tarea_id === tarea.id)}
+                  versiones={versiones.filter((v) => v.tarea_id === tarea.id)}
                   socios={socios}
                   clientes={clientes}
                   proyectos={proyectos}
@@ -177,7 +182,16 @@ export function Tablero({
                       </div>
                     )}
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                      <span className="font-mono">{codigoTarea(tarea.numero)}</span>
+                      <span className="flex items-center gap-1.5 font-mono">
+                        {codigoTarea(tarea.numero)}
+                        {briefVacio(tarea) && tarea.estado !== "hecho" && (
+                          // Punto ámbar: la tarjeta todavía no tiene brief.
+                          <span
+                            title="Sin desarrollar"
+                            className="size-1.5 rounded-full bg-amber-500"
+                          />
+                        )}
+                      </span>
                       {tarea.asignado_a && nombreSocio.has(tarea.asignado_a) && (
                         <span className="flex items-center gap-1">
                           <UserIcon className="size-3" />

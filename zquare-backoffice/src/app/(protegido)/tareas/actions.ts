@@ -17,6 +17,10 @@ function datosDesde(formData: FormData) {
   return {
     titulo,
     descripcion: textoOpcional(formData.get("descripcion")),
+    contexto: textoOpcional(formData.get("contexto")),
+    resultado: textoOpcional(formData.get("resultado")),
+    recursos: textoOpcional(formData.get("recursos")),
+    plan: textoOpcional(formData.get("plan")),
     estado: (formData.get("estado") as string | null) ?? "backlog",
     prioridad: (formData.get("prioridad") as string | null) ?? "media",
     asignado_a: textoOpcional(formData.get("asignado_a")),
@@ -47,15 +51,41 @@ async function ordenAlTope(estado: string): Promise<number> {
   return (data?.orden ?? 0) - 1
 }
 
+// Historial de co-edición: cada creación/edición deja un snapshot del
+// contenido con su autor (los movimientos de columna/orden no versionan).
+// Explícito (no trigger) para poder atribuirlo, igual que en ideas.
+async function guardarVersion(
+  tareaId: string,
+  snapshot: Record<string, unknown>
+) {
+  const supabase = await createClient()
+  const socioId = await idSocioActual()
+  const { data: socio } = socioId
+    ? await supabase.from("socios").select("nombre").eq("id", socioId).maybeSingle()
+    : { data: null }
+
+  await supabase.from("tareas_versiones").insert({
+    tarea_id: tareaId,
+    snapshot,
+    autor: socio?.nombre ?? "Socio",
+    autor_socio_id: socioId,
+  })
+}
+
 export async function crearTarea(formData: FormData) {
   const datos = datosDesde(formData)
   const supabase = await createClient()
-  const { error } = await supabase.from("tareas").insert({
-    ...datos,
-    orden: await ordenAlTope(datos.estado),
-    created_by: await idSocioActual(),
-  })
+  const { data, error } = await supabase
+    .from("tareas")
+    .insert({
+      ...datos,
+      orden: await ordenAlTope(datos.estado),
+      created_by: await idSocioActual(),
+    })
+    .select("id")
+    .single()
   if (error) throw new Error(error.message)
+  await guardarVersion(data.id, datos)
   revalidatePath("/tareas")
 }
 
@@ -76,6 +106,7 @@ export async function actualizarTarea(id: string, formData: FormData) {
       : datos
   const { error } = await supabase.from("tareas").update(cambios).eq("id", id)
   if (error) throw new Error(error.message)
+  await guardarVersion(id, datos)
   revalidatePath("/tareas")
 }
 

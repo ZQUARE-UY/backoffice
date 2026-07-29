@@ -2,7 +2,12 @@ import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { type ComentarioTarea, type Socio, type Tarea } from "@/lib/dominio"
+import {
+  type ComentarioTarea,
+  type Socio,
+  type Tarea,
+  type VersionTarea,
+} from "@/lib/dominio"
 import { createClient } from "@/lib/supabase/server"
 
 import { Backlog } from "./backlog"
@@ -113,21 +118,27 @@ export default async function TareasPage({
 
   const tareas = (tareasData ?? []) as Tarea[]
 
-  // Solo los comentarios de las tarjetas visibles (depende del resultado de
-  // arriba, por eso va después del Promise.all).
-  const { data: comentariosData } = tareas.length
-    ? await supabase
-        .from("tareas_comentarios")
-        .select("id, tarea_id, cuerpo, autor, autor_socio_id, created_at")
-        .in(
-          "tarea_id",
-          tareas.map((t) => t.id)
-        )
-        .is("deleted_at", null)
-        .order("created_at", { ascending: true })
-    : { data: [] }
+  // Solo los comentarios y versiones de las tarjetas visibles (dependen del
+  // resultado de arriba, por eso van después del Promise.all).
+  const idsVisibles = tareas.map((t) => t.id)
+  const [{ data: comentariosData }, { data: versionesData }] = tareas.length
+    ? await Promise.all([
+        supabase
+          .from("tareas_comentarios")
+          .select("id, tarea_id, cuerpo, autor, autor_socio_id, created_at")
+          .in("tarea_id", idsVisibles)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("tareas_versiones")
+          .select("id, tarea_id, autor, created_at")
+          .in("tarea_id", idsVisibles)
+          .order("created_at", { ascending: false }),
+      ])
+    : [{ data: [] }, { data: [] }]
 
   const comentarios = (comentariosData ?? []) as ComentarioTarea[]
+  const versiones = (versionesData ?? []) as VersionTarea[]
   const socios = (sociosData ?? []) as Socio[]
   const clientes = (clientesData ?? []) as { id: string; nombre: string }[]
   const proyectos: ProyectoOpcion[] = (
@@ -196,6 +207,7 @@ export default async function TareasPage({
         <Backlog
           tareas={tareas}
           comentarios={comentarios}
+          versiones={versiones}
           socios={socios}
           clientes={clientes}
           proyectos={proyectos}
@@ -205,6 +217,7 @@ export default async function TareasPage({
         <Tablero
           tareas={tareas}
           comentarios={comentarios}
+          versiones={versiones}
           socios={socios}
           clientes={clientes}
           proyectos={proyectos}

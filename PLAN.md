@@ -276,6 +276,35 @@ propio en lugar de partir la gestión en dos herramientas.
 - [ ] Release: PR abierto → merge → migración en SQL Editor (Joaquín) →
   verificación en prod (UI + tools nuevas desde sesión/conector nuevo).
 
+#### Tablero v3 — Brief de desarrollo (2026-07-29)
+
+Objetivo: que cada tarjeta tenga un formato que un LLM pueda leer y resolver
+de la mejor manera, y que se pueda crear con lo mínimo (título) para que un
+agente la desarrolle después. Mismo patrón que el one-pager de ideas.
+
+- [x] Brief de 4 campos en `tareas` (migración `20260729000002_brief_tareas.sql`):
+  `contexto` (por qué existe), `resultado` (criterios de aceptación
+  verificables), `recursos` (links/docs/accesos con URLs concretas) y `plan`
+  (pasos accionables). Mapa `BRIEF_TAREA` en dominio.ts compartido por
+  detalle, formulario y MCP.
+- [x] Historial `tareas_versiones` (snapshot jsonb explícito con autor, como
+  `ideas_versiones`): versionan las ediciones de contenido (UI y MCP), no los
+  movimientos de columna/orden. Visible plegado en el diálogo de la tarjeta.
+- [x] UI: brief como grid de secciones en el diálogo; si está vacío, aviso
+  didáctico ("Pedile a Claude «desarrollá ZQ-N»") y punto ámbar en la tarjeta
+  (tablero y backlog) para ver de un vistazo qué falta desarrollar. En el
+  formulario el brief va colapsado (normalmente lo completa Claude).
+- [x] MCP: `crear_tarea`/`actualizar_tarea` aceptan el brief (cada campo con
+  su pregunta como descripción) y guardan snapshot; `ficha_tarea` devuelve
+  brief + versiones y le enseña al agente resolvedor a seguir `plan` y
+  verificar contra `resultado`; `listar_tareas` expone `desarrollada:
+  boolean` sin inflar el payload. **Prompt `desarrollar_tarea`** (espejo de
+  `bajar_idea_a_tierra`): busca contexto en el backoffice antes de preguntar,
+  entrevista de a una pregunta, guarda incremental, propone partir tarjetas
+  grandes, comenta el cierre y pregunta antes de mover de backlog.
+- [ ] Release: PR → merge → migración en SQL Editor (Joaquín) → verificación
+  en prod (UI + prompt desde conector reconectado).
+
 ### Post-MVP — Calendario de reuniones
 - [x] Panel "Próximas reuniones" en el dashboard: agenda unificada de los 4
   socios (próximos 7 días) leída de sus Google Calendars vía la cuenta de
@@ -487,3 +516,9 @@ de Google en la consola del Workspace.
   `?tarea=ZQ-N`, y `priorizar_tarea` en el MCP. Se reevaluó usar un Jira real
   para producto y se ratificó el tablero propio: lo que faltaba eran estas dos
   features, no otra herramienta.
+- **2026-07-29** — Tablero v3: brief de desarrollo por tarjeta (contexto /
+  resultado / recursos / plan) para que un LLM pueda leerla y resolverla sin
+  más contexto; creación con campos mínimos + prompt MCP `desarrollar_tarea`
+  que entrevista al socio y completa el brief; historial `tareas_versiones`
+  con autoría humano/agente; indicador "sin desarrollar" en el tablero.
+  Patrón calcado del one-pager del banco de ideas.
