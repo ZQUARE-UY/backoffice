@@ -1,15 +1,18 @@
 "use server"
 
 import {
+  codigoIdea,
   codigoTarea,
+  ESTADOS_IDEA,
   ESTADOS_TAREA,
+  type EstadoIdea,
   type EstadoTarea,
 } from "@/lib/dominio"
 import { generarEmbeddings } from "@/lib/embeddings"
 import { createClient } from "@/lib/supabase/server"
 
 export type ResultadoBusqueda = {
-  kind: "cliente" | "proyecto" | "documento" | "tarea" | "contenido"
+  kind: "cliente" | "proyecto" | "documento" | "tarea" | "idea" | "contenido"
   id: string
   titulo: string
   subtitulo: string | null
@@ -35,7 +38,7 @@ export async function buscar(query: string): Promise<ResultadoBusqueda[]> {
 
   const supabase = await createClient()
 
-  const [clientes, proyectos, documentos, tareas] = await Promise.all([
+  const [clientes, proyectos, documentos, tareas, ideas] = await Promise.all([
     supabase
       .from("clientes")
       .select("id, nombre, empresa")
@@ -56,6 +59,12 @@ export async function buscar(query: string): Promise<ResultadoBusqueda[]> {
       .limit(6),
     supabase
       .from("tareas")
+      .select("id, numero, titulo, estado")
+      .is("deleted_at", null)
+      .ilike("titulo", like)
+      .limit(6),
+    supabase
+      .from("ideas")
       .select("id, numero, titulo, estado")
       .is("deleted_at", null)
       .ilike("titulo", like)
@@ -102,6 +111,15 @@ export async function buscar(query: string): Promise<ResultadoBusqueda[]> {
       href: "/tareas",
     })
   }
+  for (const i of ideas.data ?? []) {
+    resultados.push({
+      kind: "idea",
+      id: i.id,
+      titulo: i.titulo,
+      subtitulo: `${codigoIdea(i.numero)} · ${ESTADOS_IDEA[i.estado as EstadoIdea]?.label ?? i.estado}`,
+      href: `/ideas/${i.id}`,
+    })
+  }
 
   return resultados
 }
@@ -114,7 +132,7 @@ export async function buscar(query: string): Promise<ResultadoBusqueda[]> {
 const UMBRAL_SIMILITUD = 0.45
 
 type Fragmento = {
-  origen: "drive" | "decision"
+  origen: "drive" | "decision" | "idea"
   origen_id: string
   titulo: string
   url: string | null

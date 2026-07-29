@@ -254,6 +254,37 @@ ZQUARE (Unidad compartida del Workspace)
   Setup 2026-07-27: Calendar API habilitada y 3 de 4 calendarios compartidos;
   falta solo que Nicolás comparta el suyo con la cuenta de servicio.)
 
+### Post-MVP — Banco de ideas *(iterar ideas con Claude vía MCP)*
+- [x] Decisión 2026-07-29 (bajada a tierra con Claude, con el flujo que el
+  propio módulo automatiza): las ideas de los socios viven en el backoffice y
+  maduran conversando con Claude. La iteración ocurre **fuera** (claude.ai /
+  Claude Code, vía el conector MCP existente), no con un chat embebido: más
+  barato y aprovecha lo ya construido. Diseño acordado:
+  - **Captura por ambos lados:** alta rápida desde la UI (título + una línea,
+    estado `semilla`) o desde una conversación con Claude vía MCP.
+  - **One-pager estructurado:** problema, solución propuesta, esfuerzo
+    estimado, impacto esperado y próximos pasos, más descripción libre y
+    etiquetas. Comparable entre ideas y filtrable.
+  - **Ciclo de vida:** semilla → en exploración → lista → aprobada /
+    descartada. Una idea aprobada se convierte en proyecto o tareas del
+    kanban con trazabilidad (etapa de graduación).
+  - **Colaboración:** comentarios (mismo patrón que tareas), votos (+1 por
+    socio) y co-edición con historial de versiones (snapshot por edición,
+    con autor — socio o Claude).
+  - **Prompt MCP `bajar_idea_a_tierra`:** entrevista estándar servida por el
+    server MCP para que los 4 socios iteren igual sin saber "cómo preguntar".
+- [ ] Etapa 1 — migración `ideas` (+ versiones, comentarios, votos) y página
+  `/ideas`: lista por estado, captura rápida, detalle con one-pager,
+  comentarios, votos e historial.
+- [ ] Etapa 2 — MCP en el mismo PR (principio "módulo nuevo → herramienta
+  MCP"): `listar_ideas`, `ficha_idea`, `crear_idea`, `actualizar_idea`,
+  `comentar_idea`, `votar_idea` + prompt `bajar_idea_a_tierra`. Ideas en
+  `buscar`, en el Cmd+K y en el índice semántico (origen `idea`).
+- [ ] Etapa 3 — graduación: `graduar_idea` (aprueba y crea proyecto o tareas
+  vinculadas en la misma operación) + botón equivalente en la UI.
+- [ ] Etapa 4 — matriz impacto × esfuerzo para priorizar de un vistazo, y
+  afinado de la entrevista del prompt según el uso real.
+
 ### Pendiente — Identidad visual *(esperando a la diseñadora)*
 - [ ] Rediseño de la UI del backoffice: pedido explícito de Joaquín desde el
   arranque — que NO se vea como una UI genérica generada por IA (hoy usa el
@@ -390,6 +421,11 @@ de Google en la consola del Workspace.
   resultado (USD), clientes activos, proyectos en curso y por estado; evolución
   mensual (barras CSS, sin librerías de gráficos) y balance de socios (componente
   compartido con Finanzas).
+- **2026-07-29** — Banco de ideas: diseño acordado (iteración vía MCP con
+  prompt guía, one-pager estructurado, ciclo de vida con graduación a
+  proyecto/tareas, comentarios + votos + co-edición con historial) e
+  implementación de las etapas 1 y 2 (migración, página /ideas y herramientas
+  MCP). Ver la sección "Post-MVP — Banco de ideas".
 - **2026-07-28/29** — Tablero de tareas propio (kanban) en lugar de integrar
   Jira: tarjetas en Supabase con código corto `ZQ-N`, drag & drop, comentarios,
   y 6 herramientas MCP para que los LLM lean, creen, editen, muevan y comenten

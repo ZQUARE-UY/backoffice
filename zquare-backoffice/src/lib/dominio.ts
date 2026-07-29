@@ -57,6 +57,38 @@ export function codigoTarea(numero: number): string {
   return `ZQ-${numero}`
 }
 
+// Ciclo de vida de una idea del banco. El orden de las claves es el orden en
+// que se muestran las secciones en /ideas.
+export const ESTADOS_IDEA = {
+  semilla: { label: "Semilla", variant: "outline" as const },
+  en_exploracion: { label: "En exploración", variant: "secondary" as const },
+  lista: { label: "Lista", variant: "default" as const },
+  aprobada: { label: "Aprobada", variant: "default" as const },
+  descartada: { label: "Descartada", variant: "outline" as const },
+}
+
+export type EstadoIdea = keyof typeof ESTADOS_IDEA
+
+export const ESTADOS_IDEA_ORDEN = Object.keys(ESTADOS_IDEA) as EstadoIdea[]
+
+// Secciones del one-pager: campo de la tabla → label. Compartido entre la UI
+// (detalle y formulario) y el snapshot de versiones.
+export const ONE_PAGER_IDEA = {
+  problema: { label: "Problema", placeholder: "Qué problema real resuelve y a quién le duele" },
+  solucion: { label: "Solución propuesta", placeholder: "Cómo se resuelve, versión mínima primero" },
+  esfuerzo: { label: "Esfuerzo estimado", placeholder: "Qué implica construirla (tiempo, plata, dependencias)" },
+  impacto: { label: "Impacto esperado", placeholder: "Qué cambia si funciona, cómo se mide" },
+  proximos_pasos: { label: "Próximos pasos", placeholder: "Qué habría que hacer primero para validarla" },
+}
+
+export type CampoOnePager = keyof typeof ONE_PAGER_IDEA
+
+// Identificador corto para hablar de una idea ("IDEA-7"), el mismo que se
+// muestra en /ideas y devuelve el MCP.
+export function codigoIdea(numero: number): string {
+  return `IDEA-${numero}`
+}
+
 export const TIPOS_DOCUMENTO = {
   analisis: { label: "Análisis" },
   propuesta: { label: "Propuesta" },
@@ -221,6 +253,47 @@ export type ComentarioTarea = {
   autor: string
   autor_socio_id: string | null
   created_at: string
+}
+
+export type Idea = {
+  id: string
+  numero: number
+  titulo: string
+  descripcion: string | null
+  problema: string | null
+  solucion: string | null
+  esfuerzo: string | null
+  impacto: string | null
+  proximos_pasos: string | null
+  estado: EstadoIdea
+  etiquetas: string[]
+  proyecto_id: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type ComentarioIdea = {
+  id: string
+  idea_id: string
+  cuerpo: string
+  autor: string
+  autor_socio_id: string | null
+  created_at: string
+}
+
+export type VersionIdea = {
+  id: string
+  idea_id: string
+  snapshot: Record<string, unknown>
+  autor: string
+  autor_socio_id: string | null
+  created_at: string
+}
+
+export type VotoIdea = {
+  idea_id: string
+  socio_id: string
 }
 
 export type Socio = {

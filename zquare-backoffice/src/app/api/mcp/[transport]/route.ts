@@ -58,12 +58,53 @@ async function socioIdPorEmail(email: string): Promise<string | null> {
 
 const ESTADOS_TAREA = ["backlog", "en_curso", "en_revision", "hecho"] as const
 const PRIORIDADES_TAREA = ["baja", "media", "alta", "urgente"] as const
+const ESTADOS_IDEA = [
+  "semilla",
+  "en_exploracion",
+  "lista",
+  "aprobada",
+  "descartada",
+] as const
 
 // Las tarjetas se referencian por número ("ZQ-12" o 12): es el identificador
 // corto que ven los socios en el tablero.
 function numeroDeTarea(referencia: string | number): number | null {
   const n = Number(String(referencia).replace(/^zq-?/i, "").trim())
   return Number.isInteger(n) && n > 0 ? n : null
+}
+
+// Las ideas se referencian igual, con su propio prefijo ("IDEA-7" o 7).
+function numeroDeIdea(referencia: string | number): number | null {
+  const n = Number(String(referencia).replace(/^idea-?/i, "").trim())
+  return Number.isInteger(n) && n > 0 ? n : null
+}
+
+// Campos del one-pager de una idea, compartidos entre crear/actualizar y el
+// snapshot que se guarda en ideas_versiones.
+const CAMPOS_IDEA = [
+  "titulo",
+  "descripcion",
+  "problema",
+  "solucion",
+  "esfuerzo",
+  "impacto",
+  "proximos_pasos",
+  "estado",
+  "etiquetas",
+] as const
+
+// Quién opera vía MCP: socio dueño del token, con la marca "(Claude)" para
+// atribuir versiones y comentarios (mismo criterio que comentar_tarea).
+async function actorMcp(
+  extra: { authInfo?: { extra?: Record<string, unknown> } }
+): Promise<{ socioId: string | null; autor: string }> {
+  const email = extra.authInfo?.extra?.email as string | undefined
+  const socioId = email ? await socioIdPorEmail(email) : null
+  const supabase = createAdminClient()
+  const { data: socio } = socioId
+    ? await supabase.from("socios").select("nombre").eq("id", socioId).maybeSingle()
+    : { data: null }
+  return { socioId, autor: `${socio?.nombre ?? email ?? "Agente"} (Claude)` }
 }
 
 // Una tarjeta movida o creada por un agente entra arriba de su columna, donde
@@ -119,13 +160,13 @@ const handler = createMcpHandler(
       {
         title: "Buscar en el backoffice",
         description:
-          "Busca clientes, proyectos, documentos y tarjetas del tablero por nombre (literal) y contenido de documentos de Drive y decisiones (semántico, multilingüe).",
+          "Busca clientes, proyectos, documentos, tarjetas del tablero e ideas por nombre (literal) y contenido de documentos de Drive, decisiones e ideas (semántico, multilingüe).",
         inputSchema: { consulta: z.string().min(2) },
       },
       async ({ consulta }) => {
         const supabase = createAdminClient()
         const like = `%${consulta.replace(/[(),*%_]/g, " ").trim()}%`
-        const [clientes, proyectos, documentos, tareas] = await Promise.all([
+        const [clientes, proyectos, documentos, tareas, ideas] = await Promise.all([
           supabase
             .from("clientes")
             .select("id, nombre, estado")
@@ -147,6 +188,12 @@ const handler = createMcpHandler(
           supabase
             .from("tareas")
             .select("numero, titulo, estado, prioridad")
+            .is("deleted_at", null)
+            .ilike("titulo", like)
+            .limit(5),
+          supabase
+            .from("ideas")
+            .select("numero, titulo, estado")
             .is("deleted_at", null)
             .ilike("titulo", like)
             .limit(5),
@@ -176,6 +223,10 @@ const handler = createMcpHandler(
           tareas: (tareas.data ?? []).map(({ numero, ...t }) => ({
             codigo: `ZQ-${numero}`,
             ...t,
+          })),
+          ideas: (ideas.data ?? []).map(({ numero, ...i }) => ({
+            codigo: `IDEA-${numero}`,
+            ...i,
           })),
           contenido_semantico: contenido,
         })
@@ -687,6 +738,381 @@ const handler = createMcpHandler(
         if (error) throw new Error(error.message)
         return texto({ comentado: `ZQ-${numero}` })
       }
+    )
+
+    // ── Banco de ideas ────────────────────────────────────────────────────
+    // El módulo pensado para iterar CON Claude: las ideas se capturan crudas
+    // y maduran conversando hasta un one-pager (problema / solución /
+    // esfuerzo / impacto / próximos pasos). Cada creación/edición deja un
+    // snapshot en ideas_versiones con su autor. El borrado sigue siendo solo
+    // de la UI.
+    server.registerTool(
+      "listar_ideas",
+      {
+        title: "Listar ideas",
+        description:
+          "Ideas del banco agrupadas por estado (semilla, en_exploracion, lista, aprobada, descartada), con sus votos. Por defecto omite las descartadas.",
+        inputSchema: {
+          estado: z.enum(ESTADOS_IDEA).optional(),
+          incluir_descartadas: z.boolean().optional(),
+          limite: z.number().int().min(1).max(200).optional(),
+        },
+      },
+      async ({ estado, incluir_descartadas, limite }) => {
+        const supabase = createAdminClient()
+        let q = supabase
+          .from("ideas")
+          .select(
+            "id, numero, titulo, descripcion, problema, solucion, esfuerzo, impacto, proximos_pasos, estado, etiquetas, creador:socios!ideas_created_by_fkey(nombre), created_at"
+          )
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false })
+          .limit(limite ?? 100)
+        if (estado) q = q.eq("estado", estado)
+        else if (!incluir_descartadas) q = q.neq("estado", "descartada")
+
+        const { data, error } = await q
+        if (error) throw new Error(error.message)
+
+        const { data: votos } = await supabase
+          .from("ideas_votos")
+          .select("idea_id")
+        const votosPorIdea = new Map<string, number>()
+        for (const v of votos ?? []) {
+          votosPorIdea.set(v.idea_id, (votosPorIdea.get(v.idea_id) ?? 0) + 1)
+        }
+
+        const porEstado: Record<string, unknown[]> = {}
+        for (const i of data ?? []) {
+          const { id, numero, ...resto } = i
+          ;(porEstado[i.estado] ??= []).push({
+            codigo: `IDEA-${numero}`,
+            votos: votosPorIdea.get(id) ?? 0,
+            ...resto,
+          })
+        }
+        return texto({ ideas: porEstado })
+      }
+    )
+
+    server.registerTool(
+      "ficha_idea",
+      {
+        title: "Ficha de una idea",
+        description:
+          "Detalle completo de una idea: one-pager, votos, comentarios e historial de versiones. Se identifica por número o código (7 o IDEA-7).",
+        inputSchema: { idea: z.union([z.string(), z.number()]) },
+      },
+      async ({ idea }) => {
+        const numero = numeroDeIdea(idea)
+        if (!numero) return texto(`"${idea}" no parece un número de idea (ej. IDEA-7).`)
+
+        const supabase = createAdminClient()
+        const { data } = await supabase
+          .from("ideas")
+          .select(
+            "id, numero, titulo, descripcion, problema, solucion, esfuerzo, impacto, proximos_pasos, estado, etiquetas, creador:socios!ideas_created_by_fkey(nombre), created_at, updated_at"
+          )
+          .eq("numero", numero)
+          .is("deleted_at", null)
+          .maybeSingle()
+        if (!data) return texto(`No existe la idea IDEA-${numero}.`)
+
+        const [{ data: comentarios }, { data: versiones }, { data: votos }] =
+          await Promise.all([
+            supabase
+              .from("ideas_comentarios")
+              .select("autor, cuerpo, created_at")
+              .eq("idea_id", data.id)
+              .is("deleted_at", null)
+              .order("created_at"),
+            supabase
+              .from("ideas_versiones")
+              .select("autor, created_at")
+              .eq("idea_id", data.id)
+              .order("created_at"),
+            supabase
+              .from("ideas_votos")
+              .select("socios(nombre)")
+              .eq("idea_id", data.id),
+          ])
+
+        const { id, numero: n, ...ficha } = data
+        void id
+        return texto({
+          idea: { codigo: `IDEA-${n}`, ...ficha },
+          votos: (votos ?? []).map((v) => {
+            const socio = v.socios as { nombre: string } | { nombre: string }[] | null
+            return (Array.isArray(socio) ? socio[0]?.nombre : socio?.nombre) ?? "?"
+          }),
+          comentarios: comentarios ?? [],
+          versiones: versiones ?? [],
+        })
+      }
+    )
+
+    server.registerTool(
+      "crear_idea",
+      {
+        title: "Guardar una idea nueva",
+        description:
+          "Crea una idea en el banco. Puede entrar cruda (solo título, estado 'semilla') o ya trabajada con el one-pager completo (problema, solución, esfuerzo, impacto, próximos pasos). Antes de crear, conviene usar `buscar` para detectar ideas parecidas ya guardadas.",
+        inputSchema: {
+          titulo: z.string().min(3),
+          descripcion: z.string().describe("contexto libre: de dónde salió").optional(),
+          problema: z.string().describe("qué problema real resuelve y a quién le duele").optional(),
+          solucion: z.string().describe("cómo se resuelve, versión mínima primero").optional(),
+          esfuerzo: z.string().describe("qué implica construirla: tiempo, plata, dependencias").optional(),
+          impacto: z.string().describe("qué cambia si funciona y cómo se mide").optional(),
+          proximos_pasos: z.string().describe("qué hacer primero para validarla").optional(),
+          estado: z.enum(ESTADOS_IDEA).optional(),
+          etiquetas: z.array(z.string()).optional(),
+        },
+      },
+      async (entrada, extra) => {
+        const { socioId, autor } = await actorMcp(extra)
+        const supabase = createAdminClient()
+
+        const datos = {
+          titulo: entrada.titulo,
+          descripcion: entrada.descripcion ?? null,
+          problema: entrada.problema ?? null,
+          solucion: entrada.solucion ?? null,
+          esfuerzo: entrada.esfuerzo ?? null,
+          impacto: entrada.impacto ?? null,
+          proximos_pasos: entrada.proximos_pasos ?? null,
+          estado: entrada.estado ?? "semilla",
+          etiquetas: entrada.etiquetas ?? [],
+        }
+        const { data, error } = await supabase
+          .from("ideas")
+          .insert({ ...datos, created_by: socioId, metadata: { origen: "mcp" } })
+          .select("id, numero, titulo, estado")
+          .single()
+        if (error) throw new Error(error.message)
+
+        await supabase.from("ideas_versiones").insert({
+          idea_id: data.id,
+          snapshot: datos,
+          autor,
+          autor_socio_id: socioId,
+        })
+        return texto({
+          creada: { codigo: `IDEA-${data.numero}`, titulo: data.titulo, estado: data.estado },
+          ver: `/ideas`,
+        })
+      }
+    )
+
+    server.registerTool(
+      "actualizar_idea",
+      {
+        title: "Actualizar una idea",
+        description:
+          "Actualiza campos de una idea existente (one-pager, estado, etiquetas). Solo se tocan los campos que se pasan; string vacío limpia el campo. Cada edición queda en el historial de versiones con su autor.",
+        inputSchema: {
+          idea: z.union([z.string(), z.number()]),
+          titulo: z.string().min(3).optional(),
+          descripcion: z.string().optional(),
+          problema: z.string().optional(),
+          solucion: z.string().optional(),
+          esfuerzo: z.string().optional(),
+          impacto: z.string().optional(),
+          proximos_pasos: z.string().optional(),
+          estado: z.enum(ESTADOS_IDEA).optional(),
+          etiquetas: z.array(z.string()).optional(),
+        },
+      },
+      async (entrada, extra) => {
+        const numero = numeroDeIdea(entrada.idea)
+        if (!numero) return texto(`"${entrada.idea}" no parece un número de idea.`)
+
+        const supabase = createAdminClient()
+        const { data: actual } = await supabase
+          .from("ideas")
+          .select("*")
+          .eq("numero", numero)
+          .is("deleted_at", null)
+          .maybeSingle()
+        if (!actual) return texto(`No existe la idea IDEA-${numero}.`)
+
+        const cambios: Record<string, unknown> = {}
+        if (entrada.titulo !== undefined) cambios.titulo = entrada.titulo
+        for (const campo of [
+          "descripcion",
+          "problema",
+          "solucion",
+          "esfuerzo",
+          "impacto",
+          "proximos_pasos",
+        ] as const) {
+          if (entrada[campo] !== undefined) cambios[campo] = entrada[campo] || null
+        }
+        if (entrada.estado !== undefined) cambios.estado = entrada.estado
+        if (entrada.etiquetas !== undefined) cambios.etiquetas = entrada.etiquetas
+
+        if (Object.keys(cambios).length === 0) {
+          return texto(`No pasaste ningún cambio para IDEA-${numero}.`)
+        }
+
+        const { data, error } = await supabase
+          .from("ideas")
+          .update(cambios)
+          .eq("id", actual.id)
+          .select("*")
+          .single()
+        if (error) throw new Error(error.message)
+
+        const { socioId, autor } = await actorMcp(extra)
+        const snapshot: Record<string, unknown> = {}
+        for (const campo of CAMPOS_IDEA) snapshot[campo] = data[campo]
+        await supabase.from("ideas_versiones").insert({
+          idea_id: actual.id,
+          snapshot,
+          autor,
+          autor_socio_id: socioId,
+        })
+        return texto({
+          actualizada: { codigo: `IDEA-${data.numero}`, titulo: data.titulo, estado: data.estado },
+        })
+      }
+    )
+
+    server.registerTool(
+      "comentar_idea",
+      {
+        title: "Comentar una idea",
+        description:
+          "Agrega un comentario al hilo de una idea. El autor queda registrado como el socio dueño del token, aclarando que vino por MCP.",
+        inputSchema: {
+          idea: z.union([z.string(), z.number()]),
+          cuerpo: z.string().min(2),
+        },
+      },
+      async ({ idea, cuerpo }, extra) => {
+        const numero = numeroDeIdea(idea)
+        if (!numero) return texto(`"${idea}" no parece un número de idea.`)
+
+        const supabase = createAdminClient()
+        const { data } = await supabase
+          .from("ideas")
+          .select("id")
+          .eq("numero", numero)
+          .is("deleted_at", null)
+          .maybeSingle()
+        if (!data) return texto(`No existe la idea IDEA-${numero}.`)
+
+        const { socioId, autor } = await actorMcp(extra)
+        const { error } = await supabase.from("ideas_comentarios").insert({
+          idea_id: data.id,
+          cuerpo,
+          autor,
+          autor_socio_id: socioId,
+        })
+        if (error) throw new Error(error.message)
+        return texto({ comentada: `IDEA-${numero}` })
+      }
+    )
+
+    server.registerTool(
+      "votar_idea",
+      {
+        title: "Votar una idea",
+        description:
+          "Suma el +1 del socio dueño del token a una idea (o lo quita con quitar_voto). Un voto por socio por idea.",
+        inputSchema: {
+          idea: z.union([z.string(), z.number()]),
+          quitar_voto: z.boolean().optional(),
+        },
+      },
+      async ({ idea, quitar_voto }, extra) => {
+        const numero = numeroDeIdea(idea)
+        if (!numero) return texto(`"${idea}" no parece un número de idea.`)
+
+        const email = extra.authInfo?.extra?.email as string | undefined
+        const socioId = email ? await socioIdPorEmail(email) : null
+        if (!socioId) {
+          return texto("No pude identificar al socio dueño del token para votar.")
+        }
+
+        const supabase = createAdminClient()
+        const { data } = await supabase
+          .from("ideas")
+          .select("id")
+          .eq("numero", numero)
+          .is("deleted_at", null)
+          .maybeSingle()
+        if (!data) return texto(`No existe la idea IDEA-${numero}.`)
+
+        if (quitar_voto) {
+          const { error } = await supabase
+            .from("ideas_votos")
+            .delete()
+            .eq("idea_id", data.id)
+            .eq("socio_id", socioId)
+          if (error) throw new Error(error.message)
+          return texto({ voto_quitado: `IDEA-${numero}` })
+        }
+        // Upsert sobre la unique (idea_id, socio_id): votar dos veces no duplica.
+        const { error } = await supabase
+          .from("ideas_votos")
+          .upsert(
+            { idea_id: data.id, socio_id: socioId },
+            { onConflict: "idea_id,socio_id" }
+          )
+        if (error) throw new Error(error.message)
+        return texto({ votada: `IDEA-${numero}` })
+      }
+    )
+
+    // Prompt guía: la entrevista estándar para que los 4 socios bajen ideas a
+    // tierra con el mismo proceso, sin depender de que cada uno sepa preguntar.
+    server.registerPrompt(
+      "bajar_idea_a_tierra",
+      {
+        title: "Bajar una idea a tierra",
+        description:
+          "Entrevista guiada para madurar una idea del banco: problema, solución mínima, esfuerzo, impacto y próximos pasos. Termina guardándola con crear_idea o actualizar_idea.",
+        argsSchema: {
+          idea: z
+            .string()
+            .describe(
+              "código de una idea existente (IDEA-7) para retomarla; vacío para arrancar de cero"
+            )
+            .optional(),
+        },
+      },
+      ({ idea }) => ({
+        messages: [
+          {
+            role: "user" as const,
+            content: {
+              type: "text" as const,
+              text: [
+                "Ayudame a bajar a tierra una idea para ZQUARE usando el banco de ideas del backoffice.",
+                "",
+                idea
+                  ? `La idea es ${idea}: traé su ficha con \`ficha_idea\` y retomá desde lo que ya tiene.`
+                  : "Arranco de cero: primero pedime que te cuente la idea cruda en una o dos frases. Después usá `buscar` para ver si ya hay una idea parecida guardada — si la hay, avisame y propongo retomarla en vez de duplicar.",
+                "",
+                "Entrevistame para completar el one-pager, de a UNA pregunta por vez, escuchando antes de pasar a la siguiente:",
+                "1. **Problema**: ¿qué problema real resuelve y a quién le duele? Si no hay un dolor concreto, decímelo sin vueltas.",
+                "2. **Solución**: ¿cuál es la versión mínima que lo resuelve? Empujá hacia lo más chico que sirva.",
+                "3. **Esfuerzo**: ¿qué implica construirla (tiempo, plata, dependencias)? Usá el contexto del backoffice si ayuda (clientes, finanzas, proyectos).",
+                "4. **Impacto**: ¿qué cambia si funciona y cómo lo mediríamos?",
+                "5. **Próximos pasos**: ¿qué es lo primero que habría que hacer para validarla?",
+                "",
+                "Sé crítico pero constructivo: cuestioná supuestos, señalá riesgos, y si la idea se solapa con algo que ZQUARE ya tiene o decidió, decilo.",
+                "",
+                idea
+                  ? "Al cerrar cada parte, guardá el avance con `actualizar_idea` (así queda el historial de versiones)."
+                  : "Cuando tengamos el título y el problema, guardala con `crear_idea` en estado `en_exploracion` y seguí actualizándola con `actualizar_idea` a medida que avanzamos.",
+                "Cuando el one-pager esté completo y yo esté conforme, pasala a estado `lista` y cerrá con un resumen del one-pager.",
+              ].join("\n"),
+            },
+          },
+        ],
+      })
     )
 
     // ── Escrituras seguras (solo altas; sin ediciones ni borrados) ─────────

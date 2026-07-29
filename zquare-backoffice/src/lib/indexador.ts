@@ -25,7 +25,7 @@ export type ResultadoIndexacion = {
 
 async function indexadosPorOrigen(
   supabase: SupabaseClient,
-  origen: "drive" | "decision"
+  origen: "drive" | "decision" | "idea"
 ): Promise<Map<string, string | null>> {
   const { data, error } = await supabase
     .from("fragmentos_busqueda")
@@ -100,6 +100,73 @@ export async function indexar(
       .delete()
       .eq("origen", "decision")
       .in("origen_id", decisionesHuerfanas)
+  }
+
+  // ── Ideas (baratas: se procesan todas en cada pasada) ──
+  const ideasIndexadas = await indexadosPorOrigen(supabase, "idea")
+  const { data: ideas } = await supabase
+    .from("ideas")
+    .select(
+      "id, titulo, descripcion, problema, solucion, esfuerzo, impacto, proximos_pasos, etiquetas, updated_at"
+    )
+    .is("deleted_at", null)
+
+  const idsIdeas = new Set<string>()
+  for (const i of ideas ?? []) {
+    idsIdeas.add(i.id)
+    const previo = ideasIndexadas.get(i.id)
+    if (previo && new Date(previo) >= new Date(i.updated_at)) continue
+
+    const texto = [
+      i.titulo,
+      i.descripcion,
+      i.problema,
+      i.solucion,
+      i.esfuerzo,
+      i.impacto,
+      i.proximos_pasos,
+      (i.etiquetas ?? []).join(", "),
+    ]
+      .filter(Boolean)
+      .join("\n\n")
+    const fragmentos = trocearTexto(texto)
+    if (fragmentos.length === 0) continue
+    try {
+      const embeddings = await generarEmbeddings(fragmentos)
+      await supabase
+        .from("fragmentos_busqueda")
+        .delete()
+        .eq("origen", "idea")
+        .eq("origen_id", i.id)
+      const { error } = await supabase.from("fragmentos_busqueda").insert(
+        fragmentos.map((fragmento, indice) => ({
+          origen: "idea",
+          origen_id: i.id,
+          titulo: i.titulo,
+          url: `/ideas/${i.id}`,
+          indice,
+          fragmento,
+          modificado: i.updated_at,
+          embedding: embeddings[indice],
+        }))
+      )
+      if (error) throw new Error(error.message)
+      procesados++
+    } catch (e) {
+      errores.push(`Idea "${i.titulo}": ${(e as Error).message}`)
+    }
+  }
+
+  // Limpiar ideas borradas del índice.
+  const ideasHuerfanas = [...ideasIndexadas.keys()].filter(
+    (id) => !idsIdeas.has(id)
+  )
+  if (ideasHuerfanas.length > 0) {
+    await supabase
+      .from("fragmentos_busqueda")
+      .delete()
+      .eq("origen", "idea")
+      .in("origen_id", ideasHuerfanas)
   }
 
   // ── Archivos de Drive (de a MAX_ARCHIVOS_POR_PASADA por pasada) ──
