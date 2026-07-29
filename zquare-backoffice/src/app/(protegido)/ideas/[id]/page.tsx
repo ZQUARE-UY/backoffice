@@ -133,33 +133,50 @@ export default async function IdeaPage({
       </div>
 
       {/* El one-pager se lee como documento, no como dashboard: una sola
-          columna con ancho de lectura y secciones sin cajas. */}
+          columna con ancho de lectura y secciones sin cajas. La descripción
+          es la SEMILLA original (la nota cruda de la que arrancó el análisis):
+          mientras el one-pager está vacío es lo único que hay y abre la
+          página; una vez madurada la idea, baja al final como nota de origen
+          para no leerse como resumen de la idea actual. */}
       <div className="flex max-w-3xl flex-col gap-8">
-        {idea.descripcion && (
-          <p className="text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">
-            {idea.descripcion}
-          </p>
-        )}
-
         {onePagerVacio ? (
-          <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-            El one-pager está vacío. Pedile a Claude &quot;bajá a tierra{" "}
-            {codigoIdea(idea.numero)}&quot; desde claude.ai (con el conector
-            del backoffice) para completarlo iterando, o editalo a mano.
-          </div>
+          <>
+            {idea.descripcion && (
+              <p className="text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">
+                {idea.descripcion}
+              </p>
+            )}
+            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              El one-pager está vacío. Pedile a Claude &quot;bajá a tierra{" "}
+              {codigoIdea(idea.numero)}&quot; desde claude.ai (con el conector
+              del backoffice) para completarlo iterando, o editalo a mano.
+            </div>
+          </>
         ) : (
-          camposOnePager.map((campo) =>
-            idea[campo] ? (
-              <section key={campo} className="flex flex-col gap-1.5">
+          <>
+            {camposOnePager.map((campo) =>
+              idea[campo] ? (
+                <section key={campo} className="flex flex-col gap-1.5">
+                  <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                    {ONE_PAGER_IDEA[campo].label}
+                  </h2>
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                    {idea[campo]}
+                  </p>
+                </section>
+              ) : null
+            )}
+            {idea.descripcion && (
+              <section className="flex flex-col gap-1.5 border-t pt-6">
                 <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-                  {ONE_PAGER_IDEA[campo].label}
+                  Semilla original
                 </h2>
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                  {idea[campo]}
+                <p className="text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">
+                  {idea.descripcion}
                 </p>
               </section>
-            ) : null
-          )
+            )}
+          </>
         )}
       </div>
 
