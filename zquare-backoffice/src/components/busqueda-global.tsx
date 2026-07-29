@@ -6,6 +6,7 @@ import {
   FileTextIcon,
   FolderIcon,
   KanbanIcon,
+  LightbulbIcon,
   SearchIcon,
   SparklesIcon,
   UsersIcon,
@@ -31,6 +32,7 @@ const ICONOS = {
   proyecto: FolderIcon,
   documento: FileTextIcon,
   tarea: KanbanIcon,
+  idea: LightbulbIcon,
   contenido: SparklesIcon,
 }
 
@@ -39,6 +41,7 @@ const GRUPOS: { kind: ResultadoBusqueda["kind"]; label: string }[] = [
   { kind: "proyecto", label: "Proyectos" },
   { kind: "documento", label: "Documentos" },
   { kind: "tarea", label: "Tareas" },
+  { kind: "idea", label: "Ideas" },
   { kind: "contenido", label: "Contenido (semántico)" },
 ]
 
