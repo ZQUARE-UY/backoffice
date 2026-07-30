@@ -1075,10 +1075,10 @@ const handler = createMcpHandler(
       {
         title: "Guardar una idea nueva",
         description:
-          "Crea una idea en el banco. Puede entrar cruda (solo título, estado 'semilla') o ya trabajada con el one-pager completo (problema, solución, esfuerzo, impacto, próximos pasos). Antes de crear, conviene usar `buscar` para detectar ideas parecidas ya guardadas.",
+          "Crea una idea en el banco. Puede entrar cruda (solo título, estado 'semilla') o ya trabajada con el one-pager completo (problema, competencia, solución, esfuerzo, impacto, próximos pasos). Los campos del one-pager aceptan Markdown: usar listas para enumeraciones y negritas para números clave. Antes de crear, conviene usar `buscar` para detectar ideas parecidas ya guardadas.",
         inputSchema: {
           titulo: z.string().min(3),
-          descripcion: z.string().describe("contexto libre: de dónde salió").optional(),
+          descripcion: z.string().describe("la semilla original: la nota cruda de la que arranca la idea; se escribe al capturar y no se actualiza al madurar").optional(),
           problema: z.string().describe("qué problema real resuelve y a quién le duele").optional(),
           competencia: z.string().describe("quién lo resuelve hoy, a qué precio, y nuestro diferencial").optional(),
           solucion: z.string().describe("cómo se resuelve, versión mínima primero").optional(),
@@ -1130,11 +1130,16 @@ const handler = createMcpHandler(
       {
         title: "Actualizar una idea",
         description:
-          "Actualiza campos de una idea existente (one-pager, estado, etiquetas). Solo se tocan los campos que se pasan; string vacío limpia el campo. Cada edición queda en el historial de versiones con su autor.",
+          "Actualiza campos de una idea existente (one-pager, estado, etiquetas). Solo se tocan los campos que se pasan; string vacío limpia el campo. Los campos del one-pager aceptan Markdown: usar listas para enumeraciones y negritas para números clave. Cada edición queda en el historial de versiones con su autor.",
         inputSchema: {
           idea: z.union([z.string(), z.number()]),
           titulo: z.string().min(3).optional(),
-          descripcion: z.string().optional(),
+          descripcion: z
+            .string()
+            .describe(
+              "la semilla original del socio; NO actualizarla al madurar la idea — el avance va en el one-pager"
+            )
+            .optional(),
           problema: z.string().optional(),
           competencia: z.string().optional(),
           solucion: z.string().optional(),
@@ -1326,7 +1331,7 @@ const handler = createMcpHandler(
                 "5. **Impacto**: ¿qué cambia si funciona y cómo lo mediríamos? Números a escala ZQUARE (no fantasías de unicornio), contrastados con los precios de la competencia relevados.",
                 "6. **Próximos pasos**: ¿qué es lo primero que habría que hacer para validarla? Priorizá validar con desconocidos que pagan sobre amigos que opinan — el feedback tibio de gente cercana es la trampa clásica. Medir uso real, no opiniones.",
                 "",
-                "Sé crítico pero constructivo: cuestioná supuestos, señalá riesgos, y si la idea se solapa con algo que ZQUARE ya tiene o decidió, decilo. Si a mitad de la entrevista la idea revela ser una trampa (mercado saturado sin diferencial, dolor inexistente), proponé descartarla con honestidad — descartar rápido también es un buen resultado del banco.",
+                "Escribí los campos del one-pager en Markdown pensado para leerse rápido: listas numeradas para los próximos pasos, bullets para enumeraciones (competidores, funcionalidades), **negritas** en los números clave (precios, metas, plazos), y párrafos cortos — nada de bloques largos de prosa. La `descripcion` es la semilla original del socio: no la pises ni la reescribas — la idea madurada vive en el one-pager. Sé crítico pero constructivo: cuestioná supuestos, señalá riesgos, y si la idea se solapa con algo que ZQUARE ya tiene o decidió, decilo. Si a mitad de la entrevista la idea revela ser una trampa (mercado saturado sin diferencial, dolor inexistente), proponé descartarla con honestidad — descartar rápido también es un buen resultado del banco.",
                 "",
                 idea
                   ? "Al cerrar cada parte, guardá el avance con `actualizar_idea` (así queda el historial de versiones)."

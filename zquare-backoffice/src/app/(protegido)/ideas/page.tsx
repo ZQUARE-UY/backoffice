@@ -20,6 +20,7 @@ import {
 } from "@/lib/dominio"
 import { createClient } from "@/lib/supabase/server"
 
+import { textoPlano } from "./markdown-idea"
 import { NuevaIdea } from "./nueva-idea"
 
 export const metadata = { title: "Ideas" }
@@ -127,7 +128,7 @@ export default async function IdeasPage() {
                         </h3>
                         {(idea.problema ?? idea.descripcion) && (
                           <p className="line-clamp-2 text-sm text-muted-foreground">
-                            {idea.problema ?? idea.descripcion}
+                            {textoPlano(idea.problema ?? idea.descripcion ?? "")}
                           </p>
                         )}
                         <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-1">

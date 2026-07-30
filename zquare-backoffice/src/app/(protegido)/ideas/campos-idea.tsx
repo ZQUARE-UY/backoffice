@@ -29,12 +29,12 @@ export function CamposIdea({ idea }: { idea?: Idea }) {
         />
       </Field>
       <Field>
-        <FieldLabel htmlFor="descripcion">Descripción</FieldLabel>
+        <FieldLabel htmlFor="descripcion">Semilla original</FieldLabel>
         <Textarea
           id="descripcion"
           name="descripcion"
           rows={3}
-          placeholder="Contexto libre: de dónde salió, notas sueltas"
+          placeholder="La nota cruda de la que arrancó la idea; no hace falta actualizarla al madurar"
           defaultValue={idea?.descripcion ?? ""}
         />
       </Field>
