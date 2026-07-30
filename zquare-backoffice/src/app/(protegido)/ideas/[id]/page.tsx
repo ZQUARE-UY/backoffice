@@ -20,6 +20,7 @@ import { idSocioActual } from "@/lib/socio-actual"
 import { createClient } from "@/lib/supabase/server"
 
 import { urlIterarIdea, urlIterarSeccion } from "../chat-claude"
+import { MarkdownIdea } from "../markdown-idea"
 import { ComentariosIdea } from "./comentarios-idea"
 import { IdeaAcciones, VotarIdea } from "./idea-acciones"
 
@@ -189,32 +190,39 @@ export default async function IdeaPage({
           <>
             {camposOnePager.map((campo) =>
               idea[campo] ? (
-                <section key={campo} className="flex flex-col gap-1.5">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                <section key={campo} className="flex flex-col gap-3">
+                  {/* Título de sección con regla: el ojo encuentra dónde
+                      empieza cada parte sin encajonar el texto. */}
+                  <div className="flex items-center gap-3">
+                    <h2 className="shrink-0 text-xs font-semibold tracking-widest text-muted-foreground uppercase">
                       {ONE_PAGER_IDEA[campo].label}
                     </h2>
+                    <span className="h-px flex-1 bg-border" />
                     <a
                       href={urlIterarSeccion(idea, campo)}
                       target="_blank"
                       rel="noreferrer"
                       title={`Trabajar "${ONE_PAGER_IDEA[campo].label}" con Claude`}
-                      className="text-muted-foreground/60 transition-colors hover:text-foreground"
+                      className="shrink-0 text-muted-foreground/60 transition-colors hover:text-foreground"
                     >
                       <MessageCircleIcon className="size-3.5" />
                     </a>
                   </div>
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                  {/* El problema es la tesis de la idea: abre como lead. */}
+                  <MarkdownIdea lead={campo === "problema"}>
                     {idea[campo]}
-                  </p>
+                  </MarkdownIdea>
                 </section>
               ) : null
             )}
             {idea.descripcion && (
-              <section className="flex flex-col gap-1.5 border-t pt-6">
-                <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-                  Semilla original
-                </h2>
+              <section className="flex flex-col gap-3 pt-2">
+                <div className="flex items-center gap-3">
+                  <h2 className="shrink-0 text-xs font-semibold tracking-widest text-muted-foreground/70 uppercase">
+                    Semilla original
+                  </h2>
+                  <span className="h-px flex-1 bg-border" />
+                </div>
                 <p className="text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">
                   {idea.descripcion}
                 </p>
