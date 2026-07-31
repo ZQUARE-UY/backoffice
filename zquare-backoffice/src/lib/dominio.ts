@@ -89,10 +89,20 @@ export type CampoBrief = keyof typeof BRIEF_TAREA
 
 export const CAMPOS_BRIEF = Object.keys(BRIEF_TAREA) as CampoBrief[]
 
-// Una tarjeta "sin desarrollar" es la que todavía no tiene brief: el tablero
-// la marca y el MCP la reporta como `desarrollada: false`.
+// Brief sin empezar: no hay nada de nada. Distingue el caso "todavía nadie la
+// tocó" (se muestra el aviso para desarrollarla) del brief a medio hacer.
 export function briefVacio(tarea: Pick<Tarea, CampoBrief>): boolean {
   return CAMPOS_BRIEF.every((campo) => !tarea[campo])
+}
+
+// Una tarjeta está "desarrollada" cuando tiene `resultado`, no con que tenga
+// cualquier campo del brief: el resultado es lo que la vuelve resoluble y
+// verificable — es contra eso que un agente chequea si terminó (ver la
+// descripción de `ficha_tarea` en el MCP). Sin él, tener contexto no alcanza:
+// las tarjetas que salen de graduar una idea nacen justo así, con contexto y
+// sin criterios, y son las que más necesitan una pasada de `desarrollar_tarea`.
+export function tareaDesarrollada(tarea: Pick<Tarea, CampoBrief>): boolean {
+  return Boolean(tarea.resultado)
 }
 
 // Ciclo de vida de una idea del banco. El orden de las claves es el orden en

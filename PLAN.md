@@ -304,6 +304,15 @@ agente la desarrolle después. Mismo patrón que el one-pager de ideas.
   grandes, comenta el cierre y pregunta antes de mover de backlog.
 - [ ] Release: PR → merge → migración en SQL Editor (Joaquín) → verificación
   en prod (UI + prompt desde conector reconectado).
+- [x] Ajuste 2026-07-31, salido de revisar la graduación: "desarrollada" pasa a
+  significar **tiene `resultado`**, no "tiene algún campo del brief". El
+  resultado es lo que vuelve la tarjeta verificable (es contra eso que un
+  agente chequea si terminó), así que sin él tener contexto no alcanza. Las
+  tarjetas que salen de graduar una idea nacen justo así —contexto sí,
+  criterios no— y antes quedaban marcadas como listas: eran las que más
+  necesitaban `desarrollar_tarea` y el tablero las declaraba resueltas.
+  Alcanza al punto ámbar, al flag `desarrollada` del MCP y a las
+  descripciones de las tools; el diálogo avisa cuando el brief está a medias.
 
 ### Post-MVP — Calendario de reuniones
 - [x] Panel "Próximas reuniones" en el dashboard: agenda unificada de los 4
@@ -372,6 +381,9 @@ agente la desarrolle después. Mismo patrón que el one-pager de ideas.
   `metadata.graduacion`, y devuelve la idea a `lista` con su one-pager
   intacto; queda registrado en el historial. La franja solo se muestra
   mientras la idea esté aprobada y el proyecto vivo.
+- [x] Cierre de la trazabilidad en la UI (2026-07-31): la ficha de un proyecto
+  interno muestra "Graduado de IDEA-N · título" con link a la idea. El dato ya
+  estaba (la idea guarda `proyecto_id`), pero solo se veía de ida.
 - [ ] Etapa 4 — matriz impacto × esfuerzo para priorizar de un vistazo, y
   afinado de la entrevista del prompt según el uso real.
 
@@ -543,3 +555,8 @@ de Google en la consola del Workspace.
   que entrevista al socio y completa el brief; historial `tareas_versiones`
   con autoría humano/agente; indicador "sin desarrollar" en el tablero.
   Patrón calcado del one-pager del banco de ideas.
+- **2026-07-31** — Revisión de la graduación: "desarrollada" pasa a exigir
+  `resultado` (antes bastaba cualquier campo del brief, así que las tareas
+  recién graduadas —contexto sí, criterios no— se mostraban como listas justo
+  cuando eran las que más necesitaban `desarrollar_tarea`), y la ficha del
+  proyecto interno ahora linkea a la idea que lo originó.

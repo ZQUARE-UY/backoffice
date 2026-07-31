@@ -8,9 +8,9 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import {
-  briefVacio,
   codigoTarea,
   PRIORIDADES_TAREA,
+  tareaDesarrollada,
   type ComentarioTarea,
   type Socio,
   type Tarea,
@@ -145,10 +145,11 @@ export function Backlog({
               <Card className="flex-row items-center gap-3 p-3 hover:border-primary/50">
                 <span className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
                   {codigoTarea(tarea.numero)}
-                  {briefVacio(tarea) && (
-                    // Punto ámbar: la tarjeta todavía no tiene brief.
+                  {!tareaDesarrollada(tarea) && (
+                    // Punto ámbar: falta el resultado esperado, así que
+                    // todavía no es resoluble.
                     <span
-                      title="Sin desarrollar"
+                      title="Sin desarrollar: falta el resultado esperado"
                       className="size-1.5 rounded-full bg-amber-500"
                     />
                   )}

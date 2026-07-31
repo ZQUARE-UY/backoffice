@@ -455,7 +455,7 @@ const handler = createMcpHandler(
       {
         title: "Listar tareas del tablero",
         description:
-          "Tarjetas del tablero de la empresa, agrupadas por columna. 'backlog' es la lista priorizada fuera del tablero (ideas sin comprometer); el tablero va de 'por_hacer' a 'hecho'. Por defecto omite las que están en 'hecho'. `desarrollada` indica si la tarjeta tiene brief: las que no, necesitan una pasada por el prompt `desarrollar_tarea` antes de que un agente las resuelva (el brief completo se ve con `ficha_tarea`).",
+          "Tarjetas del tablero de la empresa, agrupadas por columna. 'backlog' es la lista priorizada fuera del tablero (ideas sin comprometer); el tablero va de 'por_hacer' a 'hecho'. Por defecto omite las que están en 'hecho'. `desarrollada` indica si la tarjeta tiene definido su resultado esperado, que es lo que la vuelve resoluble: las que no (típicamente las recién creadas o las que salen de graduar una idea, que traen contexto pero no criterios) necesitan una pasada por el prompt `desarrollar_tarea` antes de que un agente las resuelva. El brief completo se ve con `ficha_tarea`.",
         inputSchema: {
           estado: z.enum(ESTADOS_TAREA).optional(),
           asignado_email: z.string().optional(),
@@ -514,7 +514,12 @@ const handler = createMcpHandler(
           // flag `desarrollada`; el contenido se pide con ficha_tarea.
           const { numero, orden, contexto, resultado, recursos, plan, ...resto } = t
           void orden
-          const desarrollada = Boolean(contexto || resultado || recursos || plan)
+          void contexto
+          void recursos
+          void plan
+          // Desarrollada = tiene `resultado`. Tener contexto no alcanza: es el
+          // resultado lo que la vuelve verificable (ver dominio.ts).
+          const desarrollada = Boolean(resultado)
           ;(porColumna[t.estado] ??= []).push({
             codigo: `ZQ-${numero}`,
             desarrollada,
@@ -530,7 +535,7 @@ const handler = createMcpHandler(
       {
         title: "Ficha de una tarjeta",
         description:
-          "Detalle completo de una tarjeta, con su brief de desarrollo (contexto / resultado / recursos / plan), comentarios e historial de versiones. Se identifica por número o código (12 o ZQ-12). Para resolver una tarjeta: si tiene brief, seguí su `plan` y verificá lo hecho contra `resultado` antes de darla por terminada; si no lo tiene, conviene desarrollarla primero (prompt `desarrollar_tarea`).",
+          "Detalle completo de una tarjeta, con su brief de desarrollo (contexto / resultado / recursos / plan), comentarios e historial de versiones. Se identifica por número o código (12 o ZQ-12). Para resolver una tarjeta: seguí su `plan` y verificá lo hecho contra `resultado` antes de darla por terminada. Si le falta `resultado` no hay contra qué verificar —aunque tenga contexto— así que conviene desarrollarla primero (prompt `desarrollar_tarea`).",
         inputSchema: { tarea: z.union([z.string(), z.number()]) },
       },
       async ({ tarea }) => {
