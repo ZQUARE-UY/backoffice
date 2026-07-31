@@ -55,11 +55,14 @@ export default async function ProyectoPage({
   if (!proyecto) notFound()
 
   const [{ data: cliente }, { data: tareasData }] = await Promise.all([
-    supabase
-      .from("clientes")
-      .select("*")
-      .eq("id", proyecto.cliente_id)
-      .maybeSingle<Cliente>(),
+    // cliente_id null = proyecto interno (ej. graduado del banco de ideas).
+    proyecto.cliente_id
+      ? supabase
+          .from("clientes")
+          .select("*")
+          .eq("id", proyecto.cliente_id)
+          .maybeSingle<Cliente>()
+      : Promise.resolve({ data: null }),
     supabase
       .from("tareas")
       .select("id, numero, titulo, estado, prioridad, fecha_limite")
@@ -71,8 +74,11 @@ export default async function ProyectoPage({
   ])
 
   const tareas = (tareasData ?? []) as TareaRelacionada[]
-  // Ambos params para que la cascada de filtros del tablero quede coherente.
-  const hrefTablero = `/tareas?cliente=${proyecto.cliente_id}&proyecto=${proyecto.id}`
+  // Ambos params para que la cascada de filtros del tablero quede coherente
+  // (en proyectos internos no hay cliente que filtrar).
+  const hrefTablero = proyecto.cliente_id
+    ? `/tareas?cliente=${proyecto.cliente_id}&proyecto=${proyecto.id}`
+    : `/tareas?proyecto=${proyecto.id}`
 
   return (
     <>
@@ -82,10 +88,16 @@ export default async function ProyectoPage({
           size="sm"
           className="-ml-2 mb-2"
           nativeButton={false}
-          render={<Link href={`/clientes/${proyecto.cliente_id}`} />}
+          render={
+            <Link
+              href={
+                proyecto.cliente_id ? `/clientes/${proyecto.cliente_id}` : "/"
+              }
+            />
+          }
         >
           <ArrowLeftIcon data-icon="inline-start" />
-          {cliente?.nombre ?? "Cliente"}
+          {cliente?.nombre ?? "Proyecto interno"}
         </Button>
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">

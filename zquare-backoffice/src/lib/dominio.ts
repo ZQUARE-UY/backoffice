@@ -202,7 +202,8 @@ export type Cliente = {
 
 export type Proyecto = {
   id: string
-  cliente_id: string
+  // Null = proyecto interno de ZQUARE (ej. graduado del banco de ideas).
+  cliente_id: string | null
   nombre: string
   descripcion: string | null
   estado: EstadoProyecto
@@ -319,9 +320,21 @@ export type Idea = {
   estado: EstadoIdea
   etiquetas: string[]
   proyecto_id: string | null
+  metadata: MetadataIdea
   created_by: string | null
   created_at: string
   updated_at: string
+}
+
+// metadata.graduacion: qué generó la idea al graduarse (etapa 3). Las tareas
+// se guardan por número (código ZQ-N) para mostrarlas sin joins.
+export type MetadataIdea = {
+  graduacion?: {
+    destino: "proyecto" | "tareas"
+    fecha: string
+    tareas: number[]
+  }
+  [clave: string]: unknown
 }
 
 export type ComentarioIdea = {

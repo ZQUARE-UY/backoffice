@@ -162,7 +162,9 @@ export async function eliminarCliente(id: string) {
   redirect("/clientes")
 }
 
-export async function eliminarProyecto(id: string, clienteId: string) {
+// clienteId null = proyecto interno (graduado del banco de ideas): al
+// eliminarlo se vuelve a la home en vez de a una ficha de cliente.
+export async function eliminarProyecto(id: string, clienteId: string | null) {
   const supabase = await createClient()
   const { error } = await supabase
     .from("proyectos")
@@ -170,8 +172,9 @@ export async function eliminarProyecto(id: string, clienteId: string) {
     .eq("id", id)
   if (error) throw new Error(error.message)
 
-  revalidatePath(`/clientes/${clienteId}`)
-  redirect(`/clientes/${clienteId}`)
+  const destino = clienteId ? `/clientes/${clienteId}` : "/"
+  revalidatePath(destino)
+  redirect(destino)
 }
 
 export async function crearProyecto(formData: FormData) {

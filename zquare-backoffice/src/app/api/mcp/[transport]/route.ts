@@ -1293,6 +1293,139 @@ const handler = createMcpHandler(
       }
     )
 
+    server.registerTool(
+      "graduar_idea",
+      {
+        title: "Graduar una idea aprobada",
+        description:
+          "Convierte una idea del banco en trabajo real: un proyecto interno (con tareas iniciales opcionales colgando de él) o tareas sueltas del kanban. La idea pasa a estado 'aprobada' y queda vinculada a lo que generó. Usar cuando los socios ya decidieron hacerla; las tareas suelen salir de los próximos pasos del one-pager.",
+        inputSchema: {
+          idea: z.union([z.string(), z.number()]),
+          destino: z
+            .enum(["proyecto", "tareas"])
+            .describe(
+              "ideas grandes → 'proyecto' (interno, sin cliente); ideas chicas → 'tareas' sueltas"
+            ),
+          proyecto_nombre: z
+            .string()
+            .describe("nombre del proyecto; default el título de la idea")
+            .optional(),
+          tareas: z
+            .array(z.string())
+            .describe(
+              "títulos de las tareas iniciales, en orden; obligatorio si destino='tareas'"
+            )
+            .optional(),
+        },
+      },
+      async ({ idea, destino, proyecto_nombre, tareas }, extra) => {
+        const numero = numeroDeIdea(idea)
+        if (!numero) return texto(`"${idea}" no parece un número de idea.`)
+
+        const supabase = createAdminClient()
+        const { data: actual } = await supabase
+          .from("ideas")
+          .select("*")
+          .eq("numero", numero)
+          .is("deleted_at", null)
+          .maybeSingle()
+        if (!actual) return texto(`No existe la idea IDEA-${numero}.`)
+        if (actual.estado === "aprobada") {
+          return texto(`IDEA-${numero} ya está graduada; no hice nada.`)
+        }
+
+        const titulosTareas = (tareas ?? []).map((t) => t.trim()).filter(Boolean)
+        if (destino === "tareas" && titulosTareas.length === 0) {
+          return texto(
+            "Para graduar a tareas sueltas hace falta al menos un título en `tareas`."
+          )
+        }
+
+        const { socioId } = await actorMcp(extra)
+        const codigo = `IDEA-${numero}`
+
+        let proyectoId: string | null = null
+        let proyectoNombre: string | null = null
+        if (destino === "proyecto") {
+          proyectoNombre = proyecto_nombre?.trim() || actual.titulo
+          const { data: proyecto, error } = await supabase
+            .from("proyectos")
+            .insert({
+              nombre: proyectoNombre,
+              cliente_id: null,
+              descripcion: `Proyecto interno graduado del banco de ideas (${codigo}: ${actual.titulo}).`,
+              estado: "propuesta",
+              metadata: { idea: codigo, origen: "mcp" },
+              created_by: socioId,
+            })
+            .select("id")
+            .single()
+          if (error) throw new Error(error.message)
+          proyectoId = proyecto.id
+        }
+
+        // Las tareas entran arriba del backlog, en el orden recibido.
+        const numerosTareas: number[] = []
+        if (titulosTareas.length > 0) {
+          const base =
+            (await ordenAlTopeDeColumna("backlog")) - titulosTareas.length + 1
+          const { data: creadas, error } = await supabase
+            .from("tareas")
+            .insert(
+              titulosTareas.map((titulo, i) => ({
+                titulo,
+                estado: "backlog",
+                prioridad: "media",
+                proyecto_id: proyectoId,
+                etiquetas: [codigo],
+                contexto: `Sale de la idea ${codigo} ("${actual.titulo}") del banco de ideas. El one-pager de la idea tiene el contexto completo (ficha_idea ${codigo}).`,
+                orden: base + i,
+                created_by: socioId,
+                metadata: { idea: codigo, origen: "mcp" },
+              }))
+            )
+            .select("numero")
+          if (error) throw new Error(error.message)
+          for (const t of creadas ?? []) numerosTareas.push(t.numero)
+        }
+
+        const { error } = await supabase
+          .from("ideas")
+          .update({
+            estado: "aprobada",
+            proyecto_id: proyectoId,
+            metadata: {
+              ...(actual.metadata ?? {}),
+              graduacion: {
+                destino,
+                fecha: new Date().toISOString().slice(0, 10),
+                tareas: numerosTareas,
+              },
+            },
+          })
+          .eq("id", actual.id)
+        if (error) throw new Error(error.message)
+
+        const { autor } = await actorMcp(extra)
+        const snapshot: Record<string, unknown> = {}
+        for (const campo of CAMPOS_IDEA) snapshot[campo] = actual[campo]
+        snapshot.estado = "aprobada"
+        await supabase.from("ideas_versiones").insert({
+          idea_id: actual.id,
+          snapshot,
+          autor,
+          autor_socio_id: socioId,
+        })
+
+        return texto({
+          graduada: codigo,
+          proyecto: proyectoNombre,
+          tareas: numerosTareas.map((n) => `ZQ-${n}`),
+          ver: "/ideas",
+        })
+      }
+    )
+
     // Prompt guía: la entrevista estándar para que los 4 socios bajen ideas a
     // tierra con el mismo proceso, sin depender de que cada uno sepa preguntar.
     server.registerPrompt(
@@ -1336,7 +1469,7 @@ const handler = createMcpHandler(
                 idea
                   ? "Al cerrar cada parte, guardá el avance con `actualizar_idea` (así queda el historial de versiones)."
                   : "Cuando tengamos el título y el problema, guardala con `crear_idea` en estado `en_exploracion` y seguí actualizándola con `actualizar_idea` a medida que avanzamos.",
-                "Cuando el one-pager esté completo y yo esté conforme, pasala a estado `lista` y cerrá con un resumen del one-pager.",
+                "Cuando el one-pager esté completo y yo esté conforme, pasala a estado `lista` y cerrá con un resumen del one-pager. La aprobación es de los socios (comentarios y votos en el banco); cuando decidan hacerla, se gradúa con `graduar_idea` — ideas grandes a proyecto interno, chicas a tareas sueltas, con los próximos pasos como tareas iniciales.",
               ].join("\n"),
             },
           },

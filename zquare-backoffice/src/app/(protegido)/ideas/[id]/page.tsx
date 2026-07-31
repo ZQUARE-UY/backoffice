@@ -1,12 +1,19 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { ArrowLeftIcon, HistoryIcon, MessageCircleIcon, SparklesIcon } from "lucide-react"
+import {
+  ArrowLeftIcon,
+  GraduationCapIcon,
+  HistoryIcon,
+  MessageCircleIcon,
+  SparklesIcon,
+} from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import {
   codigoIdea,
+  codigoTarea,
   ESTADOS_IDEA,
   ONE_PAGER_IDEA,
   type CampoOnePager,
@@ -22,6 +29,7 @@ import { createClient } from "@/lib/supabase/server"
 import { urlIterarIdea, urlIterarSeccion } from "../chat-claude"
 import { MarkdownIdea } from "../markdown-idea"
 import { ComentariosIdea } from "./comentarios-idea"
+import { GraduarIdea } from "./graduar-idea"
 import { IdeaAcciones, VotarIdea } from "./idea-acciones"
 
 export const metadata = { title: "Idea" }
@@ -66,6 +74,16 @@ export default async function IdeaPage({
     supabase.from("socios").select("id, nombre, email").is("deleted_at", null),
     idSocioActual(),
   ])
+
+  // Trazabilidad de la graduación: el proyecto que generó (si lo hay).
+  const { data: proyectoGraduado } = idea.proyecto_id
+    ? await supabase
+        .from("proyectos")
+        .select("id, nombre")
+        .eq("id", idea.proyecto_id)
+        .maybeSingle()
+    : { data: null }
+  const graduacion = idea.metadata?.graduacion
 
   const comentarios = (comentariosData ?? []) as ComentarioIdea[]
   const versiones = (versionesData ?? []) as VersionIdea[]
@@ -135,6 +153,9 @@ export default async function IdeaPage({
                 votos={votos.length}
                 yaVote={votos.some((v) => v.socio_id === socioActual)}
               />
+              {idea.estado !== "aprobada" && idea.estado !== "descartada" && (
+                <GraduarIdea idea={idea} />
+              )}
               <IdeaAcciones idea={idea} />
             </div>
             {votos.length > 0 && (
@@ -148,6 +169,44 @@ export default async function IdeaPage({
           </div>
         </div>
       </div>
+
+      {/* Qué generó la idea al graduarse: el link de trazabilidad. */}
+      {graduacion && (
+        <div className="flex max-w-3xl flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-4 py-3 text-sm">
+          <GraduationCapIcon className="size-4 text-muted-foreground" />
+          <span>
+            Graduada el {graduacion.fecha}
+            {proyectoGraduado && (
+              <>
+                {" "}
+                →{" "}
+                <Link
+                  href={`/proyectos/${proyectoGraduado.id}`}
+                  className="font-medium text-primary hover:underline"
+                >
+                  {proyectoGraduado.nombre}
+                </Link>
+              </>
+            )}
+          </span>
+          {graduacion.tareas.length > 0 && (
+            <span className="text-muted-foreground">
+              · tareas:{" "}
+              {graduacion.tareas.map((n, i) => (
+                <span key={n}>
+                  {i > 0 && ", "}
+                  <Link
+                    href={`/tareas?tarea=${codigoTarea(n)}`}
+                    className="font-mono text-primary hover:underline"
+                  >
+                    {codigoTarea(n)}
+                  </Link>
+                </span>
+              ))}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* El one-pager se lee como documento, no como dashboard: una sola
           columna con ancho de lectura y secciones sin cajas. La descripción
