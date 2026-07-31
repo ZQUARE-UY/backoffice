@@ -232,6 +232,76 @@ export async function graduarIdea(id: string, formData: FormData) {
   revalidatePath("/tareas")
 }
 
+// Deshacer la graduación: la contracara de graduarIdea. Archiva (soft delete,
+// como todo en el esquema) el proyecto y las tareas que generó, limpia la
+// trazabilidad y devuelve la idea a 'lista'. Solo toca lo que la graduación
+// creó: una tarea que alguien movió a otro proyecto o completó igual se
+// archiva — es lo que se creó desde acá, y el histórico queda en la base.
+export async function deshacerGraduacion(id: string) {
+  const supabase = await createClient()
+  const { data: ideaData } = await supabase
+    .from("ideas")
+    .select("*")
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle()
+  if (!ideaData) throw new Error("No existe la idea")
+  const idea = ideaData as Idea
+
+  const graduacion = idea.metadata?.graduacion
+  if (!graduacion) throw new Error("La idea no está graduada")
+
+  const ahora = new Date().toISOString()
+
+  if (graduacion.tareas.length > 0) {
+    const { error } = await supabase
+      .from("tareas")
+      .update({ deleted_at: ahora })
+      .in("numero", graduacion.tareas)
+      .is("deleted_at", null)
+    if (error) throw new Error(error.message)
+  }
+
+  if (idea.proyecto_id) {
+    const { error } = await supabase
+      .from("proyectos")
+      .update({ deleted_at: ahora })
+      .eq("id", idea.proyecto_id)
+      .is("deleted_at", null)
+    if (error) throw new Error(error.message)
+  }
+
+  const { graduacion: _descartada, ...metadataSinGraduacion } = idea.metadata
+  void _descartada
+
+  const { error } = await supabase
+    .from("ideas")
+    .update({
+      estado: "lista",
+      proyecto_id: null,
+      metadata: metadataSinGraduacion,
+    })
+    .eq("id", id)
+  if (error) throw new Error(error.message)
+
+  await guardarVersion(id, {
+    titulo: idea.titulo,
+    descripcion: idea.descripcion,
+    problema: idea.problema,
+    competencia: idea.competencia,
+    solucion: idea.solucion,
+    esfuerzo: idea.esfuerzo,
+    impacto: idea.impacto,
+    proximos_pasos: idea.proximos_pasos,
+    estado: "lista",
+    etiquetas: idea.etiquetas,
+  })
+
+  revalidatePath("/ideas")
+  revalidatePath(`/ideas/${id}`)
+  revalidatePath("/tareas")
+}
+
 // Toggle del +1 del socio logueado.
 export async function votarIdea(ideaId: string) {
   const socioId = await idSocioActual()

@@ -29,6 +29,7 @@ import { createClient } from "@/lib/supabase/server"
 import { urlIterarIdea, urlIterarSeccion } from "../chat-claude"
 import { MarkdownIdea } from "../markdown-idea"
 import { ComentariosIdea } from "./comentarios-idea"
+import { DeshacerGraduacion } from "./deshacer-graduacion"
 import { GraduarIdea } from "./graduar-idea"
 import { IdeaAcciones, VotarIdea } from "./idea-acciones"
 
@@ -75,15 +76,20 @@ export default async function IdeaPage({
     idSocioActual(),
   ])
 
-  // Trazabilidad de la graduación: el proyecto que generó (si lo hay).
-  const { data: proyectoGraduado } = idea.proyecto_id
-    ? await supabase
-        .from("proyectos")
-        .select("id, nombre")
-        .eq("id", idea.proyecto_id)
-        .maybeSingle()
-    : { data: null }
-  const graduacion = idea.metadata?.graduacion
+  // Trazabilidad de la graduación: el proyecto que generó (si lo hay y sigue
+  // vivo). Solo aplica mientras la idea esté aprobada — al deshacer la
+  // graduación la franja desaparece con ella.
+  const graduacion =
+    idea.estado === "aprobada" ? idea.metadata?.graduacion : undefined
+  const { data: proyectoGraduado } =
+    graduacion && idea.proyecto_id
+      ? await supabase
+          .from("proyectos")
+          .select("id, nombre")
+          .eq("id", idea.proyecto_id)
+          .is("deleted_at", null)
+          .maybeSingle()
+      : { data: null }
 
   const comentarios = (comentariosData ?? []) as ComentarioIdea[]
   const versiones = (versionesData ?? []) as VersionIdea[]
@@ -205,6 +211,12 @@ export default async function IdeaPage({
               ))}
             </span>
           )}
+          <DeshacerGraduacion
+            ideaId={idea.id}
+            numero={idea.numero}
+            proyecto={proyectoGraduado?.nombre ?? null}
+            tareas={graduacion.tareas}
+          />
         </div>
       )}
 

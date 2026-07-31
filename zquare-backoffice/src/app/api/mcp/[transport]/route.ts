@@ -1426,6 +1426,82 @@ const handler = createMcpHandler(
       }
     )
 
+    server.registerTool(
+      "deshacer_graduacion",
+      {
+        title: "Deshacer la graduación de una idea",
+        description:
+          "Revierte una graduación: archiva el proyecto y las tareas que generó, limpia la trazabilidad y devuelve la idea a estado 'lista' con su one-pager intacto. Lo archivado es soft delete (recuperable desde la base).",
+        inputSchema: { idea: z.union([z.string(), z.number()]) },
+      },
+      async ({ idea }, extra) => {
+        const numero = numeroDeIdea(idea)
+        if (!numero) return texto(`"${idea}" no parece un número de idea.`)
+
+        const supabase = createAdminClient()
+        const { data: actual } = await supabase
+          .from("ideas")
+          .select("*")
+          .eq("numero", numero)
+          .is("deleted_at", null)
+          .maybeSingle()
+        if (!actual) return texto(`No existe la idea IDEA-${numero}.`)
+
+        const graduacion = actual.metadata?.graduacion as
+          | { destino: string; fecha: string; tareas: number[] }
+          | undefined
+        if (!graduacion) {
+          return texto(`IDEA-${numero} no está graduada; no hice nada.`)
+        }
+
+        const ahora = new Date().toISOString()
+
+        if (graduacion.tareas.length > 0) {
+          const { error } = await supabase
+            .from("tareas")
+            .update({ deleted_at: ahora })
+            .in("numero", graduacion.tareas)
+            .is("deleted_at", null)
+          if (error) throw new Error(error.message)
+        }
+
+        if (actual.proyecto_id) {
+          const { error } = await supabase
+            .from("proyectos")
+            .update({ deleted_at: ahora })
+            .eq("id", actual.proyecto_id)
+            .is("deleted_at", null)
+          if (error) throw new Error(error.message)
+        }
+
+        const { graduacion: _descartada, ...metadata } = actual.metadata ?? {}
+        void _descartada
+
+        const { error } = await supabase
+          .from("ideas")
+          .update({ estado: "lista", proyecto_id: null, metadata })
+          .eq("id", actual.id)
+        if (error) throw new Error(error.message)
+
+        const { socioId, autor } = await actorMcp(extra)
+        const snapshot: Record<string, unknown> = {}
+        for (const campo of CAMPOS_IDEA) snapshot[campo] = actual[campo]
+        snapshot.estado = "lista"
+        await supabase.from("ideas_versiones").insert({
+          idea_id: actual.id,
+          snapshot,
+          autor,
+          autor_socio_id: socioId,
+        })
+
+        return texto({
+          desgraduada: `IDEA-${numero}`,
+          archivadas: graduacion.tareas.map((n) => `ZQ-${n}`),
+          estado: "lista",
+        })
+      }
+    )
+
     // Prompt guía: la entrevista estándar para que los 4 socios bajen ideas a
     // tierra con el mismo proceso, sin depender de que cada uno sepa preguntar.
     server.registerPrompt(

@@ -366,6 +366,12 @@ agente la desarrolle después. Mismo patrón que el one-pager de ideas.
   `contexto` del brief apuntando a la idea. Implementado como botón
   "Graduar" en la UI y herramienta MCP `graduar_idea`; el prompt de la
   entrevista menciona la graduación como cierre del ciclo.
+- [x] Rollback de la graduación (2026-07-30): botón "Deshacer" en la franja de
+  trazabilidad y herramienta MCP `deshacer_graduacion`. Archiva (soft delete)
+  el proyecto y las tareas generadas, limpia `proyecto_id` y
+  `metadata.graduacion`, y devuelve la idea a `lista` con su one-pager
+  intacto; queda registrado en el historial. La franja solo se muestra
+  mientras la idea esté aprobada y el proyecto vivo.
 - [ ] Etapa 4 — matriz impacto × esfuerzo para priorizar de un vistazo, y
   afinado de la entrevista del prompt según el uso real.
 
