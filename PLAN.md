@@ -355,8 +355,17 @@ agente la desarrolle después. Mismo patrón que el one-pager de ideas.
   paso 2 nuevo en la entrevista del prompt: Claude investiga quién lo
   resuelve hoy (con búsqueda web si está disponible), qué cobran, y el campo
   cierra con nuestro diferencial — o la advertencia honesta de que no lo hay.
-- [ ] Etapa 3 — graduación: `graduar_idea` (aprueba y crea proyecto o tareas
-  vinculadas en la misma operación) + botón equivalente en la UI.
+- [x] Etapa 3 — graduación (2026-07-30): una idea aprobada se convierte en
+  trabajo real. Quien gradúa elige el destino: **proyecto interno** (con
+  tareas iniciales opcionales colgando de él) para ideas grandes, o **tareas
+  sueltas** del kanban para ideas chicas. Migración `20260730000001`:
+  `proyectos.cliente_id` pasa a nullable (null = proyecto interno de ZQUARE).
+  Trazabilidad en ambos sentidos: la idea guarda `proyecto_id` +
+  `metadata.graduacion` (destino, fecha, tareas ZQ-N) y se muestra en su
+  detalle; cada tarea nace arriba del backlog con etiqueta `IDEA-N` y el
+  `contexto` del brief apuntando a la idea. Implementado como botón
+  "Graduar" en la UI y herramienta MCP `graduar_idea`; el prompt de la
+  entrevista menciona la graduación como cierre del ciclo.
 - [ ] Etapa 4 — matriz impacto × esfuerzo para priorizar de un vistazo, y
   afinado de la entrevista del prompt según el uso real.
 
