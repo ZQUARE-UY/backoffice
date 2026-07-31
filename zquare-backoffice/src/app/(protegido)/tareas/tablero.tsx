@@ -7,11 +7,11 @@ import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import {
-  briefVacio,
   codigoTarea,
   ESTADOS_TABLERO,
   ESTADOS_TAREA,
   PRIORIDADES_TAREA,
+  tareaDesarrollada,
   type ComentarioTarea,
   type EstadoTarea,
   type Socio,
@@ -184,10 +184,11 @@ export function Tablero({
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1.5 font-mono">
                         {codigoTarea(tarea.numero)}
-                        {briefVacio(tarea) && tarea.estado !== "hecho" && (
-                          // Punto ámbar: la tarjeta todavía no tiene brief.
+                        {!tareaDesarrollada(tarea) && tarea.estado !== "hecho" && (
+                          // Punto ámbar: falta el resultado esperado, así que
+                          // todavía no es resoluble.
                           <span
-                            title="Sin desarrollar"
+                            title="Sin desarrollar: falta el resultado esperado"
                             className="size-1.5 rounded-full bg-amber-500"
                           />
                         )}

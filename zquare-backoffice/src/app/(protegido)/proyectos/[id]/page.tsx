@@ -18,7 +18,7 @@ import {
   CardDescription,
   CardHeader,
 } from "@/components/ui/card"
-import { type Cliente, type Proyecto } from "@/lib/dominio"
+import { codigoIdea, type Cliente, type Proyecto } from "@/lib/dominio"
 import { createClient } from "@/lib/supabase/server"
 
 function formatearMonto(monto: number | null, moneda: string | null) {
@@ -54,24 +54,33 @@ export default async function ProyectoPage({
 
   if (!proyecto) notFound()
 
-  const [{ data: cliente }, { data: tareasData }] = await Promise.all([
-    // cliente_id null = proyecto interno (ej. graduado del banco de ideas).
-    proyecto.cliente_id
-      ? supabase
-          .from("clientes")
-          .select("*")
-          .eq("id", proyecto.cliente_id)
-          .maybeSingle<Cliente>()
-      : Promise.resolve({ data: null }),
-    supabase
-      .from("tareas")
-      .select("id, numero, titulo, estado, prioridad, fecha_limite")
-      .eq("proyecto_id", id)
-      .neq("estado", "hecho")
-      .is("deleted_at", null)
-      .order("estado")
-      .order("orden"),
-  ])
+  const [{ data: cliente }, { data: tareasData }, { data: ideaOrigen }] =
+    await Promise.all([
+      // cliente_id null = proyecto interno (ej. graduado del banco de ideas).
+      proyecto.cliente_id
+        ? supabase
+            .from("clientes")
+            .select("*")
+            .eq("id", proyecto.cliente_id)
+            .maybeSingle<Cliente>()
+        : Promise.resolve({ data: null }),
+      supabase
+        .from("tareas")
+        .select("id, numero, titulo, estado, prioridad, fecha_limite")
+        .eq("proyecto_id", id)
+        .neq("estado", "hecho")
+        .is("deleted_at", null)
+        .order("estado")
+        .order("orden"),
+      // La vuelta de la trazabilidad de la graduación: la idea guarda a qué
+      // proyecto graduó, así que se busca por esa FK (no por metadata).
+      supabase
+        .from("ideas")
+        .select("id, numero, titulo")
+        .eq("proyecto_id", id)
+        .is("deleted_at", null)
+        .maybeSingle<{ id: string; numero: number; titulo: string }>(),
+    ])
 
   const tareas = (tareasData ?? []) as TareaRelacionada[]
   // Ambos params para que la cascada de filtros del tablero quede coherente
@@ -100,11 +109,24 @@ export default async function ProyectoPage({
           {cliente?.nombre ?? "Proyecto interno"}
         </Button>
         <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              {proyecto.nombre}
-            </h1>
-            <EstadoProyectoBadge estado={proyecto.estado} />
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-semibold tracking-tight">
+                {proyecto.nombre}
+              </h1>
+              <EstadoProyectoBadge estado={proyecto.estado} />
+            </div>
+            {ideaOrigen && (
+              <span className="text-sm text-muted-foreground">
+                Graduado de{" "}
+                <Link
+                  href={`/ideas/${ideaOrigen.id}`}
+                  className="text-primary hover:underline"
+                >
+                  {codigoIdea(ideaOrigen.numero)} · {ideaOrigen.titulo}
+                </Link>
+              </span>
+            )}
           </div>
           <div className="flex gap-2">
             <EditarProyecto proyecto={proyecto} />

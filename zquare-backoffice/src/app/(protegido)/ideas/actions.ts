@@ -186,7 +186,7 @@ export async function graduarIdea(id: string, formData: FormData) {
           etiquetas: [codigo],
           contexto: `Sale de la idea ${codigo} ("${idea.titulo}") del banco de ideas, graduada como ${
             destino === "proyecto" ? "proyecto" : "tareas sueltas"
-          }. El one-pager de la idea tiene el contexto completo.`,
+          }. El one-pager de la idea tiene el contexto completo (ficha_idea ${codigo}).`,
           orden: base + i,
           created_by: socioId,
           metadata: { idea: codigo },

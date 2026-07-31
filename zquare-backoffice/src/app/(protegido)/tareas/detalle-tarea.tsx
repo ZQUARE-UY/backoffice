@@ -27,6 +27,7 @@ import {
   codigoTarea,
   ESTADOS_TAREA,
   PRIORIDADES_TAREA,
+  tareaDesarrollada,
   type ComentarioTarea,
   type Socio,
   type Tarea,
@@ -201,22 +202,33 @@ export function DetalleTarea({
                 editá la tarjeta a mano.
               </div>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {CAMPOS_BRIEF.map((campo) =>
-                  tarea[campo] ? (
-                    <div
-                      key={campo}
-                      className={cn(
-                        "flex flex-col gap-1 rounded-lg border p-3",
-                        campo === "plan" && "sm:col-span-2"
-                      )}
-                    >
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {BRIEF_TAREA[campo].label}
-                      </span>
-                      <p className="text-sm whitespace-pre-wrap">{tarea[campo]}</p>
-                    </div>
-                  ) : null
+              <div className="flex flex-col gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {CAMPOS_BRIEF.map((campo) =>
+                    tarea[campo] ? (
+                      <div
+                        key={campo}
+                        className={cn(
+                          "flex flex-col gap-1 rounded-lg border p-3",
+                          campo === "plan" && "sm:col-span-2"
+                        )}
+                      >
+                        <span className="text-xs font-medium text-muted-foreground">
+                          {BRIEF_TAREA[campo].label}
+                        </span>
+                        <p className="text-sm whitespace-pre-wrap">{tarea[campo]}</p>
+                      </div>
+                    ) : null
+                  )}
+                </div>
+                {/* Brief a medias: el caso típico son las tarjetas que salen de
+                    graduar una idea, que nacen con contexto y sin criterios. */}
+                {!tareaDesarrollada(tarea) && (
+                  <p className="text-sm text-muted-foreground">
+                    Falta el resultado esperado, así que todavía no es resoluble.
+                    Pedile a Claude &quot;desarrollá {codigoTarea(tarea.numero)}
+                    &quot; para completar el brief.
+                  </p>
                 )}
               </div>
             )}
