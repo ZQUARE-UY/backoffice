@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
+  CalendarClockIcon,
   FileTextIcon,
   HomeIcon,
   KanbanIcon,
@@ -33,13 +34,26 @@ const secciones = [
   { titulo: "Inicio", href: "/", icono: HomeIcon, disponible: true },
   { titulo: "Clientes", href: "/clientes", icono: UsersIcon, disponible: true },
   { titulo: "Tareas", href: "/tareas", icono: KanbanIcon, disponible: true },
+  {
+    titulo: "Reuniones",
+    href: "/reuniones",
+    icono: CalendarClockIcon,
+    disponible: true,
+  },
   { titulo: "Ideas", href: "/ideas", icono: LightbulbIcon, disponible: true },
   { titulo: "Decisiones", href: "/decisiones", icono: ScrollTextIcon, disponible: true },
   { titulo: "Documentos", href: "/documentos", icono: FileTextIcon, disponible: true },
   { titulo: "Finanzas", href: "/finanzas", icono: WalletIcon, disponible: true },
 ]
 
-export function AppSidebar({ email }: { email: string }) {
+export function AppSidebar({
+  email,
+  // Reuniones esperando que este socio marque su disponibilidad.
+  pendientesReuniones = 0,
+}: {
+  email: string
+  pendientesReuniones?: number
+}) {
   const pathname = usePathname()
 
   return (
@@ -82,6 +96,9 @@ export function AppSidebar({ email }: { email: string }) {
                   </SidebarMenuButton>
                   {!seccion.disponible && (
                     <SidebarMenuBadge>pronto</SidebarMenuBadge>
+                  )}
+                  {seccion.href === "/reuniones" && pendientesReuniones > 0 && (
+                    <SidebarMenuBadge>{pendientesReuniones}</SidebarMenuBadge>
                   )}
                 </SidebarMenuItem>
               ))}

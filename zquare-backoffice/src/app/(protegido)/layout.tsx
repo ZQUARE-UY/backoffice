@@ -6,6 +6,8 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
+import { contarPendientes } from "@/lib/reuniones"
+import { idSocioActual } from "@/lib/socio-actual"
 import { createClient } from "@/lib/supabase/server"
 
 export default async function ProtegidoLayout({
@@ -22,9 +24,15 @@ export default async function ProtegidoLayout({
     redirect("/login")
   }
 
+  const socioId = await idSocioActual()
+  const pendientesReuniones = socioId ? await contarPendientes(socioId) : 0
+
   return (
     <SidebarProvider>
-      <AppSidebar email={user.email ?? ""} />
+      <AppSidebar
+        email={user.email ?? ""}
+        pendientesReuniones={pendientesReuniones}
+      />
       <SidebarInset>
         <header className="flex h-14 items-center border-b px-4 md:hidden">
           <SidebarTrigger />

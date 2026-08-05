@@ -4,6 +4,7 @@ import Link from "next/link"
 import { BalanceSociosTabla } from "@/components/balance-socios-tabla"
 import { EvolucionMensual } from "@/components/evolucion-mensual"
 import { ProximasReuniones } from "@/components/proximas-reuniones"
+import { ReunionesPendientes } from "@/components/reuniones-pendientes"
 import { Badge } from "@/components/ui/badge"
 import {
   Card,
@@ -144,6 +145,12 @@ export default async function InicioPage() {
           </Card>
         ))}
       </div>
+
+      {socioId && (
+        <Suspense fallback={<Skeleton className="h-24 w-full rounded-xl" />}>
+          <ReunionesPendientes socioId={socioId} />
+        </Suspense>
+      )}
 
       <Suspense fallback={<Skeleton className="h-40 w-full rounded-xl" />}>
         <ProximasReuniones socios={socios} />
