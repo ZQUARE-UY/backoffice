@@ -400,3 +400,68 @@ export type BalanceSocio = {
   pagado_usd: number
   saldo_usd: number
 }
+
+export const ESTADOS_REUNION = {
+  abierta: { label: "Abierta", variant: "default" as const },
+  agendada: { label: "Agendada", variant: "secondary" as const },
+  cancelada: { label: "Cancelada", variant: "outline" as const },
+}
+
+export type EstadoReunion = keyof typeof ESTADOS_REUNION
+
+export const DURACIONES_REUNION = [
+  { valor: "30", label: "30 minutos" },
+  { valor: "60", label: "1 hora" },
+]
+
+// Identificador corto para hablar de una reunión ("REU-7"), igual que ZQ-N e
+// IDEA-N.
+export function codigoReunion(numero: number): string {
+  return `REU-${numero}`
+}
+
+// Franja de disponibilidad tal como se guarda: instantes absolutos en ISO.
+export type FranjaGuardada = {
+  inicio: string
+  fin: string
+}
+
+export type SolicitudReunion = {
+  id: string
+  numero: number
+  titulo: string
+  notas: string | null
+  cliente_id: string | null
+  proyecto_id: string | null
+  duracion_min: number
+  ventana_desde: string
+  ventana_hasta: string
+  socios_requeridos: string[]
+  invitar_cliente: boolean
+  estado: EstadoReunion
+  inicio: string | null
+  fin: string | null
+  google_event_id: string | null
+  google_calendar_id: string | null
+  meet_url: string | null
+  agendada_por: string | null
+  agendada_at: string | null
+  metadata: Record<string, unknown>
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type RespuestaReunion = {
+  id: string
+  solicitud_id: string
+  socio_id: string
+  franjas: FranjaGuardada[]
+  comentario: string | null
+  created_at: string
+  updated_at: string
+}
+
+// Qué hizo cada socio requerido con la solicitud. Sale de una sola fuente:
+// sin fila de respuesta es "falta"; con franjas vacías es "no_puede".
+export type EstadoRespuesta = "respondio" | "no_puede" | "falta"

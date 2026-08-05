@@ -43,6 +43,30 @@ npm install
 npm run dev
 ```
 
+### 5. Google Calendar: agendar reuniones
+
+Leer los calendarios (widget "Próximas reuniones", huecos comunes de
+`/reuniones`) alcanza con que cada socio comparta el suyo con la cuenta de
+servicio, permiso *"Ver todos los detalles"*.
+
+**Crear** el evento al agendar una reunión necesita un permiso más: una cuenta
+de servicio por sí sola no puede invitar a nadie (Google responde 403
+`forbiddenForServiceAccounts`), así que el backoffice actúa *como* el socio que
+agenda. Para habilitarlo, un admin del Workspace tiene que ir a
+**admin.google.com → Seguridad → Control de acceso a datos → Delegación en todo
+el dominio**, agregar el `client_id` de la cuenta de servicio y autorizarle
+estos scopes:
+
+```
+https://www.googleapis.com/auth/calendar.readonly
+https://www.googleapis.com/auth/calendar.events
+```
+
+Sin ese paso `/reuniones` funciona igual (se abren encuestas, se responde
+disponibilidad y se ven los huecos), pero al agendar la reunión queda guardada
+en el backoffice sin evento de Google: la UI avisa que hay que mandar la
+invitación a mano.
+
 ## Seguridad
 
 Tres capas para que solo entren los 4 socios:

@@ -20,6 +20,21 @@ export function clienteJwt(scopes: string[]) {
   })
 }
 
+// Igual que `clienteJwt` pero actuando como un usuario del Workspace, no como
+// la cuenta de servicio. Hace falta para crear eventos con invitados: una
+// cuenta de servicio por su cuenta no puede invitar a nadie (Google responde
+// 403 forbiddenForServiceAccounts). Requiere que el admin habilite la
+// delegación de dominio para el client_id de la cuenta; ver el README.
+export function clienteJwtComo(scopes: string[], subject: string) {
+  const cred = credencialesServicio()
+  return new google.auth.JWT({
+    email: cred.client_email,
+    key: cred.private_key,
+    scopes,
+    subject,
+  })
+}
+
 export function googleConfigurado(): boolean {
   return Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_KEY_B64)
 }
