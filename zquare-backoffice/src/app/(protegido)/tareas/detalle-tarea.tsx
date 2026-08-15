@@ -26,6 +26,7 @@ import {
   CAMPOS_BRIEF,
   codigoTarea,
   ESTADOS_TAREA,
+  MOSCOW_TAREA,
   PRIORIDADES_TAREA,
   tareaDesarrollada,
   type ComentarioTarea,
@@ -164,6 +165,31 @@ export function DetalleTarea({
               </Dato>
               <Dato label="Responsable">{responsable?.nombre ?? "Sin asignar"}</Dato>
               <Dato label="Fecha límite">{tarea.fecha_limite ?? "—"}</Dato>
+              {/* Planificación: sólo se muestra lo que está cargado. Una tarea
+                  de empresa no lleva nada de esto y no tiene por qué mostrar
+                  cuatro guiones. */}
+              {tarea.codigo_proyecto && (
+                <Dato label="Código">
+                  <span className="font-mono">{tarea.codigo_proyecto}</span>
+                </Dato>
+              )}
+              {tarea.epica && (
+                <Dato label="Épica">
+                  <span className="font-mono">{tarea.epica}</span>
+                </Dato>
+              )}
+              {tarea.estimacion && (
+                <Dato label="Estimación">
+                  {tarea.estimacion} {tarea.estimacion === 1 ? "punto" : "puntos"}
+                </Dato>
+              )}
+              {tarea.moscow && (
+                <Dato label="MoSCoW">
+                  <Badge variant={MOSCOW_TAREA[tarea.moscow].variant}>
+                    {MOSCOW_TAREA[tarea.moscow].label}
+                  </Badge>
+                </Dato>
+              )}
               <Dato label="Cliente">
                 {cliente ? (
                   <Link

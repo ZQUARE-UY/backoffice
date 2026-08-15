@@ -56,6 +56,38 @@ export const PRIORIDADES_TAREA = {
 
 export type PrioridadTarea = keyof typeof PRIORIDADES_TAREA
 
+// MoSCoW: alcance del release, no urgencia. Es otra cosa que `prioridad` y por
+// eso vive en su propio campo — la regla 60/20/20 de 01-gestion-requisitos §6
+// necesita el valor exacto, y "alta" no dice si algo es Must o Should.
+export const MOSCOW_TAREA = {
+  must: { label: "Must have", variant: "default" as const },
+  should: { label: "Should have", variant: "secondary" as const },
+  could: { label: "Could have", variant: "outline" as const },
+  wont: { label: "Won't have", variant: "outline" as const },
+}
+
+export type MoscowTarea = keyof typeof MOSCOW_TAREA
+
+export const MOSCOW_ORDEN = Object.keys(MOSCOW_TAREA) as MoscowTarea[]
+
+// Fibonacci, según 01-gestion-requisitos §3.4. Una US de 13 no entra a un
+// sprint: se parte primero. La base la acepta igual —una tarjeta puede estar
+// estimada en 13 mientras espera que la partan— y esa regla la aplica quien
+// planifica.
+export const PUNTOS_TAREA = [1, 2, 3, 5, 8, 13] as const
+
+// Código de la tarjeta dentro de su proyecto (US-014, DEF-07, SC-3, TEC-2).
+// Distinto de `numero`, que es el ZQ-N de la empresa: este es el que enlaza
+// con el requisito y el que usa la convención de ramas del estándar.
+export const RE_CODIGO_PROYECTO = /^(US|DEF|SC|TEC)-\d+$/
+export const RE_EPICA = /^EP-\d+$/
+
+// Tipo de trabajo derivado del prefijo del código, que es lo que decide el
+// tipo de rama (US → feat, DEF → fix).
+export function tipoDeCodigo(codigo: string | null): string | null {
+  return codigo?.match(RE_CODIGO_PROYECTO)?.[1] ?? null
+}
+
 // Identificador corto para hablar de una tarjeta ("ZQ-12"), el mismo que se
 // muestra en el tablero y devuelve el MCP.
 export function codigoTarea(numero: number): string {
@@ -290,6 +322,10 @@ export type Tarea = {
   plan: string | null
   estado: EstadoTarea
   prioridad: PrioridadTarea
+  codigo_proyecto: string | null
+  estimacion: number | null
+  moscow: MoscowTarea | null
+  epica: string | null
   asignado_a: string | null
   cliente_id: string | null
   proyecto_id: string | null

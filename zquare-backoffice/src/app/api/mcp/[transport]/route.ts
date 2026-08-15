@@ -113,11 +113,64 @@ const CAMPOS_TAREA = [
   "prioridad",
   "etiquetas",
   "fecha_limite",
+  "codigo_proyecto",
+  "estimacion",
+  "moscow",
+  "epica",
 ] as const
 
 // Brief de desarrollo: si los cuatro están vacíos, la tarjeta está "sin
 // desarrollar" y conviene pasarla por el prompt `desarrollar_tarea`.
 const CAMPOS_BRIEF = ["contexto", "resultado", "recursos", "plan"] as const
+
+// Planificación: los campos que exige el estándar de ingeniería para poder
+// armar un sprint. Sólo aplican a proyectos que lo siguen; una tarea de
+// empresa los deja en null. Compartidos entre crear_tarea y actualizar_tarea.
+const CAMPOS_PLANIFICACION = ["codigo_proyecto", "estimacion", "moscow", "epica"] as const
+
+const PUNTOS_FIBONACCI = [1, 2, 3, 5, 8, 13]
+
+const ESQUEMA_PLANIFICACION = {
+  codigo_proyecto: z
+    .string()
+    .regex(
+      /^(US|DEF|SC|TEC)-\d+$/i,
+      "formato esperado: US-014, DEF-07, SC-3 o TEC-2"
+    )
+    .describe(
+      "código de la tarjeta DENTRO de su proyecto (US-014, DEF-07). Distinto del ZQ-N, que es de la empresa: éste es el que enlaza con el requisito y el que usa la convención de ramas"
+    )
+    .optional(),
+  estimacion: z
+    .number()
+    .int()
+    .refine((n) => PUNTOS_FIBONACCI.includes(n), "puntos válidos: 1, 2, 3, 5, 8, 13")
+    .describe(
+      "puntos de historia en Fibonacci. La estima el equipo por consenso, no un agente: no la completes por tu cuenta"
+    )
+    .optional(),
+  moscow: z
+    .enum(["must", "should", "could", "wont"])
+    .describe("alcance del release. No es lo mismo que `prioridad`, que es urgencia")
+    .optional(),
+  epica: z
+    .string()
+    .regex(/^EP-\d+$/i, "formato esperado: EP-3")
+    .describe("épica a la que pertenece; una tarjeta no puede pertenecer a dos")
+    .optional(),
+}
+
+// Los códigos se guardan en mayúsculas: "us-14" y "US-14" son el mismo código
+// y no pueden convivir como dos.
+function normalizarPlanificacion<T extends Record<string, unknown>>(entrada: T) {
+  const salida: Record<string, unknown> = {}
+  for (const campo of ["codigo_proyecto", "epica"] as const) {
+    if (typeof entrada[campo] === "string") {
+      salida[campo] = (entrada[campo] as string).toUpperCase()
+    }
+  }
+  return salida
+}
 
 // Quién opera vía MCP: socio dueño del token, con la marca "(Claude)" para
 // atribuir versiones y comentarios (mismo criterio que comentar_tarea).
@@ -455,7 +508,7 @@ const handler = createMcpHandler(
       {
         title: "Listar tareas del tablero",
         description:
-          "Tarjetas del tablero de la empresa, agrupadas por columna. 'backlog' es la lista priorizada fuera del tablero (ideas sin comprometer); el tablero va de 'por_hacer' a 'hecho'. Por defecto omite las que están en 'hecho'. `desarrollada` indica si la tarjeta tiene definido su resultado esperado, que es lo que la vuelve resoluble: las que no (típicamente las recién creadas o las que salen de graduar una idea, que traen contexto pero no criterios) necesitan una pasada por el prompt `desarrollar_tarea` antes de que un agente las resuelva. El brief completo se ve con `ficha_tarea`.",
+          "Tarjetas del tablero de la empresa, agrupadas por columna. 'backlog' es la lista priorizada fuera del tablero (ideas sin comprometer); el tablero va de 'por_hacer' a 'hecho'. Por defecto omite las que están en 'hecho'. `desarrollada` indica si la tarjeta tiene definido su resultado esperado, que es lo que la vuelve resoluble: las que no (típicamente las recién creadas o las que salen de graduar una idea, que traen contexto pero no criterios) necesitan una pasada por el prompt `desarrollar_tarea` antes de que un agente las resuelva. El brief completo se ve con `ficha_tarea`. Para planificar un sprint, filtrá por proyecto: cada tarjeta trae su `codigo_proyecto`, `estimacion`, `moscow` y `epica`; las que vengan con `estimacion` en null no pueden entrar a un sprint hasta que el equipo las estime.",
         inputSchema: {
           estado: z.enum(ESTADOS_TAREA).optional(),
           asignado_email: z.string().optional(),
@@ -479,7 +532,7 @@ const handler = createMcpHandler(
           .select(
             // `tareas` tiene dos FK a socios (asignado_a y created_by): sin el
             // hint del constraint, PostgREST no sabe cuál embeber.
-            "numero, titulo, descripcion, contexto, resultado, recursos, plan, estado, prioridad, etiquetas, fecha_limite, orden, asignado:socios!tareas_asignado_a_fkey(nombre, email), clientes(nombre), proyectos(nombre)"
+            "numero, titulo, descripcion, contexto, resultado, recursos, plan, estado, prioridad, codigo_proyecto, estimacion, moscow, epica, etiquetas, fecha_limite, orden, asignado:socios!tareas_asignado_a_fkey(nombre, email), clientes(nombre), proyectos(nombre)"
           )
           .is("deleted_at", null)
           .order("estado")
@@ -546,7 +599,7 @@ const handler = createMcpHandler(
         const { data } = await supabase
           .from("tareas")
           .select(
-            "id, numero, titulo, descripcion, contexto, resultado, recursos, plan, estado, prioridad, etiquetas, fecha_limite, created_at, updated_at, asignado:socios!tareas_asignado_a_fkey(nombre, email), clientes(nombre), proyectos(nombre)"
+            "id, numero, titulo, descripcion, contexto, resultado, recursos, plan, estado, prioridad, codigo_proyecto, estimacion, moscow, epica, etiquetas, fecha_limite, created_at, updated_at, asignado:socios!tareas_asignado_a_fkey(nombre, email), clientes(nombre), proyectos(nombre)"
           )
           .eq("numero", numero)
           .is("deleted_at", null)
@@ -582,7 +635,7 @@ const handler = createMcpHandler(
       {
         title: "Crear una tarjeta",
         description:
-          "Crea una tarjeta. Entra arriba de su columna (por defecto 'backlog', la lista de ideas fuera del tablero; usá 'por_hacer' para que entre directo al tablero). Cliente y proyecto se resuelven por nombre aproximado. Alcanza con el título: el brief (contexto/resultado/recursos/plan) se completa después con el prompt `desarrollar_tarea`.",
+          "Crea una tarjeta. Entra arriba de su columna (por defecto 'backlog', la lista de ideas fuera del tablero; usá 'por_hacer' para que entre directo al tablero). Cliente y proyecto se resuelven por nombre aproximado. Alcanza con el título: el brief (contexto/resultado/recursos/plan) se completa después con el prompt `desarrollar_tarea`. Los campos de planificación (`codigo_proyecto`, `estimacion`, `moscow`, `epica`) sólo aplican a proyectos que siguen el estándar de ingeniería; `codigo_proyecto` es único dentro de su proyecto.",
         inputSchema: {
           titulo: z.string().min(3),
           descripcion: z.string().optional(),
@@ -612,6 +665,7 @@ const handler = createMcpHandler(
             .string()
             .describe("brief: pasos sugeridos en orden, cada uno accionable por sí solo")
             .optional(),
+          ...ESQUEMA_PLANIFICACION,
         },
       },
       async (entrada, extra) => {
@@ -649,6 +703,11 @@ const handler = createMcpHandler(
           prioridad: entrada.prioridad ?? "media",
           etiquetas: entrada.etiquetas ?? [],
           fecha_limite: entrada.fecha_limite ?? null,
+          codigo_proyecto: null as string | null,
+          estimacion: entrada.estimacion ?? null,
+          moscow: entrada.moscow ?? null,
+          epica: null as string | null,
+          ...normalizarPlanificacion(entrada),
         }
         const { data, error } = await supabase
           .from("tareas")
@@ -710,6 +769,7 @@ const handler = createMcpHandler(
           proyecto_nombre: z.string().optional(),
           etiquetas: z.array(z.string()).optional(),
           fecha_limite: z.string().describe("YYYY-MM-DD").optional(),
+          ...ESQUEMA_PLANIFICACION,
         },
       },
       async (entrada, extra) => {
@@ -736,6 +796,10 @@ const handler = createMcpHandler(
         if (entrada.etiquetas !== undefined) cambios.etiquetas = entrada.etiquetas
         if (entrada.fecha_limite !== undefined)
           cambios.fecha_limite = entrada.fecha_limite || null
+        for (const campo of CAMPOS_PLANIFICACION) {
+          if (entrada[campo] !== undefined) cambios[campo] = entrada[campo] || null
+        }
+        Object.assign(cambios, normalizarPlanificacion(entrada))
 
         if (entrada.estado !== undefined && entrada.estado !== actual.estado) {
           cambios.estado = entrada.estado
