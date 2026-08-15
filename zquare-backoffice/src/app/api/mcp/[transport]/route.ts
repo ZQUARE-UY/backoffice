@@ -142,7 +142,10 @@ const ESQUEMA_PLANIFICACION = {
     )
     .optional(),
   estimacion: z
-    .number()
+    // `coerce` por la misma razón que `tarea` acepta string|number: hay
+    // clientes MCP que serializan todo escalar como texto, y un "5" que
+    // rebota deja el campo inutilizable desde ese cliente.
+    .coerce.number()
     .int()
     .refine((n) => PUNTOS_FIBONACCI.includes(n), "puntos válidos: 1, 2, 3, 5, 8, 13")
     .describe(
