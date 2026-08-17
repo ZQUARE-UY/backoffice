@@ -272,7 +272,6 @@ export function MiRespuesta({
   const franjas = dias.flatMap((fecha) =>
     rangosPorDia[fecha].map((r) => ({ fecha, desde: r.desde, hasta: r.hasta }))
   )
-  const diasMarcados = dias.filter((d) => rangosPorDia[d].length > 0).length
 
   function ejecutar(
     accion: () => Promise<{ ok: boolean; error?: string }>,
@@ -297,17 +296,12 @@ export function MiRespuesta({
           {yaRespondi ? "Tu disponibilidad" : "¿Cuándo podés?"}
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          Elegí un día y pintá las horas en que te sirve reunirte. Lo que ya
-          tenés ocupado en tu Google Calendar se descuenta solo.
+          {noPuedo
+            ? "Dijiste que no podés en estos días. Si te liberaste, pintá las horas."
+            : "Elegí un día y pintá las horas en que podés."}
         </p>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {noPuedo && (
-          <p className="text-sm text-muted-foreground">
-            Respondiste que no podés en ninguno de estos días. Podés pintar
-            horas igual si te liberaste.
-          </p>
-        )}
 
         <div className="overflow-x-auto">
           <div className="min-w-[560px]">
@@ -426,11 +420,11 @@ export function MiRespuesta({
               <span className="text-sm font-medium capitalize">
                 {etiquetaLarga(activo)}
               </span>
-              <span className="text-xs text-muted-foreground">
-                {rangosPorDia[activo].length > 0
-                  ? resumenRangos(rangosPorDia[activo])
-                  : "Tocá o arrastrá sobre las horas para pintarlas"}
-              </span>
+              {rangosPorDia[activo].length > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  {resumenRangos(rangosPorDia[activo])}
+                </span>
+              )}
             </div>
 
             <PintorDeDia
@@ -439,47 +433,10 @@ export function MiRespuesta({
                 setPorDia((previo) => ({ ...previo, [activo]: bloques }))
               }
             />
-
-            {(puedenPorDia[activo] ?? []).length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                Ese día también pueden: {(puedenPorDia[activo] ?? []).join(", ")}
-              </p>
-            )}
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            // Sin franjas no hay nada que guardar: para eso está el botón de
-            // "no puedo", que es explícito.
-            disabled={pendiente || franjas.length === 0}
-            onClick={() =>
-              ejecutar(
-                () => guardarRespuesta(solicitudId, franjas),
-                "Guardamos tu disponibilidad"
-              )
-            }
-          >
-            {pendiente && <Spinner data-icon="inline-start" />}
-            Guardar mi disponibilidad
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            disabled={pendiente}
-            onClick={() => {
-              vaciar()
-              ejecutar(
-                () => marcarNoPuedo(solicitudId),
-                "Avisamos que no podés en estos días"
-              )
-            }}
-          >
-            No puedo ninguno de estos días
-          </Button>
-
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {yaRespondi && (
             <Button
               type="button"
@@ -497,11 +454,37 @@ export function MiRespuesta({
             </Button>
           )}
 
-          {diasMarcados > 0 && (
-            <span className="text-sm text-muted-foreground">
-              {diasMarcados} {diasMarcados === 1 ? "día marcado" : "días marcados"}
-            </span>
-          )}
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pendiente}
+            onClick={() => {
+              vaciar()
+              ejecutar(
+                () => marcarNoPuedo(solicitudId),
+                "Avisamos que no podés en estos días"
+              )
+            }}
+          >
+            No puedo ninguno de estos días
+          </Button>
+
+          <Button
+            type="button"
+            // Sin franjas no hay nada que guardar: para eso está el botón de
+            // "no puedo", que es explícito.
+            disabled={pendiente || franjas.length === 0}
+            onClick={() =>
+              ejecutar(
+                () => guardarRespuesta(solicitudId, franjas),
+                "Guardamos tu disponibilidad"
+              )
+            }
+          >
+            {pendiente && <Spinner data-icon="inline-start" />}
+            Guardar mi disponibilidad
+          </Button>
+
         </div>
       </CardContent>
     </Card>
