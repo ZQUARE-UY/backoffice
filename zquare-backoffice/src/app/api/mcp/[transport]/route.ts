@@ -5,15 +5,15 @@ import {
   etiquetaHueco,
   FORMATO_FECHA,
   FORMATO_HORA,
-  instanteEnZona,
 } from "@/lib/disponibilidad"
-import type { SolicitudReunion } from "@/lib/dominio"
+import { codigoReunion, type SolicitudReunion } from "@/lib/dominio"
 import { generarEmbeddings } from "@/lib/embeddings"
 import { socioDelAccessToken } from "@/lib/mcp-oauth"
 import {
   agendarSolicitud,
   CAMPOS_SOLICITUD,
   cancelarSolicitud,
+  crearSolicitudReunion,
   guardarRespuestaDe,
   huecosDeSolicitud,
   solicitudesPendientes,
@@ -2481,27 +2481,30 @@ const handler = createMcpHandler(
       },
       async (entrada, extra) => {
         const supabase = createAdminClient()
-        const { socioId } = await actorMcp(extra)
 
-        const requeridos = await sociosRequeridosMcp(entrada.socios)
+        // Cuatro lecturas independientes: van juntas.
+        const [{ socioId }, requeridos, clienteId, proyectoId] =
+          await Promise.all([
+            actorMcp(extra),
+            sociosRequeridosMcp(entrada.socios),
+            idPorNombre("clientes", entrada.cliente),
+            idPorNombre("proyectos", entrada.proyecto),
+          ])
+
         if (requeridos.length === 0) {
           return texto("No pude identificar a ningún socio para la reunión.")
         }
-
-        const clienteId = await idPorNombre("clientes", entrada.cliente)
         if (entrada.cliente && !clienteId) {
           return texto(`No encontré ningún cliente parecido a "${entrada.cliente}".`)
         }
-        const proyectoId = await idPorNombre("proyectos", entrada.proyecto)
         if (entrada.proyecto && !proyectoId) {
           return texto(
             `No encontré ningún proyecto parecido a "${entrada.proyecto}".`
           )
         }
 
-        const { data, error } = await supabase
-          .from("solicitudes_reunion")
-          .insert({
+        const resultado = await crearSolicitudReunion(
+          {
             titulo: entrada.titulo,
             notas: entrada.notas ?? null,
             cliente_id: clienteId ?? null,
@@ -2512,14 +2515,14 @@ const handler = createMcpHandler(
             socios_requeridos: requeridos.map((s) => s.id),
             invitar_cliente: entrada.invitar_cliente ?? true,
             created_by: socioId,
-          })
-          .select("id, numero")
-          .single()
-        if (error) throw new Error(error.message)
+          },
+          { supabase }
+        )
+        if (!resultado.ok) return texto(resultado.error)
 
         return texto({
-          reunion: `REU-${data.numero}`,
-          url: `/reuniones/${data.id}`,
+          reunion: codigoReunion(resultado.numero),
+          url: `/reuniones/${resultado.id}`,
           dias: `${entrada.desde} al ${entrada.hasta}`,
           esperando_respuesta_de: requeridos.map((s) => s.nombre),
         })
@@ -2548,7 +2551,7 @@ const handler = createMcpHandler(
           const pendientes = await solicitudesPendientes(socioId, { supabase })
           return texto({
             pendientes: pendientes.map((s) => ({
-              reunion: `REU-${s.numero}`,
+              reunion: codigoReunion(s.numero),
               titulo: s.titulo,
               dias: `${s.ventana_desde} al ${s.ventana_hasta}`,
               duracion_min: s.duracion_min,
@@ -2569,7 +2572,7 @@ const handler = createMcpHandler(
 
         return texto({
           reuniones: solicitudes.map((s) => ({
-            reunion: `REU-${s.numero}`,
+            reunion: codigoReunion(s.numero),
             titulo: s.titulo,
             estado: s.estado,
             dias: `${s.ventana_desde} al ${s.ventana_hasta}`,
@@ -2615,22 +2618,25 @@ const handler = createMcpHandler(
           return texto("No pude identificar al socio dueño del token.")
         }
 
-        const entrada = no_puedo ? [] : (franjas ?? [])
+        // Sin franjas y sin no_puedo no hay nada que guardar: la lib lo
+        // rechaza para que un olvido no se lea como "no puede".
         const resultado = await guardarRespuestaDe({
           solicitudId: solicitud.id,
           socioId,
-          franjas: entrada.map((f) => ({
-            inicio: new Date(instanteEnZona(f.fecha, f.desde)).toISOString(),
-            fin: new Date(instanteEnZona(f.fecha, f.hasta)).toISOString(),
-          })),
+          franjas: franjas ?? [],
+          noPuede: no_puedo === true,
           comentario: comentario ?? null,
           supabase,
+          solicitud,
         })
         if (!resultado.ok) return texto(resultado.error ?? "No se pudo guardar.")
 
-        const resumen = await huecosDeSolicitud(solicitud.id, { supabase })
+        const resumen = await huecosDeSolicitud(solicitud.id, {
+          supabase,
+          solicitud,
+        })
         return texto({
-          reunion: `REU-${solicitud.numero}`,
+          reunion: codigoReunion(solicitud.numero),
           respuesta: no_puedo ? "no puede en esos días" : "guardada",
           respondieron: `${resumen?.respondieron} de ${resumen?.requeridos}`,
           faltan:
@@ -2655,11 +2661,14 @@ const handler = createMcpHandler(
         const solicitud = await solicitudPorReferencia(reunion, supabase)
         if (!solicitud) return texto(`No encontré la reunión "${reunion}".`)
 
-        const resumen = await huecosDeSolicitud(solicitud.id, { supabase })
+        const resumen = await huecosDeSolicitud(solicitud.id, {
+          supabase,
+          solicitud,
+        })
         if (!resumen) return texto(`No encontré la reunión "${reunion}".`)
 
         return texto({
-          reunion: `REU-${solicitud.numero}`,
+          reunion: codigoReunion(solicitud.numero),
           titulo: solicitud.titulo,
           estado: solicitud.estado,
           duracion_min: solicitud.duracion_min,
@@ -2709,11 +2718,12 @@ const handler = createMcpHandler(
           organizadorEmail: email,
           organizadorSocioId: socioId,
           supabase,
+          solicitud,
         })
 
         if (!resultado.ok) return texto(resultado.error ?? "No se pudo agendar.")
         return texto({
-          agendada: `REU-${solicitud.numero}`,
+          agendada: codigoReunion(solicitud.numero),
           cuando: resultado.inicio
             ? etiquetaHueco({
                 inicio: Date.parse(resultado.inicio),
@@ -2748,9 +2758,18 @@ const handler = createMcpHandler(
           solicitudId: solicitud.id,
           motivo: motivo ?? null,
           supabase,
+          solicitud,
         })
         if (!resultado.ok) return texto(resultado.error ?? "No se pudo cancelar.")
-        return texto({ cancelada: `REU-${solicitud.numero}` })
+        return texto({
+          cancelada: codigoReunion(solicitud.numero),
+          evento_calendario: solicitud.google_event_id
+            ? resultado.advertencia
+              ? "no se pudo borrar"
+              : "borrado"
+            : "no había",
+          advertencia: resultado.advertencia,
+        })
       }
     )
   },

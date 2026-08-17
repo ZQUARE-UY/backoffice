@@ -280,7 +280,10 @@ export async function eliminarEventoReunion(
       sendUpdates: "all",
     })
   } catch (error) {
-    const codigo = (error as { code?: number })?.code
+    // gaxios 7 deja el status HTTP en `status`; versiones viejas lo ponían en
+    // `code`. Se miran los dos para no depender de cuál toque.
+    const e = error as { status?: number; code?: number | string }
+    const codigo = e?.status ?? Number(e?.code)
     if (codigo === 404 || codigo === 410) return
     throw error
   }

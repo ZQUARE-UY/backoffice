@@ -225,7 +225,9 @@ export function MiRespuesta({
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
-            disabled={pendiente || invalidas.length > 0}
+            // Sin franjas no hay nada que guardar: para eso está el botón de
+            // "no puedo", que es explícito.
+            disabled={pendiente || invalidas.length > 0 || franjas.length === 0}
             onClick={() =>
               ejecutar(
                 () => guardarRespuesta(solicitudId, franjas),

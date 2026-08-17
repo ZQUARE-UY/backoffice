@@ -29,13 +29,24 @@ export function SolicitudAcciones({
   const [pendiente, iniciarTransicion] = useTransition()
 
   function ejecutar(
-    accion: () => Promise<{ ok: boolean; error?: string }>,
+    accion: () => Promise<{
+      ok: boolean
+      error?: string
+      advertencia?: string
+    }>,
     exito: string
   ) {
     iniciarTransicion(async () => {
       const resultado = await accion()
-      if (resultado.ok) toast.success(exito)
-      else toast.error(resultado.error ?? "No se pudo completar")
+      if (!resultado.ok) {
+        toast.error(resultado.error ?? "No se pudo completar")
+      } else if (resultado.advertencia) {
+        // El cambio se hizo pero el evento de Google quedó colgado: no decir
+        // "borrado" cuando no lo está.
+        toast.warning(resultado.advertencia)
+      } else {
+        toast.success(exito)
+      }
     })
   }
 

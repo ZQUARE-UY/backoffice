@@ -168,7 +168,8 @@ export function paredEnZona(
 }
 
 export const FORMATO_FECHA = /^\d{4}-\d{2}-\d{2}$/
-export const FORMATO_HORA = /^([01]\d|2[0-4]):[0-5]\d$/
+// "24:00" es válido como fin de día; "24:30" no existe.
+export const FORMATO_HORA = /^(?:(?:[01]\d|2[0-3]):[0-5]\d|24:00)$/
 
 // Hora de pared en la zona → instante. Interpreta el par como si fuera UTC y
 // corrige por la diferencia observada; la segunda pasada cubre los saltos de
@@ -222,7 +223,8 @@ export function partirPorDia(
 // Pasa las franjas guardadas (instantes) a la forma que edita el socio: horas
 // de pared agrupadas por día. Una franja que llega hasta la medianoche se
 // muestra terminando a las 23:59, que es lo máximo que acepta un input de
-// hora; el minuto que se pierde no cambia ningún slot (van de a 30).
+// hora; al guardar, `guardarRespuestaDe` vuelve a leer 23:59 como fin del día,
+// así el ida y vuelta por el editor no recorta el último slot.
 export function franjasPorDia(
   franjas: Intervalo[],
   zona = ZONA_HORARIA

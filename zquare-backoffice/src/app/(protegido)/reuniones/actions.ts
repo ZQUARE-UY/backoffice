@@ -3,17 +3,13 @@
 import { revalidatePath } from "next/cache"
 
 import {
-  FORMATO_FECHA,
-  FORMATO_HORA,
-  instanteEnZona,
-} from "@/lib/disponibilidad"
-import type { FranjaGuardada } from "@/lib/dominio"
-import {
   agendarSolicitud,
   cancelarSolicitud as cancelarEnBase,
+  crearSolicitudReunion,
   eliminarSolicitud as eliminarEnBase,
   guardarRespuestaDe,
   reabrirSolicitud as reabrirEnBase,
+  type FranjaDePared,
 } from "@/lib/reuniones"
 import { idSocioActual } from "@/lib/socio-actual"
 import { createClient } from "@/lib/supabase/server"
@@ -31,54 +27,34 @@ function textoOpcional(valor: FormDataEntryValue | null): string | null {
   return t ? t : null
 }
 
+// Solo lee el formulario; las reglas viven en crearSolicitudReunion.
 function datosDesde(formData: FormData) {
-  const titulo = (formData.get("titulo") as string | null)?.trim()
-  if (!titulo) throw new Error("El título es obligatorio")
-
   const desde = (formData.get("ventana_desde") as string | null)?.trim()
   const hasta = (formData.get("ventana_hasta") as string | null)?.trim()
   if (!desde || !hasta) throw new Error("Hay que elegir los días candidatos")
-  if (hasta < desde) {
-    throw new Error("El último día no puede ser anterior al primero")
-  }
-
-  const requeridos = formData.getAll("socios_requeridos") as string[]
-  if (requeridos.length === 0) {
-    throw new Error("Elegí al menos un socio para la reunión")
-  }
-
-  const duracion = Number(formData.get("duracion_min") ?? 30)
-  if (duracion !== 30 && duracion !== 60) {
-    throw new Error("La duración tiene que ser de 30 o 60 minutos")
-  }
 
   return {
-    titulo,
+    titulo: ((formData.get("titulo") as string | null) ?? "").trim(),
     notas: textoOpcional(formData.get("notas")),
     cliente_id: textoOpcional(formData.get("cliente_id")),
     proyecto_id: textoOpcional(formData.get("proyecto_id")),
-    duracion_min: duracion,
+    duracion_min: Number(formData.get("duracion_min") ?? 30),
     ventana_desde: desde,
     ventana_hasta: hasta,
-    socios_requeridos: requeridos,
+    socios_requeridos: formData.getAll("socios_requeridos") as string[],
     invitar_cliente: formData.get("invitar_cliente") === "on",
   }
 }
 
 export async function crearSolicitud(formData: FormData): Promise<string> {
-  const datos = datosDesde(formData)
-  const supabase = await createClient()
+  const resultado = await crearSolicitudReunion({
+    ...datosDesde(formData),
+    created_by: await idSocioActual(),
+  })
+  if (!resultado.ok) throw new Error(resultado.error)
 
-  const { data, error } = await supabase
-    .from("solicitudes_reunion")
-    .insert({ ...datos, created_by: await idSocioActual() })
-    .select("id")
-    .single()
-
-  if (error) throw new Error(error.message)
-
-  refrescar(data.id)
-  return data.id as string
+  refrescar(resultado.id)
+  return resultado.id
 }
 
 export async function eliminarSolicitud(id: string) {
@@ -86,36 +62,22 @@ export async function eliminarSolicitud(id: string) {
   refrescar(id)
 }
 
-// Las franjas llegan del editor como hora de pared ("2026-08-05", "14:00") y
-// se convierten a instantes acá, del lado del servidor, donde la zona es la
-// de la empresa y no la del navegador.
+// Las franjas llegan del editor como hora de pared ("2026-08-05", "14:00");
+// la conversión a instantes y las validaciones viven en guardarRespuestaDe.
 export async function guardarRespuesta(
   solicitudId: string,
-  franjas: { fecha: string; desde: string; hasta: string }[],
-  comentario?: string | null
+  franjas: FranjaDePared[],
+  comentario?: string | null,
+  noPuede = false
 ): Promise<{ ok: boolean; error?: string }> {
   const socioId = await idSocioActual()
   if (!socioId) return { ok: false, error: "No pude identificarte como socio" }
 
-  const malFormadas = franjas.filter(
-    (f) =>
-      !FORMATO_FECHA.test(f.fecha) ||
-      !FORMATO_HORA.test(f.desde) ||
-      !FORMATO_HORA.test(f.hasta)
-  )
-  if (malFormadas.length > 0) {
-    return { ok: false, error: "Hay una franja con una hora que no entiendo" }
-  }
-
-  const absolutas: FranjaGuardada[] = franjas.map((f) => ({
-    inicio: new Date(instanteEnZona(f.fecha, f.desde)).toISOString(),
-    fin: new Date(instanteEnZona(f.fecha, f.hasta)).toISOString(),
-  }))
-
   const resultado = await guardarRespuestaDe({
     solicitudId,
     socioId,
-    franjas: absolutas,
+    franjas,
+    noPuede,
     comentario,
   })
 
@@ -123,12 +85,13 @@ export async function guardarRespuesta(
   return resultado
 }
 
-// "No puedo en ninguno de estos días" = respuesta con cero franjas.
+// "No puedo en ninguno de estos días": explícito, para que una lista vacía
+// por descuido no se lea igual.
 export async function marcarNoPuedo(
   solicitudId: string,
   comentario?: string | null
 ) {
-  return guardarRespuesta(solicitudId, [], comentario)
+  return guardarRespuesta(solicitudId, [], comentario, true)
 }
 
 export async function borrarRespuesta(solicitudId: string) {
