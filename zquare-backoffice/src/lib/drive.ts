@@ -166,6 +166,99 @@ export async function listarTodosLosArchivos(): Promise<
   return archivos
 }
 
+export type ArchivoDriveConRuta = ArchivoDriveIndexable & {
+  // Carpetas desde la raíz hasta la que contiene el archivo, ya resueltas.
+  // `ruta` son los nombres (para mostrar) y `rutaIds` los ids en el mismo
+  // orden: con esos se cruza contra `drive_folder_id` de clientes y proyectos
+  // para saber de quién es el archivo sin depender de los nombres.
+  ruta: string[]
+  rutaIds: string[]
+  carpetaId: string | null
+}
+
+// Todos los archivos de la unidad, cada uno con la ruta de carpetas que lo
+// contiene — lo que necesita /documentos para mostrar de qué cliente y
+// proyecto es cada archivo sin que nadie lo haya registrado a mano.
+//
+// Son dos consultas: los archivos (con `parents`) y las carpetas (para poder
+// subir la cadena hasta la raíz). Drive no devuelve la ruta completa de un
+// archivo; hay que armarla.
+export async function listarArchivosConRuta(): Promise<ArchivoDriveConRuta[]> {
+  const drive = driveClient()
+
+  const carpetas = new Map<string, { nombre: string; padre: string | null }>()
+  let tokenCarpetas: string | undefined
+  do {
+    const { data } = await drive.files.list({
+      q: `mimeType = '${CARPETA_MIME}' and trashed = false`,
+      fields: "nextPageToken, files(id, name, parents)",
+      pageSize: 1000,
+      pageToken: tokenCarpetas,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+      corpora: "drive",
+      driveId: sharedDriveId(),
+    })
+    for (const f of data.files ?? []) {
+      if (!f.id) continue
+      carpetas.set(f.id, {
+        nombre: f.name ?? "(sin nombre)",
+        padre: f.parents?.[0] ?? null,
+      })
+    }
+    tokenCarpetas = data.nextPageToken ?? undefined
+  } while (tokenCarpetas)
+
+  // Sube la cadena de padres hasta la raíz de la unidad. El corte por
+  // profundidad es un seguro contra un ciclo: un atajo mal hecho en Drive no
+  // tiene por qué colgar la pantalla.
+  function rutaDe(carpetaId: string | null): { ruta: string[]; rutaIds: string[] } {
+    const ruta: string[] = []
+    const rutaIds: string[] = []
+    let actual = carpetaId
+    for (let i = 0; actual && i < 20; i++) {
+      const carpeta = carpetas.get(actual)
+      if (!carpeta) break
+      ruta.unshift(carpeta.nombre)
+      rutaIds.unshift(actual)
+      actual = carpeta.padre
+    }
+    return { ruta, rutaIds }
+  }
+
+  const archivos: ArchivoDriveConRuta[] = []
+  let tokenArchivos: string | undefined
+  do {
+    const { data } = await drive.files.list({
+      q: `mimeType != '${CARPETA_MIME}' and trashed = false`,
+      fields:
+        "nextPageToken, files(id, name, mimeType, webViewLink, modifiedTime, size, parents)",
+      pageSize: 1000,
+      pageToken: tokenArchivos,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+      corpora: "drive",
+      driveId: sharedDriveId(),
+    })
+    for (const f of data.files ?? []) {
+      const carpetaId = f.parents?.[0] ?? null
+      archivos.push({
+        id: f.id!,
+        nombre: f.name ?? "(sin nombre)",
+        mimeType: f.mimeType ?? "",
+        url: f.webViewLink ?? `https://drive.google.com/file/d/${f.id}/view`,
+        modificado: f.modifiedTime ?? new Date(0).toISOString(),
+        tamano: f.size ? Number(f.size) : 0,
+        carpetaId,
+        ...rutaDe(carpetaId),
+      })
+    }
+    tokenArchivos = data.nextPageToken ?? undefined
+  } while (tokenArchivos)
+
+  return archivos
+}
+
 // Exporta un archivo nativo de Google (Doc/Sheet/Slides) como texto plano.
 export async function exportarTextoDrive(
   fileId: string,

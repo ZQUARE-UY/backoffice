@@ -38,7 +38,12 @@ export function TarjetaProyecto({
   const comenzado = proyectoComenzado(proyecto)
 
   return (
-    <Card className="h-full">
+    // Toda la tarjeta entra al proyecto: el link del título se estira por
+    // encima con un ::after (`before:`/`after:` de Tailwind) en vez de envolver
+    // la tarjeta en un <a>. Así el enlace sigue siendo uno solo, con el nombre
+    // del proyecto como texto accesible, y lo que tiene que quedar clickeable
+    // aparte —el botón Comenzar— solo necesita su propio contexto de apilado.
+    <Card className="relative h-full transition-colors hover:border-foreground/20 focus-within:border-foreground/20">
       <CardContent className="flex h-full flex-col gap-2">
         <div className="flex items-start justify-between gap-2">
           <span className="text-xs text-muted-foreground">
@@ -53,7 +58,7 @@ export function TarjetaProyecto({
 
         <Link
           href={`/proyectos/${proyecto.id}`}
-          className="font-medium leading-snug hover:underline"
+          className="font-medium leading-snug hover:underline after:absolute after:inset-0 after:content-['']"
         >
           {proyecto.nombre}
         </Link>
@@ -81,13 +86,15 @@ export function TarjetaProyecto({
             {tareasAbiertas > 0 && ` · ${tareasAbiertas} tareas abiertas`}
           </span>
           {!comenzado && proyecto.estado !== "cancelado" && (
-            <ComenzarProyecto
-              id={proyecto.id}
-              nombre={proyecto.nombre}
-              // El brief mínimo puede estar ya cargado a mano: en ese caso el
-              // diálogo ofrece marcar el arranque sin pasar por Claude.
-              briefListo={briefProyectoCompleto(proyecto)}
-            />
+            <div className="relative">
+              <ComenzarProyecto
+                id={proyecto.id}
+                nombre={proyecto.nombre}
+                // El brief mínimo puede estar ya cargado a mano: en ese caso
+                // el diálogo ofrece marcar el arranque sin pasar por Claude.
+                briefListo={briefProyectoCompleto(proyecto)}
+              />
+            </div>
           )}
         </div>
       </CardContent>

@@ -498,10 +498,16 @@ export type PresupuestoItem = {
   orden: number
 }
 
+// Una anotación sobre un archivo de Drive: el tipo, de quién es y sus tags.
+// El catálogo de archivos es Drive, no esta tabla — ver la migración
+// 20260817000002. `cliente_id` es null en los archivos sueltos (plantillas,
+// cosas de la empresa) y `drive_file_id` es la clave que une la anotación con
+// el archivo real y con sus fragmentos en el índice de búsqueda.
 export type Documento = {
   id: string
-  cliente_id: string
+  cliente_id: string | null
   proyecto_id: string | null
+  drive_file_id: string | null
   tipo: TipoDocumento
   titulo: string
   drive_url: string

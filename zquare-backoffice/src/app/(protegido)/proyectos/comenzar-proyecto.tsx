@@ -1,11 +1,11 @@
 "use client"
 
-import Link from "next/link"
 import { useState, useTransition } from "react"
 import { toast } from "sonner"
-import { CheckIcon, PlayIcon, SparklesIcon } from "lucide-react"
+import { CheckIcon, PlayIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { CopiarPrompt } from "@/components/copiar-prompt"
 import {
   Dialog,
   DialogContent,
@@ -17,12 +17,12 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 
 import { marcarProyectoComenzado } from "./actions"
-import { urlComenzarProyecto } from "./chat-claude"
+import { promptComenzarProyecto } from "./prompts-claude"
 
 // El arranque de un proyecto es una conversación, no un formulario: hay que
 // leer los documentos, repreguntar y cambiar de rumbo. Por eso el botón no
-// corre nada en el servidor — abre Claude con el prompt `comenzar_proyecto`
-// precargado, que usa el conector MCP del backoffice y escribe el resultado
+// corre nada en el servidor — copia el prompt `comenzar_proyecto` para pegarlo
+// en Claude, que usa el conector MCP del backoffice y escribe el resultado
 // acá. El botón secundario es para los proyectos que ya se arrancaron por
 // fuera y solo hace falta registrarlo.
 export function ComenzarProyecto({
@@ -36,6 +36,7 @@ export function ComenzarProyecto({
 }) {
   const [abierto, setAbierto] = useState(false)
   const [pendiente, iniciarTransicion] = useTransition()
+  const prompt = promptComenzarProyecto(nombre)
 
   function onMarcar() {
     iniciarTransicion(async () => {
@@ -64,7 +65,8 @@ export function ComenzarProyecto({
             <DialogTitle>Comenzar &quot;{nombre}&quot;</DialogTitle>
             <DialogDescription>
               El arranque se hace conversando con Claude, que tiene acceso al
-              backoffice por el conector MCP.
+              backoffice por el conector MCP. Copiá el prompt y pegalo donde
+              quieras conversar.
             </DialogDescription>
           </DialogHeader>
 
@@ -83,6 +85,10 @@ export function ComenzarProyecto({
                 </li>
               ))}
             </ul>
+            <p className="text-muted-foreground">Se copia esto:</p>
+            <p className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+              {prompt}
+            </p>
           </div>
 
           <DialogFooter className="sm:justify-between">
@@ -94,19 +100,9 @@ export function ComenzarProyecto({
             ) : (
               <span />
             )}
-            <Button
-              nativeButton={false}
-              render={
-                <Link
-                  href={urlComenzarProyecto(nombre)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                />
-              }
-            >
-              <SparklesIcon data-icon="inline-start" />
-              Arrancar con Claude
-            </Button>
+            <CopiarPrompt prompt={prompt} copiado="Prompt copiado">
+              Copiar prompt de arranque
+            </CopiarPrompt>
           </DialogFooter>
         </DialogContent>
       </Dialog>

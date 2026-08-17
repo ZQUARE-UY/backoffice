@@ -1,10 +1,10 @@
 "use client"
 
-import Link from "next/link"
 import { useState, useTransition } from "react"
-import { PencilIcon, SparklesIcon } from "lucide-react"
+import { PencilIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { CopiarPrompt } from "@/components/copiar-prompt"
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card"
 import {
   Dialog,
@@ -25,7 +25,7 @@ import {
 } from "@/lib/dominio"
 
 import { actualizarBriefProyecto } from "../actions"
-import { urlIterarBrief } from "../chat-claude"
+import { promptIterarBrief } from "../prompts-claude"
 
 // El brief de arranque en la ficha. Se arma conversando con Claude (prompt
 // `comenzar_proyecto`), pero se puede corregir a mano acá sin abrir un chat:
@@ -72,21 +72,13 @@ export function BriefProyecto({ proyecto }: { proyecto: Proyecto }) {
               <Card key={campo}>
                 <CardHeader className="flex-row items-center justify-between gap-2">
                   <CardDescription>{BRIEF_PROYECTO[campo].label}</CardDescription>
-                  <Button
+                  <CopiarPrompt
                     variant="ghost"
                     size="sm"
-                    nativeButton={false}
-                    render={
-                      <Link
-                        href={urlIterarBrief(proyecto.nombre, campo)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      />
-                    }
+                    prompt={promptIterarBrief(proyecto.nombre, campo)}
                   >
-                    <SparklesIcon data-icon="inline-start" />
                     Trabajarlo
-                  </Button>
+                  </CopiarPrompt>
                 </CardHeader>
                 <CardContent className="text-sm whitespace-pre-wrap">
                   {valor ?? (
