@@ -125,6 +125,8 @@ export async function actualizarProyecto(id: string, formData: FormData) {
       nombre,
       descripcion: textoOpcional(formData.get("descripcion")),
       estado: (formData.get("estado") as string) || "propuesta",
+      tipo: textoOpcional(formData.get("tipo")),
+      responsable_id: textoOpcional(formData.get("responsable_id")),
       fecha_inicio: textoOpcional(formData.get("fecha_inicio")),
       fecha_fin_estimada: textoOpcional(formData.get("fecha_fin_estimada")),
       fecha_fin_real: textoOpcional(formData.get("fecha_fin_real")),
@@ -138,6 +140,7 @@ export async function actualizarProyecto(id: string, formData: FormData) {
   if (error) throw new Error(error.message)
 
   revalidatePath(`/proyectos/${id}`)
+  revalidatePath("/proyectos")
 }
 
 export async function eliminarCliente(id: string) {

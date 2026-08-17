@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   FileTextIcon,
+  FolderKanbanIcon,
   HomeIcon,
   KanbanIcon,
   LightbulbIcon,
@@ -32,6 +33,7 @@ import { UserMenu } from "@/components/user-menu"
 const secciones = [
   { titulo: "Inicio", href: "/", icono: HomeIcon, disponible: true },
   { titulo: "Clientes", href: "/clientes", icono: UsersIcon, disponible: true },
+  { titulo: "Proyectos", href: "/proyectos", icono: FolderKanbanIcon, disponible: true },
   { titulo: "Tareas", href: "/tareas", icono: KanbanIcon, disponible: true },
   { titulo: "Ideas", href: "/ideas", icono: LightbulbIcon, disponible: true },
   { titulo: "Decisiones", href: "/decisiones", icono: ScrollTextIcon, disponible: true },

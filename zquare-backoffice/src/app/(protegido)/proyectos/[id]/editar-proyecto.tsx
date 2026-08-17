@@ -18,9 +18,22 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
-import { ESTADOS_PROYECTO, MONEDAS, type Proyecto } from "@/lib/dominio"
+import {
+  ESTADOS_PROYECTO,
+  MONEDAS,
+  TIPOS_PROYECTO,
+  TIPOS_PROYECTO_ORDEN,
+  type Proyecto,
+  type Socio,
+} from "@/lib/dominio"
 
-export function EditarProyecto({ proyecto }: { proyecto: Proyecto }) {
+export function EditarProyecto({
+  proyecto,
+  socios,
+}: {
+  proyecto: Proyecto
+  socios: Socio[]
+}) {
   const [abierto, setAbierto] = useState(false)
   const [pendiente, iniciarTransicion] = useTransition()
 
@@ -77,6 +90,35 @@ export function EditarProyecto({ proyecto }: { proyecto: Proyecto }) {
                   )}
                 />
               </Field>
+              <div className="grid grid-cols-2 gap-4">
+                <Field>
+                  <FieldLabel htmlFor="tipo">Tipo</FieldLabel>
+                  <SelectCampo
+                    id="tipo"
+                    name="tipo"
+                    defaultValue={proyecto.tipo ?? ""}
+                    opciones={[
+                      { valor: "", label: "Sin clasificar" },
+                      ...TIPOS_PROYECTO_ORDEN.map((t) => ({
+                        valor: t,
+                        label: TIPOS_PROYECTO[t].label,
+                      })),
+                    ]}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="responsable_id">Responsable</FieldLabel>
+                  <SelectCampo
+                    id="responsable_id"
+                    name="responsable_id"
+                    defaultValue={proyecto.responsable_id ?? ""}
+                    opciones={[
+                      { valor: "", label: "Sin asignar" },
+                      ...socios.map((s) => ({ valor: s.id, label: s.nombre })),
+                    ]}
+                  />
+                </Field>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <Field>
                   <FieldLabel htmlFor="fecha_inicio">Inicio</FieldLabel>
