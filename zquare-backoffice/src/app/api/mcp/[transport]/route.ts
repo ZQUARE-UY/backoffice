@@ -10,6 +10,7 @@ import { codigoReunion, type SolicitudReunion } from "@/lib/dominio"
 import { generarEmbeddings } from "@/lib/embeddings"
 import { socioDelAccessToken } from "@/lib/mcp-oauth"
 import {
+  agendarSiTodosRespondieron,
   agendarSolicitud,
   CAMPOS_SOLICITUD,
   cancelarSolicitud,
@@ -2708,10 +2709,27 @@ const handler = createMcpHandler(
         })
         if (!resultado.ok) return texto(resultado.error ?? "No se pudo guardar.")
 
-        const resumen = await huecosDeSolicitud(solicitud.id, {
+        // Si con esta respuesta quedaron todos, se agenda sola.
+        const auto = await agendarSiTodosRespondieron({
+          solicitudId: solicitud.id,
+          organizadorEmail:
+            (extra.authInfo?.extra?.email as string | undefined) ?? null,
+          organizadorSocioId: socioId,
           supabase,
-          solicitud,
         })
+        if (auto.agendada && auto.inicio) {
+          return texto({
+            reunion: codigoReunion(solicitud.numero),
+            respuesta: "guardada",
+            agendada: etiquetaHueco({
+              inicio: Date.parse(auto.inicio),
+              fin: Date.parse(auto.inicio) + solicitud.duracion_min * 60_000,
+            }),
+            advertencia: auto.advertencia,
+          })
+        }
+
+        const resumen = await huecosDeSolicitud(solicitud.id, { supabase })
         return texto({
           reunion: codigoReunion(solicitud.numero),
           respuesta: no_puedo ? "no puede en esos días" : "guardada",

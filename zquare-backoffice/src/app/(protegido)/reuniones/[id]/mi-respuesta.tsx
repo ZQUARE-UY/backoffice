@@ -274,13 +274,27 @@ export function MiRespuesta({
   )
 
   function ejecutar(
-    accion: () => Promise<{ ok: boolean; error?: string }>,
+    accion: () => Promise<{
+      ok: boolean
+      error?: string
+      agendada?: string
+      advertencia?: string
+    }>,
     exito: string
   ) {
     iniciarTransicion(async () => {
       const resultado = await accion()
-      if (resultado.ok) toast.success(exito)
-      else toast.error(resultado.error ?? "No se pudo guardar")
+      if (!resultado.ok) {
+        toast.error(resultado.error ?? "No se pudo guardar")
+      } else if (resultado.agendada) {
+        // Con esta respuesta quedaron todos y se agendó sola.
+        toast.success(
+          `Respondieron todos: la reunión quedó agendada para el ${resultado.agendada}.`
+        )
+        if (resultado.advertencia) toast.warning(resultado.advertencia)
+      } else {
+        toast.success(exito)
+      }
     })
   }
 

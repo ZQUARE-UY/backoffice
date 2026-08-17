@@ -392,6 +392,65 @@ export const solicitudesPendientes = cache(async function solicitudesPendientes(
   return abiertas.filter((s) => !respondidas.has(s.id))
 })
 
+// Todas las reuniones abiertas ("a coordinar"), con quiénes ya respondieron:
+// alimenta la tarjeta del dashboard, que las muestra a todos los socios y no
+// solo a quien le falta responder.
+export type SolicitudACoordinar = {
+  solicitud: SolicitudReunion
+  respondieron: number
+  requeridos: number
+  faltan: string[]
+  meFalta: boolean
+}
+
+export const solicitudesACoordinar = cache(async function solicitudesACoordinar(
+  socioId: string | null
+): Promise<SolicitudACoordinar[]> {
+  const supabase = await clientePorDefecto()
+
+  const { data: solicitudes } = await supabase
+    .from("solicitudes_reunion")
+    .select(CAMPOS_SOLICITUD)
+    .eq("estado", "abierta")
+    .is("deleted_at", null)
+    .order("ventana_desde", { ascending: true })
+
+  const abiertas = (solicitudes ?? []) as SolicitudReunion[]
+  if (abiertas.length === 0) return []
+
+  const [{ data: respuestas }, { data: socios }] = await Promise.all([
+    supabase
+      .from("reunion_respuestas")
+      .select("solicitud_id, socio_id")
+      .in(
+        "solicitud_id",
+        abiertas.map((s) => s.id)
+      ),
+    supabase.from("socios").select("id, nombre").is("deleted_at", null),
+  ])
+
+  const nombre = new Map(
+    ((socios ?? []) as { id: string; nombre: string }[]).map((s) => [s.id, s.nombre])
+  )
+  const respondidoPor = new Map<string, Set<string>>()
+  for (const r of (respuestas ?? []) as { solicitud_id: string; socio_id: string }[]) {
+    ;(respondidoPor.get(r.solicitud_id) ??
+      respondidoPor.set(r.solicitud_id, new Set()).get(r.solicitud_id))!.add(r.socio_id)
+  }
+
+  return abiertas.map((solicitud) => {
+    const ya = respondidoPor.get(solicitud.id) ?? new Set<string>()
+    const faltanIds = solicitud.socios_requeridos.filter((id) => !ya.has(id))
+    return {
+      solicitud,
+      respondieron: solicitud.socios_requeridos.length - faltanIds.length,
+      requeridos: solicitud.socios_requeridos.length,
+      faltan: faltanIds.map((id) => nombre.get(id) ?? "?"),
+      meFalta: Boolean(socioId && faltanIds.includes(socioId)),
+    }
+  })
+})
+
 export type ResultadoAgenda = {
   ok: boolean
   error?: string
@@ -519,7 +578,12 @@ export async function agendarSolicitud(params: {
 
     return { ok: true, meetUrl: evento.meetUrl, inicio }
   } catch (error) {
-    const detalle = error instanceof Error ? error.message : String(error)
+    const crudo = error instanceof Error ? error.message : String(error)
+    // unauthorized_client es siempre lo mismo: falta la delegación de dominio
+    // para la cuenta de servicio (o los scopes autorizados no coinciden).
+    const detalle = crudo.includes("unauthorized_client")
+      ? `Falta habilitar la delegación de dominio para la cuenta de servicio en admin.google.com (ver README). Google dijo: ${crudo}`
+      : crudo
     await supabase
       .from("solicitudes_reunion")
       .update({
@@ -549,6 +613,46 @@ export type ResultadoCambio = {
 
 const AVISO_EVENTO_COLGADO =
   "No se pudo borrar el evento de Google Calendar: hay que sacarlo a mano para que los invitados no lo sigan viendo."
+
+// Cuando el último socio requerido responde, la reunión se agenda sola en el
+// primer hueco en común: no hace falta que nadie vuelva a entrar a elegir.
+// Quien respondió último queda como organizador del evento. Si no hay hueco
+// (alguien no puede, o los calendarios no dejan lugar) queda abierta y la
+// página lo muestra.
+export async function agendarSiTodosRespondieron(params: {
+  solicitudId: string
+  organizadorEmail: string | null
+  organizadorSocioId: string | null
+  supabase?: Cliente
+}): Promise<{
+  agendada: boolean
+  inicio?: string
+  duracionMin?: number
+  advertencia?: string
+}> {
+  const supabase = await clientePorDefecto(params.supabase)
+  const resumen = await huecosDeSolicitud(params.solicitudId, { supabase })
+  if (!resumen || resumen.solicitud.estado !== "abierta") return { agendada: false }
+  if (resumen.parcial || resumen.huecos.length === 0) return { agendada: false }
+  if (!params.organizadorEmail) return { agendada: false }
+
+  const primero = resumen.huecos[0]
+  const resultado = await agendarSolicitud({
+    solicitudId: params.solicitudId,
+    inicioIso: new Date(primero.inicio).toISOString(),
+    organizadorEmail: params.organizadorEmail,
+    organizadorSocioId: params.organizadorSocioId,
+    supabase,
+    solicitud: resumen.solicitud,
+  })
+  if (!resultado.ok) return { agendada: false }
+  return {
+    agendada: true,
+    inicio: resultado.inicio,
+    duracionMin: resumen.solicitud.duracion_min,
+    advertencia: resultado.advertencia,
+  }
+}
 
 // Cancelar o reabrir borran el evento si existe, pero nunca se traban por eso:
 // el estado en el backoffice manda. Si el borrado falla, devuelven el aviso
