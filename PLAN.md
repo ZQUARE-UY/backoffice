@@ -314,6 +314,105 @@ agente la desarrolle después. Mismo patrón que el one-pager de ideas.
   Alcanza al punto ámbar, al flag `desarrollada` del MCP y a las
   descripciones de las tools; el diálogo avisa cuando el brief está a medias.
 
+### Tablero v5 — Sprints, épicas y métricas *(dejar de necesitar Jira del todo)*
+
+Estado: **planificado**, nada implementado todavía. Sale de usar el tablero en serio
+y chocarse con dos cosas.
+
+**El síntoma:** las tarjetas pasan a `hecho` y quedan ahí colgadas para siempre. No hay
+ningún evento que diga "esto ya se entregó". `hecho` es una columna que sólo crece.
+
+**La causa, y el hueco que no se ve:** no existe el concepto de sprint, y tampoco hay
+registro de **cuándo** una tarjeta cambió de estado. `tareas_versiones` guarda snapshots
+del contenido, y por diseño los movimientos de columna no versionan. Sin esas dos cosas,
+la mitad de las métricas del estándar (doc 06) son imposibles de calcular, incluido el
+tiempo de ciclo, que el propio doc pone en el mínimo obligatorio del primer proyecto:
+
+| Métrica del doc 06 | Qué falta hoy |
+|---|---|
+| Tiempo de ciclo (`en_curso` → `hecho`, < 5 días) | Marca de tiempo de las transiciones |
+| Velocidad por sprint | El sprint |
+| Precisión de estimación, por sprint | El sprint, y ver la nota de la fase C |
+| Trabajo no planificado (< 20 % del sprint) | Saber qué entró planificado |
+| Cumplimiento de la DoR al entrar al sprint | El sprint |
+
+#### Fase A — Sprints y transiciones *(1-2 sesiones)*
+
+El núcleo. Arregla el síntoma y habilita todo lo demás.
+
+- [ ] Tabla `sprints`: `numero` por proyecto, objetivo, `fecha_inicio`, `fecha_fin`,
+  `capacidad_puntos`, estado (`planificado` / `activo` / `cerrado`) y `velocidad`
+  —los puntos completados, **congelados al cerrar**, no recalculados después—.
+  Índice único parcial: un solo sprint `activo` por proyecto.
+- [ ] `tareas.sprint_id` y `tareas.arrastres smallint default 0`.
+- [ ] Tabla `tareas_transiciones` (`de_estado`, `a_estado`, `at`), escrita **por
+  trigger**. Es la única excepción al principio de "snapshot explícito para poder
+  atribuir": acá importa más que no se pierda ninguna transición que saber quién la
+  movió, y un trigger garantiza que ningún camino se la saltee. El autor queda en null;
+  la atribución del contenido ya la da `tareas_versiones`.
+- [ ] **Cierre de sprint.** Lo que está en `hecho` queda atado al sprint cerrado y sale
+  del tablero (no se borra: se consulta por sprint). Lo que no se terminó **vuelve al
+  `backlog`** con `arrastres + 1`. Es la opción más incómoda a propósito: obliga a
+  repriorizar en vez de arrastrar por inercia, y una tarjeta con tres arrastres es
+  información que hay que ver, no esconder.
+- [ ] El tablero muestra el sprint activo; el backlog sigue siendo la lista de lo no
+  comprometido. Selector de sprint para mirar los cerrados.
+- [ ] MCP: `listar_sprints`, `abrir_sprint`, `cerrar_sprint`, `asignar_a_sprint`, y
+  filtro por sprint en `listar_tareas`.
+- [ ] Desbloquea la skill `zq-planificar-sprint` del plugin, que hoy no se puede escribir.
+
+#### Fase B — Épicas y dependencias *(1 sesión)*
+
+- [ ] Tabla `epicas`: código `EP-n` por proyecto, título, objetivo de negocio y criterios
+  de éxito (lo que pide el doc 01 §2). `tareas.epica_id` reemplaza al campo de texto
+  `epica`, con migración de los valores existentes.
+- [ ] Progreso por épica en la UI: cuántas US, cuántas hechas, en qué sprints cayeron.
+  Es lo que permite avisar *"esta épica queda con 1 de 4 US en el sprint, no hay demo
+  posible"*, que a mano no se ve.
+- [ ] Tabla `tareas_dependencias` (`tarea_id`, `depende_de_id`): el campo 5 del contrato
+  con el plugin. Habilita el orden de desarrollo real y detectar que una tarjeta entró a
+  un sprint con su dependencia afuera.
+- [ ] MCP: `crear_epica`, `ficha_epica`, y las dependencias en `ficha_tarea`.
+
+#### Fase C — Métricas *(1-2 sesiones)*
+
+- [ ] Vistas SQL sobre `tareas_transiciones`: tiempo de ciclo por tarjeta, throughput
+  por semana, y tiempo en cada columna (que es lo que muestra dónde se traba el flujo —
+  normalmente `en_revision`).
+- [ ] Panel `/metricas`: velocidad de los últimos sprints, tiempo de ciclo contra el
+  umbral de 5 días, y burndown del sprint activo.
+- [ ] Trabajo no planificado: se deriva de las tarjetas asignadas al sprint **después**
+  de abrirlo. Requiere que `asignar_a_sprint` deje su propia marca de tiempo.
+- [ ] **Pendiente de decidir, y es una ambigüedad del propio doc 06:** la precisión de
+  estimación se define como "real ÷ estimado", pero si el estimado son puntos de
+  historia, el "real" en puntos no existe — nadie mide puntos ejecutados. O se registran
+  horas reales (que nadie va a cargar a mano), o se redefine la métrica como
+  *comprometido vs. completado por sprint*, que sale gratis de los datos que ya vamos a
+  tener. Se resuelve con un PR contra `zquare-standards`, no acá.
+
+#### Fase D — Defectos y releases *(1 sesión)*
+
+- [ ] Los defectos hoy son tarjetas iguales a las demás. El doc 01 §7 les da flujo propio:
+  severidad S1–S4, y la regla de que un defecto no es una US. Agregar `severidad` y
+  filtrarlos aparte.
+- [ ] Tabla `releases` para agrupar sprints: el doc 06 pide métricas "por release"
+  (las cinco DORA, defectos escapados) y hoy el concepto no existe en ningún lado.
+- [ ] Enlazar la tarjeta con su PR, para cerrar la trazabilidad requisito → tarjeta →
+  rama → PR → release.
+
+#### Lo que NO vamos a copiar de Jira
+
+Explícito, porque es la mitad de la decisión:
+
+| No va | Por qué |
+|---|---|
+| Workflows configurables por proyecto | Hay **un** proceso, el del manual. Cada workflow configurable es una forma de que dos proyectos se desvíen sin que nadie lo note |
+| Campos personalizados | Lo mismo. Si falta un campo, se agrega para todos y se discute en un PR |
+| Permisos por rol | Somos cuatro socios y todos ven todo |
+| Automatizaciones con reglas | Lo que hay que automatizar va en la CI o en una skill del plugin, donde queda versionado y revisable |
+| Sub-tareas anidadas | La jerarquía es épica → US → tarea, y ya está en el estándar. Más niveles es una forma cara de no cortar bien |
+| Time tracking por tarjeta | Nadie lo carga bien y las decisiones no dependen de eso. El tiempo de ciclo sale solo de las transiciones |
+
 ### Post-MVP — Calendario de reuniones
 - [x] Panel "Próximas reuniones" en el dashboard: agenda unificada de los 4
   socios (próximos 7 días) leída de sus Google Calendars vía la cuenta de
@@ -653,3 +752,11 @@ de Google en la consola del Workspace.
   recién graduadas —contexto sí, criterios no— se mostraban como listas justo
   cuando eran las que más necesitaban `desarrollar_tarea`), y la ficha del
   proyecto interno ahora linkea a la idea que lo originó.
+- **2026-08-15** — Plan del tablero v5: sprints, épicas como entidad, dependencias
+  y métricas. Sale de usar el tablero en serio: las tarjetas pasan a `hecho` y
+  quedan colgadas para siempre porque no existe el cierre de sprint, y no hay
+  registro de cuándo una tarjeta cambió de estado, así que el tiempo de ciclo —que
+  el doc 06 del estándar pone en el mínimo obligatorio— hoy no se puede calcular.
+  Decisión tomada: al cerrar un sprint, lo no terminado vuelve al `backlog` con un
+  contador de arrastres, no pasa solo al siguiente. Nada implementado todavía; ver
+  la sección "Tablero v5".
