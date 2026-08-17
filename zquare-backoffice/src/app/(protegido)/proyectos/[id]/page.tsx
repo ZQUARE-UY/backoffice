@@ -18,8 +18,19 @@ import {
   CardDescription,
   CardHeader,
 } from "@/components/ui/card"
-import { codigoIdea, type Cliente, type Proyecto } from "@/lib/dominio"
+import {
+  briefProyectoCompleto,
+  codigoIdea,
+  proyectoComenzado,
+  TIPOS_PROYECTO,
+  type Cliente,
+  type Proyecto,
+  type Socio,
+} from "@/lib/dominio"
 import { createClient } from "@/lib/supabase/server"
+
+import { ComenzarProyecto } from "../comenzar-proyecto"
+import { BriefProyecto } from "./brief-proyecto"
 
 function formatearMonto(monto: number | null, moneda: string | null) {
   if (monto == null) return "—"
@@ -54,8 +65,12 @@ export default async function ProyectoPage({
 
   if (!proyecto) notFound()
 
-  const [{ data: cliente }, { data: tareasData }, { data: ideaOrigen }] =
-    await Promise.all([
+  const [
+    { data: cliente },
+    { data: tareasData },
+    { data: ideaOrigen },
+    { data: sociosData },
+  ] = await Promise.all([
       // cliente_id null = proyecto interno (ej. graduado del banco de ideas).
       proyecto.cliente_id
         ? supabase
@@ -80,9 +95,18 @@ export default async function ProyectoPage({
         .eq("proyecto_id", id)
         .is("deleted_at", null)
         .maybeSingle<{ id: string; numero: number; titulo: string }>(),
+      supabase
+        .from("socios")
+        .select("id, nombre, email")
+        .is("deleted_at", null)
+        .order("nombre"),
     ])
 
   const tareas = (tareasData ?? []) as TareaRelacionada[]
+  const socios = (sociosData ?? []) as Socio[]
+  const responsable = proyecto.responsable_id
+    ? (socios.find((s) => s.id === proyecto.responsable_id)?.nombre ?? null)
+    : null
   // Ambos params para que la cascada de filtros del tablero quede coherente
   // (en proyectos internos no hay cliente que filtrar).
   const hrefTablero = proyecto.cliente_id
@@ -116,6 +140,17 @@ export default async function ProyectoPage({
               </h1>
               <EstadoProyectoBadge estado={proyecto.estado} />
             </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+              <span>{responsable ?? "Sin responsable"}</span>
+              {proyecto.tipo && <span>{TIPOS_PROYECTO[proyecto.tipo].label}</span>}
+              <span>
+                {proyecto.kickoff_completado_at
+                  ? `Comenzado el ${proyecto.kickoff_completado_at.slice(0, 10)}${
+                      proyecto.kickoff_por ? ` por ${proyecto.kickoff_por}` : ""
+                    }`
+                  : "Sin comenzar"}
+              </span>
+            </div>
             {ideaOrigen && (
               <span className="text-sm text-muted-foreground">
                 Graduado de{" "}
@@ -129,7 +164,14 @@ export default async function ProyectoPage({
             )}
           </div>
           <div className="flex gap-2">
-            <EditarProyecto proyecto={proyecto} />
+            {!proyectoComenzado(proyecto) && proyecto.estado !== "cancelado" && (
+              <ComenzarProyecto
+                id={proyecto.id}
+                nombre={proyecto.nombre}
+                briefListo={briefProyectoCompleto(proyecto)}
+              />
+            )}
+            <EditarProyecto proyecto={proyecto} socios={socios} />
             <BotonEliminar
               accion={eliminarProyecto.bind(
                 null,
@@ -153,6 +195,8 @@ export default async function ProyectoPage({
           </CardContent>
         </Card>
       )}
+
+      <BriefProyecto proyecto={proyecto} />
 
       <div className="grid gap-4 md:grid-cols-3">
         <Dato label="Inicio" valor={proyecto.fecha_inicio ?? "—"} />

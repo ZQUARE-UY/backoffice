@@ -2,12 +2,34 @@
 
 import { revalidatePath } from "next/cache"
 
+import { RE_CODIGO_PROYECTO, RE_EPICA } from "@/lib/dominio"
 import { idSocioActual } from "@/lib/socio-actual"
 import { createClient } from "@/lib/supabase/server"
 
 function textoOpcional(valor: FormDataEntryValue | null): string | null {
   const t = (valor as string | null)?.trim()
   return t ? t : null
+}
+
+// Los códigos se guardan en mayúsculas para que "us-14" y "US-14" no terminen
+// siendo dos códigos distintos que parecen el mismo. Se valida acá además de
+// en la base: el check constraint devuelve un error de Postgres ilegible, y
+// este mensaje dice qué se esperaba.
+function codigoOpcional(
+  valor: FormDataEntryValue | null,
+  patron: RegExp,
+  ejemplo: string
+): string | null {
+  const t = textoOpcional(valor)?.toUpperCase() ?? null
+  if (t && !patron.test(t)) {
+    throw new Error(`"${t}" no tiene el formato esperado (ej. ${ejemplo})`)
+  }
+  return t
+}
+
+function estimacionOpcional(valor: FormDataEntryValue | null): number | null {
+  const t = textoOpcional(valor)
+  return t ? Number(t) : null
 }
 
 function datosDesde(formData: FormData) {
@@ -23,6 +45,14 @@ function datosDesde(formData: FormData) {
     plan: textoOpcional(formData.get("plan")),
     estado: (formData.get("estado") as string | null) ?? "backlog",
     prioridad: (formData.get("prioridad") as string | null) ?? "media",
+    codigo_proyecto: codigoOpcional(
+      formData.get("codigo_proyecto"),
+      RE_CODIGO_PROYECTO,
+      "US-014"
+    ),
+    estimacion: estimacionOpcional(formData.get("estimacion")),
+    moscow: textoOpcional(formData.get("moscow")),
+    epica: codigoOpcional(formData.get("epica"), RE_EPICA, "EP-3"),
     asignado_a: textoOpcional(formData.get("asignado_a")),
     cliente_id: textoOpcional(formData.get("cliente_id")),
     proyecto_id: textoOpcional(formData.get("proyecto_id")),

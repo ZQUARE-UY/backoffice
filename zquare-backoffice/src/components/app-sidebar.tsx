@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import {
   CalendarClockIcon,
   FileTextIcon,
+  FolderKanbanIcon,
   HomeIcon,
   KanbanIcon,
   LightbulbIcon,
@@ -30,20 +31,35 @@ import {
 } from "@/components/ui/sidebar"
 import { UserMenu } from "@/components/user-menu"
 
-const secciones = [
-  { titulo: "Inicio", href: "/", icono: HomeIcon, disponible: true },
-  { titulo: "Clientes", href: "/clientes", icono: UsersIcon, disponible: true },
-  { titulo: "Tareas", href: "/tareas", icono: KanbanIcon, disponible: true },
+// El menú agrupado por en qué estás pensando cuando entrás, no por qué tabla
+// lee cada pantalla. "Desarrollo" va primero porque es el día a día: proyectos
+// y tareas son lo que se abre todas las mañanas. Inicio queda suelto arriba,
+// sin título de grupo, porque no pertenece a ninguno de los dos.
+const grupos = [
   {
-    titulo: "Reuniones",
-    href: "/reuniones",
-    icono: CalendarClockIcon,
-    disponible: true,
+    label: null,
+    secciones: [
+      { titulo: "Inicio", href: "/", icono: HomeIcon, disponible: true },
+    ],
   },
-  { titulo: "Ideas", href: "/ideas", icono: LightbulbIcon, disponible: true },
-  { titulo: "Decisiones", href: "/decisiones", icono: ScrollTextIcon, disponible: true },
-  { titulo: "Documentos", href: "/documentos", icono: FileTextIcon, disponible: true },
-  { titulo: "Finanzas", href: "/finanzas", icono: WalletIcon, disponible: true },
+  {
+    label: "Desarrollo",
+    secciones: [
+      { titulo: "Proyectos", href: "/proyectos", icono: FolderKanbanIcon, disponible: true },
+      { titulo: "Tareas", href: "/tareas", icono: KanbanIcon, disponible: true },
+      { titulo: "Ideas", href: "/ideas", icono: LightbulbIcon, disponible: true },
+    ],
+  },
+  {
+    label: "Gestión",
+    secciones: [
+      { titulo: "Clientes", href: "/clientes", icono: UsersIcon, disponible: true },
+      { titulo: "Reuniones", href: "/reuniones", icono: CalendarClockIcon, disponible: true },
+      { titulo: "Documentos", href: "/documentos", icono: FileTextIcon, disponible: true },
+      { titulo: "Finanzas", href: "/finanzas", icono: WalletIcon, disponible: true },
+      { titulo: "Decisiones", href: "/decisiones", icono: ScrollTextIcon, disponible: true },
+    ],
+  },
 ]
 
 export function AppSidebar({
@@ -70,11 +86,12 @@ export function AppSidebar({
         </div>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Gestión</SidebarGroupLabel>
+        {grupos.map((grupo) => (
+        <SidebarGroup key={grupo.label ?? "principal"}>
+          {grupo.label && <SidebarGroupLabel>{grupo.label}</SidebarGroupLabel>}
           <SidebarGroupContent>
             <SidebarMenu>
-              {secciones.map((seccion) => (
+              {grupo.secciones.map((seccion) => (
                 <SidebarMenuItem key={seccion.href}>
                   <SidebarMenuButton
                     isActive={
@@ -105,6 +122,7 @@ export function AppSidebar({
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        ))}
       </SidebarContent>
       <SidebarFooter>
         <UserMenu email={email} />

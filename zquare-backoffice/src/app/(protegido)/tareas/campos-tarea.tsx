@@ -12,7 +12,9 @@ import {
   CAMPOS_BRIEF,
   ESTADOS_TAREA,
   ESTADOS_TAREA_ORDEN,
+  MOSCOW_TAREA,
   PRIORIDADES_TAREA,
+  PUNTOS_TAREA,
   type EstadoTarea,
   type Socio,
   type Tarea,
@@ -175,6 +177,70 @@ export function CamposTarea({
           />
         </Field>
       </div>
+      {/* Planificación: sólo aplica a tarjetas de un proyecto que sigue el
+          estándar. Colapsado porque una tarea de empresa no lleva nada de
+          esto; los campos de un <details> cerrado igual viajan en el FormData. */}
+      <details
+        open={Boolean(tarea?.codigo_proyecto || tarea?.estimacion || tarea?.moscow)}
+        className="group"
+      >
+        <summary className="cursor-pointer text-sm font-medium select-none">
+          Planificación
+          <span className="ml-2 text-xs font-normal text-muted-foreground">
+            Para proyectos que siguen el estándar de ingeniería
+          </span>
+        </summary>
+        <div className="grid gap-4 pt-4 sm:grid-cols-2">
+          <Field>
+            <FieldLabel htmlFor="codigo_proyecto">Código en el proyecto</FieldLabel>
+            <Input
+              id="codigo_proyecto"
+              name="codigo_proyecto"
+              placeholder="US-014, DEF-07, SC-3, TEC-2"
+              defaultValue={tarea?.codigo_proyecto ?? ""}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="epica">Épica</FieldLabel>
+            <Input
+              id="epica"
+              name="epica"
+              placeholder="EP-3"
+              defaultValue={tarea?.epica ?? ""}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="estimacion">Estimación</FieldLabel>
+            <SelectCampo
+              id="estimacion"
+              name="estimacion"
+              defaultValue={tarea?.estimacion ? String(tarea.estimacion) : ""}
+              opciones={[
+                { valor: "", label: "Sin estimar" },
+                ...PUNTOS_TAREA.map((p) => ({
+                  valor: String(p),
+                  label: p === 13 ? "13 — hay que partirla" : String(p),
+                })),
+              ]}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="moscow">MoSCoW</FieldLabel>
+            <SelectCampo
+              id="moscow"
+              name="moscow"
+              defaultValue={tarea?.moscow ?? ""}
+              opciones={[
+                { valor: "", label: "Sin clasificar" },
+                ...Object.entries(MOSCOW_TAREA).map(([valor, m]) => ({
+                  valor,
+                  label: m.label,
+                })),
+              ]}
+            />
+          </Field>
+        </div>
+      </details>
       <Field>
         <FieldLabel htmlFor="etiquetas">Etiquetas</FieldLabel>
         <Input

@@ -20,6 +20,202 @@ export const ESTADOS_PROYECTO = {
 
 export type EstadoProyecto = keyof typeof ESTADOS_PROYECTO
 
+// El orden de las claves es el orden en que se muestran las secciones en
+// /proyectos: primero lo que está por arrancar, al final lo que ya no se toca.
+export const ESTADOS_PROYECTO_ORDEN = Object.keys(
+  ESTADOS_PROYECTO
+) as EstadoProyecto[]
+
+// Clase de trabajo del proyecto. Decide qué tareas de setup propone el
+// inicializador y qué preguntas extra hace la entrevista de kickoff.
+export const TIPOS_PROYECTO = {
+  desarrollo: {
+    label: "Desarrollo a medida",
+    descripcion: "Producto o sistema nuevo para un cliente",
+  },
+  integracion: {
+    label: "Integración",
+    descripcion: "Conectar sistemas que ya existen",
+  },
+  mantenimiento: {
+    label: "Mantenimiento",
+    descripcion: "Soporte y evolución de algo ya entregado",
+  },
+  interno: {
+    label: "Interno",
+    descripcion: "Producto propio de ZQUARE, sin cliente",
+  },
+}
+
+export type TipoProyecto = keyof typeof TIPOS_PROYECTO
+
+export const TIPOS_PROYECTO_ORDEN = Object.keys(
+  TIPOS_PROYECTO
+) as TipoProyecto[]
+
+// Brief de arranque: campo de la tabla → label. Compartido entre la UI
+// (ficha y formulario), el snapshot de versiones y el MCP. Los placeholders
+// son las preguntas que responde cada campo — las mismas que hace el prompt
+// `comenzar_proyecto`, para que llenar el brief a mano o con Claude dé lo
+// mismo.
+export const BRIEF_PROYECTO = {
+  objetivo: {
+    label: "Objetivo",
+    placeholder:
+      "Qué problema del cliente resuelve y cómo sabremos que valió la pena",
+  },
+  alcance: {
+    label: "Alcance",
+    placeholder: "Qué entra: funcionalidades, entregables, integraciones",
+  },
+  fuera_de_alcance: {
+    label: "Fuera de alcance",
+    placeholder:
+      "Qué NO entra. Es lo que evita las discusiones del mes tres",
+  },
+  stakeholders: {
+    label: "Stakeholders",
+    placeholder:
+      "Quién decide del lado del cliente, quién valida, quién da accesos y por qué canal",
+  },
+  stack_y_repos: {
+    label: "Stack y repos",
+    placeholder: "Tecnologías acordadas, repos y convenciones que aplican",
+  },
+  entornos_y_accesos: {
+    label: "Entornos y accesos",
+    placeholder:
+      "Local, staging y producción; credenciales y accesos a pedir, y a quién",
+  },
+  riesgos: {
+    label: "Riesgos",
+    placeholder:
+      "Qué puede salir mal y qué haríamos: dependencias del cliente, incógnitas técnicas, plazos",
+  },
+  definicion_de_hecho: {
+    label: "Definición de hecho",
+    placeholder:
+      "Qué tiene que cumplir una tarjeta para estar hecha en este proyecto (tests, review, deploy, aceptación)",
+  },
+  hitos: {
+    label: "Hitos",
+    placeholder:
+      "Entregas intermedias con fecha: contra qué se mide el avance y qué se factura",
+  },
+}
+
+export type CampoBriefProyecto = keyof typeof BRIEF_PROYECTO
+
+export const CAMPOS_BRIEF_PROYECTO = Object.keys(
+  BRIEF_PROYECTO
+) as CampoBriefProyecto[]
+
+// Tareas de setup que propone el inicializador según el tipo de proyecto.
+// Viven en código y no en la base a propósito: son una convención de la
+// empresa que se versiona con el repo, igual que los estándares. Los códigos
+// TEC-N los asigna quien las crea, en orden.
+export const PLANTILLAS_SETUP: Record<TipoProyecto, string[]> = {
+  desarrollo: [
+    "Crear el repositorio y aplicar la estructura estándar de ZQUARE",
+    "Configurar CI (lint, build y tests en cada push)",
+    "Levantar entorno de staging con deploy automático",
+    "Pedir y guardar los accesos y credenciales del cliente",
+    "Abrir el canal de comunicación con el cliente y agendar la cadencia de reuniones",
+    "Escribir el documento de arranque y compartirlo con el cliente",
+  ],
+  integracion: [
+    "Conseguir documentación y credenciales de sandbox de cada sistema a integrar",
+    "Probar de punta a punta el caso más simple contra sandbox",
+    "Definir el manejo de errores y reintentos entre sistemas",
+    "Configurar monitoreo y alertas de la integración",
+    "Acordar con el cliente la ventana y el plan de puesta en producción",
+  ],
+  mantenimiento: [
+    "Traspaso: repos, accesos, documentación y deudas conocidas",
+    "Acordar el SLA de respuesta y el canal de reporte de incidentes",
+    "Revisar el monitoreo existente y completar lo que falte",
+    "Levantar el inventario de dependencias y su estado de actualización",
+  ],
+  interno: [
+    "Crear el repositorio y aplicar la estructura estándar de ZQUARE",
+    "Definir la métrica que dice si el producto funciona",
+    "Acordar cuánto tiempo por semana le dedica cada socio",
+    "Configurar CI y el primer deploy",
+  ],
+}
+
+// Un proyecto está "sin comenzar" mientras nadie corrió el arranque
+// estandarizado. Es a propósito independiente del estado comercial: un
+// proyecto puede pasar a `en_curso` porque el cliente firmó y aun así no
+// haberse arrancado como corresponde — ese hueco es justo lo que el listado
+// tiene que mostrar.
+export function proyectoComenzado(
+  proyecto: Pick<Proyecto, "kickoff_completado_at">
+): boolean {
+  return Boolean(proyecto.kickoff_completado_at)
+}
+
+// El brief está completo cuando están los cuatro campos que hacen falta para
+// que alguien más agarre el proyecto sin preguntar: para qué es, qué entra,
+// qué no, y con quién se habla. El resto suma pero no bloquea.
+export const CAMPOS_BRIEF_MINIMO: CampoBriefProyecto[] = [
+  "objetivo",
+  "alcance",
+  "fuera_de_alcance",
+  "stakeholders",
+]
+
+export function briefProyectoCompleto(
+  proyecto: Pick<Proyecto, CampoBriefProyecto>
+): boolean {
+  return CAMPOS_BRIEF_MINIMO.every((campo) => proyecto[campo])
+}
+
+export function briefProyectoVacio(
+  proyecto: Pick<Proyecto, CampoBriefProyecto>
+): boolean {
+  return CAMPOS_BRIEF_PROYECTO.every((campo) => !proyecto[campo])
+}
+
+// Salud del proyecto: derivada de las fechas, nunca editada a mano. Es el
+// semáforo del listado y el primer insumo del estimador (horas estimadas vs.
+// reales) que está en el PLAN.
+export const SALUD_PROYECTO = {
+  atrasado: { label: "Atrasado", variant: "destructive" as const },
+  vence_pronto: { label: "Vence pronto", variant: "secondary" as const },
+  al_dia: { label: "Al día", variant: "outline" as const },
+  sin_fecha: { label: "Sin fecha", variant: "outline" as const },
+}
+
+export type SaludProyecto = keyof typeof SALUD_PROYECTO
+
+// Cuántos días antes del vencimiento se enciende la luz amarilla.
+export const DIAS_VENCE_PRONTO = 14
+
+// `hoy` se pasa por parámetro para que el resultado sea determinista: el
+// servidor y el cliente tienen que llegar al mismo valor o React se queja de
+// la hidratación.
+export function saludProyecto(
+  proyecto: Pick<Proyecto, "estado" | "fecha_fin_estimada">,
+  hoy: Date
+): SaludProyecto {
+  // Un proyecto cerrado no tiene salud que medir: ya no se puede atrasar.
+  if (proyecto.estado === "entregado" || proyecto.estado === "cancelado") {
+    return "al_dia"
+  }
+  if (!proyecto.fecha_fin_estimada) return "sin_fecha"
+
+  const dias = Math.ceil(
+    (new Date(`${proyecto.fecha_fin_estimada}T00:00:00Z`).getTime() -
+      Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate())) /
+      86_400_000
+  )
+
+  if (dias < 0) return "atrasado"
+  if (dias <= DIAS_VENCE_PRONTO) return "vence_pronto"
+  return "al_dia"
+}
+
 export const ESTADOS_PRESUPUESTO = {
   borrador: { label: "Borrador", variant: "secondary" as const },
   enviado: { label: "Enviado", variant: "default" as const },
@@ -55,6 +251,38 @@ export const PRIORIDADES_TAREA = {
 }
 
 export type PrioridadTarea = keyof typeof PRIORIDADES_TAREA
+
+// MoSCoW: alcance del release, no urgencia. Es otra cosa que `prioridad` y por
+// eso vive en su propio campo — la regla 60/20/20 de 01-gestion-requisitos §6
+// necesita el valor exacto, y "alta" no dice si algo es Must o Should.
+export const MOSCOW_TAREA = {
+  must: { label: "Must have", variant: "default" as const },
+  should: { label: "Should have", variant: "secondary" as const },
+  could: { label: "Could have", variant: "outline" as const },
+  wont: { label: "Won't have", variant: "outline" as const },
+}
+
+export type MoscowTarea = keyof typeof MOSCOW_TAREA
+
+export const MOSCOW_ORDEN = Object.keys(MOSCOW_TAREA) as MoscowTarea[]
+
+// Fibonacci, según 01-gestion-requisitos §3.4. Una US de 13 no entra a un
+// sprint: se parte primero. La base la acepta igual —una tarjeta puede estar
+// estimada en 13 mientras espera que la partan— y esa regla la aplica quien
+// planifica.
+export const PUNTOS_TAREA = [1, 2, 3, 5, 8, 13] as const
+
+// Código de la tarjeta dentro de su proyecto (US-014, DEF-07, SC-3, TEC-2).
+// Distinto de `numero`, que es el ZQ-N de la empresa: este es el que enlaza
+// con el requisito y el que usa la convención de ramas del estándar.
+export const RE_CODIGO_PROYECTO = /^(US|DEF|SC|TEC)-\d+$/
+export const RE_EPICA = /^EP-\d+$/
+
+// Tipo de trabajo derivado del prefijo del código, que es lo que decide el
+// tipo de rama (US → feat, DEF → fix).
+export function tipoDeCodigo(codigo: string | null): string | null {
+  return codigo?.match(RE_CODIGO_PROYECTO)?.[1] ?? null
+}
 
 // Identificador corto para hablar de una tarjeta ("ZQ-12"), el mismo que se
 // muestra en el tablero y devuelve el MCP.
@@ -217,6 +445,22 @@ export type Proyecto = {
   nombre: string
   descripcion: string | null
   estado: EstadoProyecto
+  // Socio a cargo. Null = todavía sin dueño asignado.
+  responsable_id: string | null
+  tipo: TipoProyecto | null
+  // Brief de arranque (ver BRIEF_PROYECTO).
+  objetivo: string | null
+  alcance: string | null
+  fuera_de_alcance: string | null
+  stakeholders: string | null
+  stack_y_repos: string | null
+  entornos_y_accesos: string | null
+  riesgos: string | null
+  definicion_de_hecho: string | null
+  hitos: string | null
+  // Null = el arranque estandarizado todavía no se corrió.
+  kickoff_completado_at: string | null
+  kickoff_por: string | null
   fecha_inicio: string | null
   fecha_fin_estimada: string | null
   fecha_fin_real: string | null
@@ -254,10 +498,16 @@ export type PresupuestoItem = {
   orden: number
 }
 
+// Una anotación sobre un archivo de Drive: el tipo, de quién es y sus tags.
+// El catálogo de archivos es Drive, no esta tabla — ver la migración
+// 20260817000002. `cliente_id` es null en los archivos sueltos (plantillas,
+// cosas de la empresa) y `drive_file_id` es la clave que une la anotación con
+// el archivo real y con sus fragmentos en el índice de búsqueda.
 export type Documento = {
   id: string
-  cliente_id: string
+  cliente_id: string | null
   proyecto_id: string | null
+  drive_file_id: string | null
   tipo: TipoDocumento
   titulo: string
   drive_url: string
@@ -290,6 +540,10 @@ export type Tarea = {
   plan: string | null
   estado: EstadoTarea
   prioridad: PrioridadTarea
+  codigo_proyecto: string | null
+  estimacion: number | null
+  moscow: MoscowTarea | null
+  epica: string | null
   asignado_a: string | null
   cliente_id: string | null
   proyecto_id: string | null

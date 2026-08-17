@@ -387,6 +387,99 @@ agente la desarrolle después. Mismo patrón que el one-pager de ideas.
 - [ ] Etapa 4 — matriz impacto × esfuerzo para priorizar de un vistazo, y
   afinado de la entrevista del prompt según el uso real.
 
+### Post-MVP — Proyectos e inicializador *(2026-08-17)*
+
+Objetivo: que empezar un proyecto deje de depender de quién lo vendió. Hasta
+ahora `proyectos` guardaba solo lo comercial (montos, fechas, horas) y no
+tenía ni listado propio ni tools MCP; todo lo que hace falta para *empezar a
+trabajar* vivía en la cabeza de alguien o disperso en Drive. Tercera pata del
+mismo patrón que el one-pager de ideas y el brief de tarjetas: leer lo que el
+backoffice ya sabe, entrevistar solo por lo que falta, guardar el resultado.
+
+- [x] Migración `20260817000001_inicializador_proyectos.sql`: `responsable_id`
+  (socio a cargo — el filtro "mis proyectos" que faltaba), `tipo`
+  (desarrollo / integracion / mantenimiento / interno), **brief de arranque**
+  de 9 campos (objetivo, alcance, fuera_de_alcance, stakeholders,
+  stack_y_repos, entornos_y_accesos, riesgos, definicion_de_hecho, hitos),
+  `kickoff_completado_at` + `kickoff_por`, y `proyectos_versiones` (snapshot
+  explícito con autor, igual que ideas y tareas). El kickoff es un hecho
+  aparte del estado comercial a propósito: un proyecto puede estar `en_curso`
+  porque el cliente firmó y no haberse arrancado nunca como corresponde, y
+  ese hueco es justo lo que el listado tiene que mostrar.
+- [x] Pestaña **Proyectos** (`/proyectos`, en el sidebar): agrupada por estado,
+  con una sección "Esperando arranque" arriba de todo (es la pregunta que
+  trae a alguien a esta pantalla). Filtros en la URL: estado, cliente,
+  responsable, tipo, salud y arranque. **Salud** derivada de las fechas, nunca
+  editada a mano (atrasado / vence pronto / al día / sin fecha) — primer
+  insumo del estimador de la Fase 4.
+- [x] Brief en la ficha del proyecto: grid de secciones (los 4 del mínimo se
+  muestran aunque estén vacíos), edición manual en diálogo y atajo "Trabajarlo"
+  por sección que abre claude.ai con el prompt precargado (mismo mecanismo que
+  los atajos del banco de ideas).
+- [x] MCP: `listar_proyectos` (con `comenzado: boolean`), `ficha_proyecto`
+  (brief + presupuestos + documentos + decisiones + tareas + idea de origen,
+  más `campos_brief_faltantes` y `precondiciones`), `actualizar_proyecto` con
+  versionado y `comenzar_proyecto` (tool atómica que cierra el arranque y se
+  niega si falta el brief mínimo, el tipo o el responsable). `crear_decision`
+  acepta ahora `proyecto_nombre` y hereda el cliente del proyecto.
+- [x] **Prompt `comenzar_proyecto`**: lee ficha + documentos + cliente + idea
+  de origen ANTES de preguntar, avisa las precondiciones que faltan
+  (presupuesto aprobado, contrato, monto, responsable), entrevista de a una
+  pregunta proponiendo su borrador, y cierra creando los insumos — tareas de
+  setup TEC-N según el tipo, primeras historias US-N agrupadas por épica (sin
+  estimación: los puntos los pone el equipo) y decisiones de arranque.
+- [x] Release: PR #32 mergeado el 2026-08-17 y migración aplicada por Joaquín
+  el mismo día (las 13 columnas nuevas verificadas contra
+  `information_schema`).
+- [ ] **Bloqueado: no llegó a producción.** La integración de Vercel con
+  GitHub dejó de generar deployments desde el 2026-08-16 (último Production:
+  `7e75bc0`, del 15/8; el merge `640d0c6` no disparó ninguno, ni siquiera un
+  Preview al pushear la rama). La GitHub App sigue instalada y sin suspender,
+  así que la causa está del lado de Vercel — sospecha principal: límite del
+  plan Hobby, que además es formalmente para uso no comercial (ver "Cuentas y
+  secretos"). Pendiente mirar el dashboard; mientras tanto se puede deployar a
+  mano con `npx vercel --prod`. La verificación en prod (UI + prompt desde el
+  conector reconectado) queda detrás de esto.
+- [x] Segunda tanda de ajustes (2026-08-17): los atajos a Claude **copian el
+  prompt al portapapeles** en vez de abrir claude.ai — la conversación puede
+  querer arrancarse en la app de escritorio, en un proyecto con más contexto o
+  en Claude Code, y esa elección es de quien arranca, no del backoffice. El
+  sidebar se agrupó en Desarrollo (Proyectos · Tareas · Ideas) y Gestión
+  (Clientes · Documentos · Finanzas · Decisiones). Toda la tarjeta del listado
+  entra al proyecto, no solo el título.
+- [ ] Simetría pendiente: **`cerrar_proyecto`** — retro guiada que llena
+  `fecha_fin_real` / `horas_reales` y deja una decisión de aprendizaje. El
+  inicializador sin cierre deja al estimador sin los datos que justifican
+  haber guardado estimado vs. real.
+
+### Post-MVP — Documentos: Drive como fuente de verdad *(2026-08-17)*
+
+`/documentos` mostraba **un** documento teniendo Drive lleno. No era un bug:
+la tabla nació en la fase 1 con un enfoque híbrido (los archivos en Drive, acá
+la metadata para catalogarlos) que tenía sentido cuando el sistema no podía
+saber qué había en Drive. Cuatro días después la búsqueda semántica trajo
+`listarTodosLosArchivos()`, que recorre la unidad entera: la premisa dejó de
+ser cierta y quedaron **dos catálogos que ni se conocían** — la tabla guardaba
+`drive_url` y el índice el file id, así que ni siquiera se podían unir sin
+parsear la URL.
+
+- [x] Migración `20260817000002_documentos_drive.sql`: `drive_file_id` con
+  backfill desde la URL, único parcial, y `cliente_id` nullable (un archivo
+  suelto puede merecer un tipo sin ser de nadie). La tabla pasa a ser
+  **anotaciones sobre archivos de Drive**, no el catálogo.
+- [x] `/documentos` lista lo que hay en Drive y superpone la ficha cuando
+  existe. Cliente y proyecto se **infieren de la carpeta** (cruzando la cadena
+  de padres contra `drive_folder_id` de clientes y proyectos, la carpeta más
+  profunda gana); lo anotado a mano manda sobre lo inferido. Filtros en el
+  cliente (texto, cliente, tipo, "sin ficha") porque los archivos ya vinieron
+  todos: recorrer Drive es la parte cara y se hace una vez.
+- [x] Anotar desde la lista: diálogo con tipo, cliente, proyecto, fecha y tags,
+  precargado con lo inferido. Las fichas cuyo archivo ya no está en Drive se
+  muestran aparte en vez de desaparecer.
+- [ ] Pendiente: la ficha de cliente sigue listando solo lo anotado (tiene el
+  navegador de Drive al lado, así que no urge), y el MCP no expone las fichas
+  —`buscar` ya llega al contenido de todos los archivos igual.
+
 ### Pendiente — Identidad visual *(esperando a la diseñadora)*
 - [ ] Rediseño de la UI del backoffice: pedido explícito de Joaquín desde el
   arranque — que NO se vea como una UI genérica generada por IA (hoy usa el

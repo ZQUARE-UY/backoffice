@@ -128,11 +128,192 @@ const CAMPOS_TAREA = [
   "prioridad",
   "etiquetas",
   "fecha_limite",
+  "codigo_proyecto",
+  "estimacion",
+  "moscow",
+  "epica",
 ] as const
 
 // Brief de desarrollo: si los cuatro están vacíos, la tarjeta está "sin
 // desarrollar" y conviene pasarla por el prompt `desarrollar_tarea`.
 const CAMPOS_BRIEF = ["contexto", "resultado", "recursos", "plan"] as const
+
+const ESTADOS_PROYECTO = [
+  "propuesta",
+  "en_curso",
+  "entregado",
+  "mantenimiento",
+  "cancelado",
+] as const
+
+const TIPOS_PROYECTO = [
+  "desarrollo",
+  "integracion",
+  "mantenimiento",
+  "interno",
+] as const
+
+// Brief de arranque de un proyecto (ver BRIEF_PROYECTO en src/lib/dominio.ts).
+// Son las nueve preguntas del prompt `comenzar_proyecto`.
+const CAMPOS_BRIEF_PROYECTO = [
+  "objetivo",
+  "alcance",
+  "fuera_de_alcance",
+  "stakeholders",
+  "stack_y_repos",
+  "entornos_y_accesos",
+  "riesgos",
+  "definicion_de_hecho",
+  "hitos",
+] as const
+
+// Los cuatro que hacen falta para que alguien más agarre el proyecto sin
+// preguntar. `comenzar_proyecto` no cierra el arranque sin ellos.
+const CAMPOS_BRIEF_PROYECTO_MINIMO = [
+  "objetivo",
+  "alcance",
+  "fuera_de_alcance",
+  "stakeholders",
+] as const
+
+// Contenido versionado de un proyecto: lo que se guarda en el snapshot de
+// proyectos_versiones (el brief más lo que define de qué proyecto se trata).
+const CAMPOS_PROYECTO = [
+  "nombre",
+  "descripcion",
+  "estado",
+  "tipo",
+  ...CAMPOS_BRIEF_PROYECTO,
+  "fecha_inicio",
+  "fecha_fin_estimada",
+  "fecha_fin_real",
+  "horas_estimadas",
+  "monto_acordado",
+  "moneda",
+] as const
+
+// Esquema del brief compartido entre `actualizar_proyecto` y
+// `comenzar_proyecto`: las descripciones son las preguntas que hay que
+// contestar, para que el agente sepa qué va en cada campo sin adivinar.
+const ESQUEMA_BRIEF_PROYECTO = {
+  objetivo: z
+    .string()
+    .describe("brief: qué problema del cliente resuelve y cómo sabremos que valió la pena")
+    .optional(),
+  alcance: z
+    .string()
+    .describe("brief: qué entra — funcionalidades, entregables, integraciones acordadas")
+    .optional(),
+  fuera_de_alcance: z
+    .string()
+    .describe("brief: qué NO entra. Es el campo que evita las discusiones del mes tres")
+    .optional(),
+  stakeholders: z
+    .string()
+    .describe("brief: quién decide del lado del cliente, quién valida, quién da accesos y por qué canal")
+    .optional(),
+  stack_y_repos: z
+    .string()
+    .describe("brief: tecnologías acordadas, repos y convenciones que aplican")
+    .optional(),
+  entornos_y_accesos: z
+    .string()
+    .describe("brief: local/staging/producción, credenciales y accesos a pedir, y a quién")
+    .optional(),
+  riesgos: z
+    .string()
+    .describe("brief: qué puede salir mal y qué haríamos — dependencias del cliente, incógnitas técnicas, plazos")
+    .optional(),
+  definicion_de_hecho: z
+    .string()
+    .describe("brief: qué tiene que cumplir una tarjeta para estar hecha en ESTE proyecto (tests, review, deploy, aceptación)")
+    .optional(),
+  hitos: z
+    .string()
+    .describe("brief: entregas intermedias con fecha; contra qué se mide el avance y qué se factura")
+    .optional(),
+}
+
+// Resuelve un proyecto por nombre aproximado y devuelve la fila entera. A
+// diferencia de `idPorNombre`, avisa cuando el nombre matchea más de uno: con
+// proyectos que se llaman parecido entre clientes, elegir el primero en
+// silencio es escribirle al proyecto equivocado.
+async function proyectoPorNombre(
+  nombre: string
+): Promise<{ proyecto: Record<string, unknown> | null; error: string | null }> {
+  const supabase = createAdminClient()
+  const { data } = await supabase
+    .from("proyectos")
+    .select("*, clientes(nombre)")
+    .is("deleted_at", null)
+    .ilike("nombre", `%${nombre.trim()}%`)
+    .limit(5)
+  if (!data || data.length === 0) {
+    return { proyecto: null, error: `No encontré un proyecto que matchee "${nombre}".` }
+  }
+  if (data.length > 1) {
+    const opciones = data
+      .map((p) => `${p.nombre}${p.clientes?.nombre ? ` (${p.clientes.nombre})` : " (interno)"}`)
+      .join(", ")
+    return {
+      proyecto: null,
+      error: `"${nombre}" matchea varios proyectos: ${opciones}. Precisá el nombre.`,
+    }
+  }
+  return { proyecto: data[0], error: null }
+}
+
+// Planificación: los campos que exige el estándar de ingeniería para poder
+// armar un sprint. Sólo aplican a proyectos que lo siguen; una tarea de
+// empresa los deja en null. Compartidos entre crear_tarea y actualizar_tarea.
+const CAMPOS_PLANIFICACION = ["codigo_proyecto", "estimacion", "moscow", "epica"] as const
+
+const PUNTOS_FIBONACCI = [1, 2, 3, 5, 8, 13]
+
+const ESQUEMA_PLANIFICACION = {
+  codigo_proyecto: z
+    .string()
+    .regex(
+      /^(US|DEF|SC|TEC)-\d+$/i,
+      "formato esperado: US-014, DEF-07, SC-3 o TEC-2"
+    )
+    .describe(
+      "código de la tarjeta DENTRO de su proyecto (US-014, DEF-07). Distinto del ZQ-N, que es de la empresa: éste es el que enlaza con el requisito y el que usa la convención de ramas"
+    )
+    .optional(),
+  estimacion: z
+    // `coerce` por la misma razón que `tarea` acepta string|number: hay
+    // clientes MCP que serializan todo escalar como texto, y un "5" que
+    // rebota deja el campo inutilizable desde ese cliente.
+    .coerce.number()
+    .int()
+    .refine((n) => PUNTOS_FIBONACCI.includes(n), "puntos válidos: 1, 2, 3, 5, 8, 13")
+    .describe(
+      "puntos de historia en Fibonacci. La estima el equipo por consenso, no un agente: no la completes por tu cuenta"
+    )
+    .optional(),
+  moscow: z
+    .enum(["must", "should", "could", "wont"])
+    .describe("alcance del release. No es lo mismo que `prioridad`, que es urgencia")
+    .optional(),
+  epica: z
+    .string()
+    .regex(/^EP-\d+$/i, "formato esperado: EP-3")
+    .describe("épica a la que pertenece; una tarjeta no puede pertenecer a dos")
+    .optional(),
+}
+
+// Los códigos se guardan en mayúsculas: "us-14" y "US-14" son el mismo código
+// y no pueden convivir como dos.
+function normalizarPlanificacion<T extends Record<string, unknown>>(entrada: T) {
+  const salida: Record<string, unknown> = {}
+  for (const campo of ["codigo_proyecto", "epica"] as const) {
+    if (typeof entrada[campo] === "string") {
+      salida[campo] = (entrada[campo] as string).toUpperCase()
+    }
+  }
+  return salida
+}
 
 // Quién opera vía MCP: socio dueño del token, con la marca "(Claude)" para
 // atribuir versiones y comentarios (mismo criterio que comentar_tarea).
@@ -511,6 +692,415 @@ const handler = createMcpHandler(
       }
     )
 
+    // ── Proyectos ─────────────────────────────────────────────────────────
+    // El proyecto es la unidad de trabajo: acá vive el brief de arranque que
+    // contesta las preguntas que hay que tener resueltas antes de escribir la
+    // primera línea de código. El arranque estandarizado se hace con el prompt
+    // `comenzar_proyecto`, que usa estas tools.
+    server.registerTool(
+      "listar_proyectos",
+      {
+        title: "Listar proyectos",
+        description:
+          "Proyectos de la empresa con su estado, cliente, responsable y estado de arranque. `comenzado` en false significa que todavía no se corrió el arranque estandarizado (prompt `comenzar_proyecto`): puede estar vendido y hasta en curso, pero sin brief, sin tareas y sin accesos definidos. Sin filtros omite los proyectos entregados y cancelados.",
+        inputSchema: {
+          estado: z.enum(ESTADOS_PROYECTO).optional(),
+          tipo: z.enum(TIPOS_PROYECTO).optional(),
+          cliente_nombre: z
+            .string()
+            .describe("nombre aproximado del cliente")
+            .optional(),
+          responsable_email: z
+            .string()
+            .describe("socio a cargo")
+            .optional(),
+          sin_comenzar: z
+            .boolean()
+            .describe("true = solo los que todavía no arrancaron")
+            .optional(),
+          incluir_cerrados: z
+            .boolean()
+            .describe("true = incluye entregados y cancelados")
+            .optional(),
+        },
+      },
+      async (entrada) => {
+        const supabase = createAdminClient()
+        let q = supabase
+          .from("proyectos")
+          .select(
+            "nombre, descripcion, estado, tipo, fecha_inicio, fecha_fin_estimada, fecha_fin_real, horas_estimadas, horas_reales, monto_acordado, moneda, kickoff_completado_at, kickoff_por, objetivo, clientes(nombre), responsable:socios!proyectos_responsable_id_fkey(nombre, email)"
+          )
+          .is("deleted_at", null)
+          .order("fecha_fin_estimada", { nullsFirst: false })
+
+        if (entrada.estado) q = q.eq("estado", entrada.estado)
+        else if (!entrada.incluir_cerrados)
+          q = q.not("estado", "in", "(entregado,cancelado)")
+        if (entrada.tipo) q = q.eq("tipo", entrada.tipo)
+        if (entrada.sin_comenzar) q = q.is("kickoff_completado_at", null)
+
+        if (entrada.cliente_nombre) {
+          const clienteId = await idPorNombre("clientes", entrada.cliente_nombre)
+          if (!clienteId)
+            return texto(`No encontré el cliente "${entrada.cliente_nombre}".`)
+          q = q.eq("cliente_id", clienteId)
+        }
+        if (entrada.responsable_email) {
+          const socioId = await socioIdPorEmail(entrada.responsable_email)
+          if (!socioId)
+            return texto(`No encontré un socio con email ${entrada.responsable_email}.`)
+          q = q.eq("responsable_id", socioId)
+        }
+
+        const { data, error } = await q
+        if (error) throw new Error(error.message)
+
+        return texto(
+          (data ?? []).map(({ kickoff_completado_at, ...p }) => ({
+            ...p,
+            comenzado: Boolean(kickoff_completado_at),
+            kickoff_completado_at,
+          }))
+        )
+      }
+    )
+
+    server.registerTool(
+      "ficha_proyecto",
+      {
+        title: "Ficha de un proyecto",
+        description:
+          "Todo lo que el backoffice sabe de un proyecto (por nombre, no hace falta exacto): su brief de arranque, cliente, presupuestos, documentos, decisiones, tarjetas del tablero e idea de origen si salió del banco. Es lo primero que hay que leer antes de arrancarlo o de preguntarle algo a un socio: casi todo lo que uno preguntaría ya está acá. `campos_brief_faltantes` dice qué queda por definir.",
+        inputSchema: { nombre: z.string().min(2) },
+      },
+      async ({ nombre }) => {
+        const { proyecto, error: noEncontrado } = await proyectoPorNombre(nombre)
+        if (!proyecto) return texto(noEncontrado)
+
+        const supabase = createAdminClient()
+        const id = proyecto.id as string
+        const clienteId = proyecto.cliente_id as string | null
+
+        const [presupuestos, documentos, decisiones, tareas, idea, responsable] =
+          await Promise.all([
+            supabase
+              .from("presupuestos")
+              .select("version, moneda, monto_total, estado, fecha_envio")
+              .eq("proyecto_id", id)
+              .is("deleted_at", null),
+            supabase
+              .from("documentos")
+              .select("titulo, tipo, drive_url, fecha")
+              .eq("proyecto_id", id)
+              .is("deleted_at", null),
+            supabase
+              .from("decisiones")
+              .select("fecha, titulo, detalle, participantes")
+              .eq("proyecto_id", id)
+              .is("deleted_at", null),
+            supabase
+              .from("tareas")
+              .select(
+                "numero, titulo, estado, prioridad, codigo_proyecto, epica, estimacion, moscow, fecha_limite"
+              )
+              .eq("proyecto_id", id)
+              .is("deleted_at", null)
+              .order("orden"),
+            supabase
+              .from("ideas")
+              .select("numero, titulo, estado")
+              .eq("proyecto_id", id)
+              .is("deleted_at", null)
+              .maybeSingle(),
+            proyecto.responsable_id
+              ? supabase
+                  .from("socios")
+                  .select("nombre, email")
+                  .eq("id", proyecto.responsable_id)
+                  .maybeSingle()
+              : Promise.resolve({ data: null }),
+          ])
+
+        const brief: Record<string, unknown> = {}
+        for (const campo of CAMPOS_BRIEF_PROYECTO) brief[campo] = proyecto[campo]
+        const faltantes = CAMPOS_BRIEF_PROYECTO.filter((campo) => !proyecto[campo])
+
+        // Precondiciones del arranque: lo que conviene tener resuelto antes de
+        // comenzar. No bloquean, pero el prompt las avisa en vez de arrancar a
+        // ciegas.
+        const presupuestoAprobado = (presupuestos.data ?? []).some(
+          (p) => p.estado === "aprobado"
+        )
+
+        return texto({
+          proyecto: {
+            nombre: proyecto.nombre,
+            descripcion: proyecto.descripcion,
+            estado: proyecto.estado,
+            tipo: proyecto.tipo,
+            cliente: (proyecto.clientes as { nombre: string } | null)?.nombre ?? null,
+            interno: clienteId === null,
+            responsable: responsable.data?.nombre ?? null,
+            responsable_email: responsable.data?.email ?? null,
+            fecha_inicio: proyecto.fecha_inicio,
+            fecha_fin_estimada: proyecto.fecha_fin_estimada,
+            fecha_fin_real: proyecto.fecha_fin_real,
+            horas_estimadas: proyecto.horas_estimadas,
+            horas_reales: proyecto.horas_reales,
+            monto_acordado: proyecto.monto_acordado,
+            moneda: proyecto.moneda,
+            comenzado: Boolean(proyecto.kickoff_completado_at),
+            kickoff_completado_at: proyecto.kickoff_completado_at,
+            kickoff_por: proyecto.kickoff_por,
+          },
+          brief,
+          campos_brief_faltantes: faltantes,
+          precondiciones: {
+            presupuesto_aprobado: presupuestoAprobado,
+            tiene_responsable: Boolean(proyecto.responsable_id),
+            tiene_tipo: Boolean(proyecto.tipo),
+            tiene_fecha_inicio: Boolean(proyecto.fecha_inicio),
+            tiene_monto_acordado: proyecto.monto_acordado != null,
+          },
+          presupuestos: presupuestos.data ?? [],
+          documentos: documentos.data ?? [],
+          decisiones: decisiones.data ?? [],
+          tareas: (tareas.data ?? []).map(({ numero, ...t }) => ({
+            codigo: `ZQ-${numero}`,
+            ...t,
+          })),
+          idea_de_origen: idea.data
+            ? { codigo: `IDEA-${idea.data.numero}`, titulo: idea.data.titulo }
+            : null,
+        })
+      }
+    )
+
+    server.registerTool(
+      "actualizar_proyecto",
+      {
+        title: "Actualizar un proyecto",
+        description:
+          "Cambia campos de un proyecto existente, incluido su brief de arranque. Solo se tocan los campos que se pasan; string vacío limpia el campo. Cada edición queda en el historial de versiones. Para cerrar el arranque completo usá `comenzar_proyecto`, que además marca el kickoff.",
+        inputSchema: {
+          proyecto: z.string().min(2).describe("nombre del proyecto, no hace falta exacto"),
+          nombre: z.string().min(3).describe("nombre nuevo, para renombrarlo").optional(),
+          descripcion: z.string().optional(),
+          estado: z.enum(ESTADOS_PROYECTO).optional(),
+          tipo: z
+            .enum(TIPOS_PROYECTO)
+            .describe("clase de trabajo; decide las tareas de setup del arranque")
+            .optional(),
+          responsable_email: z
+            .string()
+            .describe("socio a cargo; string vacío lo deja sin responsable")
+            .optional(),
+          fecha_inicio: z.string().describe("YYYY-MM-DD").optional(),
+          fecha_fin_estimada: z.string().describe("YYYY-MM-DD").optional(),
+          fecha_fin_real: z.string().describe("YYYY-MM-DD").optional(),
+          horas_estimadas: z.coerce.number().optional(),
+          horas_reales: z.coerce.number().optional(),
+          ...ESQUEMA_BRIEF_PROYECTO,
+        },
+      },
+      async (entrada, extra) => {
+        const { proyecto: actual, error: noEncontrado } = await proyectoPorNombre(
+          entrada.proyecto
+        )
+        if (!actual) return texto(noEncontrado)
+
+        const cambios: Record<string, unknown> = {}
+        if (entrada.nombre !== undefined) cambios.nombre = entrada.nombre
+        if (entrada.descripcion !== undefined)
+          cambios.descripcion = entrada.descripcion || null
+        if (entrada.estado !== undefined) cambios.estado = entrada.estado
+        if (entrada.tipo !== undefined) cambios.tipo = entrada.tipo
+        for (const campo of CAMPOS_BRIEF_PROYECTO) {
+          if (entrada[campo] !== undefined) cambios[campo] = entrada[campo] || null
+        }
+        for (const campo of [
+          "fecha_inicio",
+          "fecha_fin_estimada",
+          "fecha_fin_real",
+        ] as const) {
+          if (entrada[campo] !== undefined) cambios[campo] = entrada[campo] || null
+        }
+        for (const campo of ["horas_estimadas", "horas_reales"] as const) {
+          if (entrada[campo] !== undefined) cambios[campo] = entrada[campo]
+        }
+        if (entrada.responsable_email !== undefined) {
+          if (entrada.responsable_email === "") cambios.responsable_id = null
+          else {
+            const socioId = await socioIdPorEmail(entrada.responsable_email)
+            if (!socioId)
+              return texto(`No encontré un socio con email ${entrada.responsable_email}.`)
+            cambios.responsable_id = socioId
+          }
+        }
+
+        if (Object.keys(cambios).length === 0) {
+          return texto(`No pasaste ningún cambio para "${actual.nombre}".`)
+        }
+
+        const supabase = createAdminClient()
+        const { data, error } = await supabase
+          .from("proyectos")
+          .update(cambios)
+          .eq("id", actual.id)
+          .select("*")
+          .single()
+        if (error) throw new Error(error.message)
+
+        // Snapshot completo post-edición (no un delta), atribuido al agente.
+        const { autor, socioId } = await actorMcp(extra)
+        const snapshot: Record<string, unknown> = {}
+        for (const campo of CAMPOS_PROYECTO) snapshot[campo] = data[campo]
+        await supabase.from("proyectos_versiones").insert({
+          proyecto_id: actual.id as string,
+          snapshot,
+          autor,
+          autor_socio_id: socioId,
+        })
+
+        const faltantes = CAMPOS_BRIEF_PROYECTO.filter((campo) => !data[campo])
+        return texto({
+          actualizado: {
+            nombre: data.nombre,
+            estado: data.estado,
+            tipo: data.tipo,
+          },
+          campos_brief_faltantes: faltantes,
+        })
+      }
+    )
+
+    server.registerTool(
+      "comenzar_proyecto",
+      {
+        title: "Marcar el arranque de un proyecto",
+        description:
+          "Cierra el arranque estandarizado: guarda lo que falte del brief, pasa el proyecto a 'en_curso', fija la fecha de inicio y deja registrado quién y cuándo lo arrancó. Es el último paso del prompt `comenzar_proyecto`, después de haber creado las tareas iniciales y registrado las decisiones. No cierra el arranque si falta alguno de los cuatro campos mínimos del brief (objetivo, alcance, fuera_de_alcance, stakeholders): sin eso el proyecto no queda listo para que otro lo agarre.",
+        inputSchema: {
+          proyecto: z.string().min(2).describe("nombre del proyecto, no hace falta exacto"),
+          tipo: z
+            .enum(TIPOS_PROYECTO)
+            .describe("clase de trabajo; obligatorio si el proyecto todavía no lo tiene")
+            .optional(),
+          responsable_email: z
+            .string()
+            .describe("socio a cargo; obligatorio si el proyecto todavía no lo tiene")
+            .optional(),
+          fecha_inicio: z
+            .string()
+            .describe("YYYY-MM-DD; default hoy")
+            .optional(),
+          fecha_fin_estimada: z.string().describe("YYYY-MM-DD").optional(),
+          ...ESQUEMA_BRIEF_PROYECTO,
+        },
+      },
+      async (entrada, extra) => {
+        const { proyecto: actual, error: noEncontrado } = await proyectoPorNombre(
+          entrada.proyecto
+        )
+        if (!actual) return texto(noEncontrado)
+
+        if (actual.kickoff_completado_at) {
+          return texto(
+            `"${actual.nombre}" ya fue arrancado el ${String(actual.kickoff_completado_at).slice(0, 10)} por ${actual.kickoff_por ?? "alguien"}; no hice nada. Para corregir el brief usá \`actualizar_proyecto\`.`
+          )
+        }
+
+        // El brief resultante es el que ya estaba más lo que llega ahora.
+        const brief: Record<string, string | null> = {}
+        for (const campo of CAMPOS_BRIEF_PROYECTO) {
+          const nuevo = entrada[campo]
+          brief[campo] =
+            nuevo !== undefined
+              ? nuevo || null
+              : ((actual[campo] as string | null) ?? null)
+        }
+
+        const faltantes = CAMPOS_BRIEF_PROYECTO_MINIMO.filter((campo) => !brief[campo])
+        if (faltantes.length > 0) {
+          return texto(
+            `No cerré el arranque de "${actual.nombre}": falta definir ${faltantes.join(", ")}. Son los campos que hacen que otro pueda agarrar el proyecto sin preguntar. Completalos y volvé a intentar.`
+          )
+        }
+
+        const tipo = entrada.tipo ?? (actual.tipo as string | null)
+        if (!tipo) {
+          return texto(
+            `No cerré el arranque de "${actual.nombre}": falta el tipo de proyecto (desarrollo, integracion, mantenimiento o interno). Es lo que decide qué tareas de setup corresponden.`
+          )
+        }
+
+        let responsableId = actual.responsable_id as string | null
+        if (entrada.responsable_email) {
+          responsableId = await socioIdPorEmail(entrada.responsable_email)
+          if (!responsableId)
+            return texto(`No encontré un socio con email ${entrada.responsable_email}.`)
+        }
+        if (!responsableId) {
+          return texto(
+            `No cerré el arranque de "${actual.nombre}": falta el socio responsable. Pasá \`responsable_email\`.`
+          )
+        }
+
+        const { autor, socioId } = await actorMcp(extra)
+        const ahora = new Date()
+        const supabase = createAdminClient()
+
+        const { data, error } = await supabase
+          .from("proyectos")
+          .update({
+            ...brief,
+            tipo,
+            responsable_id: responsableId,
+            estado: "en_curso",
+            fecha_inicio:
+              entrada.fecha_inicio ??
+              (actual.fecha_inicio as string | null) ??
+              ahora.toISOString().slice(0, 10),
+            ...(entrada.fecha_fin_estimada
+              ? { fecha_fin_estimada: entrada.fecha_fin_estimada }
+              : {}),
+            kickoff_completado_at: ahora.toISOString(),
+            kickoff_por: autor,
+          })
+          .eq("id", actual.id)
+          .select("*")
+          .single()
+        if (error) throw new Error(error.message)
+
+        const snapshot: Record<string, unknown> = {}
+        for (const campo of CAMPOS_PROYECTO) snapshot[campo] = data[campo]
+        await supabase.from("proyectos_versiones").insert({
+          proyecto_id: actual.id as string,
+          snapshot,
+          autor,
+          autor_socio_id: socioId,
+        })
+
+        const { count } = await supabase
+          .from("tareas")
+          .select("id", { count: "exact", head: true })
+          .eq("proyecto_id", actual.id)
+          .is("deleted_at", null)
+
+        return texto({
+          comenzado: data.nombre,
+          estado: data.estado,
+          tipo: data.tipo,
+          fecha_inicio: data.fecha_inicio,
+          por: autor,
+          tareas_del_proyecto: count ?? 0,
+          campos_brief_pendientes: CAMPOS_BRIEF_PROYECTO.filter((c) => !data[c]),
+          ver: "/proyectos",
+        })
+      }
+    )
+
     // ── Tablero de tareas ─────────────────────────────────────────────────
     // A diferencia del resto, acá sí hay ediciones: el tablero está pensado
     // para que un agente lo opere (crear, mover, comentar). El borrado sigue
@@ -520,7 +1110,7 @@ const handler = createMcpHandler(
       {
         title: "Listar tareas del tablero",
         description:
-          "Tarjetas del tablero de la empresa, agrupadas por columna. 'backlog' es la lista priorizada fuera del tablero (ideas sin comprometer); el tablero va de 'por_hacer' a 'hecho'. Por defecto omite las que están en 'hecho'. `desarrollada` indica si la tarjeta tiene definido su resultado esperado, que es lo que la vuelve resoluble: las que no (típicamente las recién creadas o las que salen de graduar una idea, que traen contexto pero no criterios) necesitan una pasada por el prompt `desarrollar_tarea` antes de que un agente las resuelva. El brief completo se ve con `ficha_tarea`.",
+          "Tarjetas del tablero de la empresa, agrupadas por columna. 'backlog' es la lista priorizada fuera del tablero (ideas sin comprometer); el tablero va de 'por_hacer' a 'hecho'. Por defecto omite las que están en 'hecho'. `desarrollada` indica si la tarjeta tiene definido su resultado esperado, que es lo que la vuelve resoluble: las que no (típicamente las recién creadas o las que salen de graduar una idea, que traen contexto pero no criterios) necesitan una pasada por el prompt `desarrollar_tarea` antes de que un agente las resuelva. El brief completo se ve con `ficha_tarea`. Para planificar un sprint, filtrá por proyecto: cada tarjeta trae su `codigo_proyecto`, `estimacion`, `moscow` y `epica`; las que vengan con `estimacion` en null no pueden entrar a un sprint hasta que el equipo las estime.",
         inputSchema: {
           estado: z.enum(ESTADOS_TAREA).optional(),
           asignado_email: z.string().optional(),
@@ -544,7 +1134,7 @@ const handler = createMcpHandler(
           .select(
             // `tareas` tiene dos FK a socios (asignado_a y created_by): sin el
             // hint del constraint, PostgREST no sabe cuál embeber.
-            "numero, titulo, descripcion, contexto, resultado, recursos, plan, estado, prioridad, etiquetas, fecha_limite, orden, asignado:socios!tareas_asignado_a_fkey(nombre, email), clientes(nombre), proyectos(nombre)"
+            "numero, titulo, descripcion, contexto, resultado, recursos, plan, estado, prioridad, codigo_proyecto, estimacion, moscow, epica, etiquetas, fecha_limite, orden, asignado:socios!tareas_asignado_a_fkey(nombre, email), clientes(nombre), proyectos(nombre)"
           )
           .is("deleted_at", null)
           .order("estado")
@@ -611,7 +1201,7 @@ const handler = createMcpHandler(
         const { data } = await supabase
           .from("tareas")
           .select(
-            "id, numero, titulo, descripcion, contexto, resultado, recursos, plan, estado, prioridad, etiquetas, fecha_limite, created_at, updated_at, asignado:socios!tareas_asignado_a_fkey(nombre, email), clientes(nombre), proyectos(nombre)"
+            "id, numero, titulo, descripcion, contexto, resultado, recursos, plan, estado, prioridad, codigo_proyecto, estimacion, moscow, epica, etiquetas, fecha_limite, created_at, updated_at, asignado:socios!tareas_asignado_a_fkey(nombre, email), clientes(nombre), proyectos(nombre)"
           )
           .eq("numero", numero)
           .is("deleted_at", null)
@@ -647,7 +1237,7 @@ const handler = createMcpHandler(
       {
         title: "Crear una tarjeta",
         description:
-          "Crea una tarjeta. Entra arriba de su columna (por defecto 'backlog', la lista de ideas fuera del tablero; usá 'por_hacer' para que entre directo al tablero). Cliente y proyecto se resuelven por nombre aproximado. Alcanza con el título: el brief (contexto/resultado/recursos/plan) se completa después con el prompt `desarrollar_tarea`.",
+          "Crea una tarjeta. Entra arriba de su columna (por defecto 'backlog', la lista de ideas fuera del tablero; usá 'por_hacer' para que entre directo al tablero). Cliente y proyecto se resuelven por nombre aproximado. Alcanza con el título: el brief (contexto/resultado/recursos/plan) se completa después con el prompt `desarrollar_tarea`. Los campos de planificación (`codigo_proyecto`, `estimacion`, `moscow`, `epica`) sólo aplican a proyectos que siguen el estándar de ingeniería; `codigo_proyecto` es único dentro de su proyecto.",
         inputSchema: {
           titulo: z.string().min(3),
           descripcion: z.string().optional(),
@@ -677,6 +1267,7 @@ const handler = createMcpHandler(
             .string()
             .describe("brief: pasos sugeridos en orden, cada uno accionable por sí solo")
             .optional(),
+          ...ESQUEMA_PLANIFICACION,
         },
       },
       async (entrada, extra) => {
@@ -714,6 +1305,11 @@ const handler = createMcpHandler(
           prioridad: entrada.prioridad ?? "media",
           etiquetas: entrada.etiquetas ?? [],
           fecha_limite: entrada.fecha_limite ?? null,
+          codigo_proyecto: null as string | null,
+          estimacion: entrada.estimacion ?? null,
+          moscow: entrada.moscow ?? null,
+          epica: null as string | null,
+          ...normalizarPlanificacion(entrada),
         }
         const { data, error } = await supabase
           .from("tareas")
@@ -775,6 +1371,7 @@ const handler = createMcpHandler(
           proyecto_nombre: z.string().optional(),
           etiquetas: z.array(z.string()).optional(),
           fecha_limite: z.string().describe("YYYY-MM-DD").optional(),
+          ...ESQUEMA_PLANIFICACION,
         },
       },
       async (entrada, extra) => {
@@ -801,6 +1398,10 @@ const handler = createMcpHandler(
         if (entrada.etiquetas !== undefined) cambios.etiquetas = entrada.etiquetas
         if (entrada.fecha_limite !== undefined)
           cambios.fecha_limite = entrada.fecha_limite || null
+        for (const campo of CAMPOS_PLANIFICACION) {
+          if (entrada[campo] !== undefined) cambios[campo] = entrada[campo] || null
+        }
+        Object.assign(cambios, normalizarPlanificacion(entrada))
 
         if (entrada.estado !== undefined && entrada.estado !== actual.estado) {
           cambios.estado = entrada.estado
@@ -1668,22 +2269,89 @@ const handler = createMcpHandler(
       })
     )
 
+    // Prompt guía: el arranque estandarizado de un proyecto. Tercera pata del
+    // mismo patrón que `bajar_idea_a_tierra` y `desarrollar_tarea`: leer lo
+    // que el backoffice ya sabe, entrevistar solo por lo que falta, y dejar
+    // guardado el resultado. Acá el resultado no es solo texto: son las tareas
+    // y decisiones con las que el equipo arranca a trabajar.
+    server.registerPrompt(
+      "comenzar_proyecto",
+      {
+        title: "Comenzar un proyecto",
+        description:
+          "Arranque estandarizado de un proyecto: lee sus documentos, completa el brief (objetivo, alcance, stakeholders, stack, accesos, riesgos, hitos) y deja creados los insumos para empezar — tareas de setup, primeras historias y decisiones de arranque.",
+        argsSchema: {
+          proyecto: z.string().describe("nombre del proyecto a comenzar"),
+        },
+      },
+      ({ proyecto }) => ({
+        messages: [
+          {
+            role: "user" as const,
+            content: {
+              type: "text" as const,
+              text: [
+                `Ayudame a arrancar el proyecto "${proyecto}" de ZQUARE: dejarlo con un brief tan completo y con los insumos tan armados que cualquiera del equipo —incluido otro agente sin este contexto— pueda ponerse a trabajar sin preguntar nada.`,
+                "",
+                "**Primero leé, después preguntá.** No me hagas ninguna pregunta hasta terminar este bloque:",
+                `1. \`ficha_proyecto\` de "${proyecto}": trae el brief que ya tenga, cliente, presupuestos, documentos, decisiones, tareas e idea de origen. Mirá \`campos_brief_faltantes\` y \`precondiciones\`.`,
+                "2. `buscar` con el nombre del proyecto y con los temas que aparezcan en su descripción: los documentos de Drive (propuesta, contrato, análisis, minutas) están indexados y suelen tener el alcance ya escrito. Leé lo que encuentres.",
+                "3. Si tiene cliente, `ficha_cliente`: proyectos previos con ese cliente, decisiones tomadas y cómo se trabajó antes.",
+                "4. Si salió del banco de ideas, `ficha_idea` de la idea de origen: el one-pager ya tiene problema, solución e impacto.",
+                "",
+                "Después contame en pocas líneas qué encontraste y qué creés que ya está resuelto. **No me preguntes nada que el backoffice ya sepa**: proponé el borrador y pedime que lo corrija.",
+                "",
+                "**Chequeo de precondiciones.** Antes de entrevistarme, decime si falta algo de esto y qué implica: presupuesto aprobado, contrato o propuesta firmada entre los documentos, monto y moneda acordados, fecha de inicio, y socio responsable. Si falta algo importante, avisámelo — podemos arrancar igual, pero quiero saberlo, no descubrirlo en el mes dos.",
+                "",
+                "**Entrevista.** De a UNA pregunta por vez, escuchando la respuesta antes de seguir. Para cada campo, proponé primero tu borrador a partir de lo que leíste y pedime que lo ajuste:",
+                "1. **Tipo de proyecto**: desarrollo a medida, integración, mantenimiento o interno. Decide las tareas de setup, así que es lo primero.",
+                "2. **Objetivo**: qué problema del cliente resuelve y cómo sabremos que valió la pena. Empujá hacia algo medible, no hacia una frase linda.",
+                "3. **Alcance**: qué entra — funcionalidades, entregables, integraciones.",
+                "4. **Fuera de alcance**: qué NO entra. Insistí con este: es el campo que evita las discusiones del mes tres, y el que todos saltean. Si el alcance quedó vago, señalá qué quedó ambiguo.",
+                "5. **Stakeholders**: quién decide del lado del cliente, quién valida entregas, quién da accesos, por qué canal se habla y con qué frecuencia.",
+                "6. **Stack y repos**: tecnologías acordadas, repos, y qué convenciones de ZQUARE aplican (códigos US/DEF/SC/TEC, ramas, épicas).",
+                "7. **Entornos y accesos**: local, staging y producción; qué credenciales hay que pedir y a quién. Lo que no se pide en la semana uno bloquea en la semana tres.",
+                "8. **Riesgos**: qué puede salir mal y qué haríamos. Dependencias del cliente, incógnitas técnicas, plazos apretados. Sé concreto, no genérico.",
+                "9. **Definición de hecho**: qué tiene que cumplir una tarjeta para estar hecha en ESTE proyecto (tests, review, deploy, aceptación del cliente).",
+                "10. **Hitos**: entregas intermedias con fecha; contra qué se mide el avance y, si aplica, qué se factura.",
+                "",
+                "Guardá el avance con `actualizar_proyecto` al cerrar cada campo, no todo junto al final: así queda el historial de versiones y si cortamos la charla no se pierde nada.",
+                "",
+                "**Insumos.** Con el brief cerrado, proponeme (y creá recién cuando yo confirme):",
+                "- **Tareas de setup** con `crear_tarea` en `por_hacer`, con `codigo_proyecto` TEC-1, TEC-2… y el proyecto asociado. Salen del tipo de proyecto: repo y estructura estándar, CI, entornos y deploy, pedido de accesos, canal con el cliente y cadencia de reuniones, documento de arranque. Ajustá la lista al proyecto real en vez de copiar una plantilla entera.",
+                "- **Primeras historias** con `crear_tarea` en `backlog`, con `codigo_proyecto` US-1, US-2… agrupadas por `epica` (EP-1, EP-2…). Salen del alcance. Cada una con su `contexto` y su `resultado` (criterios verificables) — no títulos sueltos. **No pongas `estimacion`**: los puntos los estima el equipo por consenso, no vos.",
+                "- **Decisiones de arranque** con `crear_decision` vinculadas al proyecto: el alcance acordado (con lo que quedó afuera), el stack elegido y por qué, y la cadencia de reuniones. Son las que van a discutirse dentro de tres meses.",
+                "",
+                "Sé crítico, no un escriba. Si el alcance no cierra con el monto o el plazo acordado, decilo. Si hay algo del brief que nadie puede contestar todavía, dejalo explícito como riesgo en vez de inventarlo. Si el proyecto está vendido pero le falta información básica para arrancar, la conclusión honesta puede ser \"esto no se puede arrancar hasta que el cliente defina X\" — decilo.",
+                "",
+                `Cuando el brief esté completo, las tareas creadas y yo esté conforme, cerrá con \`comenzar_proyecto\` (la tool): marca el arranque, pasa el proyecto a en_curso y fija la fecha de inicio. Terminá mostrándome el resumen: brief final, tareas creadas con sus códigos, decisiones registradas y qué queda pendiente de definir.`,
+              ].join("\n"),
+            },
+          },
+        ],
+      })
+    )
+
     // ── Escrituras seguras (solo altas; sin ediciones ni borrados) ─────────
     server.registerTool(
       "crear_decision",
       {
         title: "Registrar una decisión",
         description:
-          "Registra una decisión en la bitácora de la empresa. Opcionalmente vinculada a un cliente por nombre.",
+          "Registra una decisión en la bitácora de la empresa. Opcionalmente vinculada a un cliente y/o a un proyecto por nombre — las decisiones de arranque de un proyecto (alcance acordado, stack elegido, cadencia) conviene vincularlas, así aparecen en su ficha cuando alguien las discuta meses después.",
         inputSchema: {
           titulo: z.string().min(3),
           detalle: z.string().optional(),
           participantes: z.array(z.string()).optional(),
           cliente_nombre: z.string().optional(),
+          proyecto_nombre: z.string().optional(),
           fecha: z.string().describe("YYYY-MM-DD, default hoy").optional(),
         },
       },
-      async ({ titulo, detalle, participantes, cliente_nombre, fecha }, extra) => {
+      async (
+        { titulo, detalle, participantes, cliente_nombre, proyecto_nombre, fecha },
+        extra
+      ) => {
         const email = extra.authInfo?.extra?.email as string | undefined
         const socioId = email ? await socioIdPorEmail(email) : null
         const supabase = createAdminClient()
@@ -1705,6 +2373,17 @@ const handler = createMcpHandler(
           clienteId = data.id
         }
 
+        // Si la decisión es de un proyecto, hereda su cliente cuando no se
+        // pasó uno: no tiene sentido que aparezca en la ficha del proyecto y
+        // no en la del cliente que lo paga.
+        let proyectoId: string | null = null
+        if (proyecto_nombre) {
+          const { proyecto, error: noEncontrado } = await proyectoPorNombre(proyecto_nombre)
+          if (!proyecto) return texto(`${noEncontrado} No registré nada.`)
+          proyectoId = proyecto.id as string
+          clienteId ??= (proyecto.cliente_id as string | null) ?? null
+        }
+
         const { data, error } = await supabase
           .from("decisiones")
           .insert({
@@ -1712,6 +2391,7 @@ const handler = createMcpHandler(
             detalle: detalle ?? null,
             participantes: participantes ?? [],
             cliente_id: clienteId,
+            proyecto_id: proyectoId,
             fecha: fecha ?? undefined,
             created_by: socioId,
           })
