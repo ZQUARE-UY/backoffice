@@ -6,6 +6,7 @@ import {
   agendarSolicitud,
   cancelarSolicitud as cancelarEnBase,
   crearSolicitudReunion,
+  editarSolicitudReunion,
   eliminarSolicitud as eliminarEnBase,
   guardarRespuestaDe,
   reabrirSolicitud as reabrirEnBase,
@@ -55,6 +56,21 @@ export async function crearSolicitud(formData: FormData): Promise<string> {
 
   refrescar(resultado.id)
   return resultado.id
+}
+
+export async function editarSolicitud(
+  id: string,
+  formData: FormData
+): Promise<{ ok: boolean; error?: string; advertencia?: string }> {
+  let datos: ReturnType<typeof datosDesde>
+  try {
+    datos = datosDesde(formData)
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Datos inválidos" }
+  }
+  const resultado = await editarSolicitudReunion({ solicitudId: id, datos })
+  if (resultado.ok) refrescar(id)
+  return resultado
 }
 
 export async function eliminarSolicitud(id: string) {

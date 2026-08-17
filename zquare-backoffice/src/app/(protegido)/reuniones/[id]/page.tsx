@@ -14,13 +14,16 @@ import {
 import {
   codigoReunion,
   ESTADOS_REUNION,
+  type Cliente,
   type EstadoRespuesta,
   type RespuestaReunion,
+  type Socio,
 } from "@/lib/dominio"
-import { huecosDeSolicitud } from "@/lib/reuniones"
+import { fechaDeHoy, huecosDeSolicitud } from "@/lib/reuniones"
 import { idSocioActual } from "@/lib/socio-actual"
 import { createClient } from "@/lib/supabase/server"
 
+import { EditarSolicitud } from "../nueva-solicitud"
 import { Huecos, type HuecoVista } from "./huecos"
 import { MiRespuesta } from "./mi-respuesta"
 import { SolicitudAcciones } from "./solicitud-acciones"
@@ -54,7 +57,18 @@ export default async function ReunionPage({
 
   // Se traen las respuestas de todos: la propia alimenta el editor y las
   // demás muestran, día por día, quién ya dijo que puede.
-  const [{ data: respuestasData }, { data: clienteData }, { data: proyectoData }] =
+  // Los catálogos (socios, clientes, proyectos) solo hacen falta para el
+  // diálogo de edición, que existe mientras la reunión sigue abierta.
+  const editable = solicitud.estado === "abierta"
+  const [
+    { data: respuestasData },
+    { data: clienteData },
+    { data: proyectoData },
+    { data: sociosData },
+    { data: clientesData },
+    { data: proyectosData },
+    hoy,
+  ] =
     await Promise.all([
       supabase
         .from("reunion_respuestas")
@@ -74,6 +88,24 @@ export default async function ReunionPage({
             .eq("id", solicitud.proyecto_id)
             .maybeSingle()
         : Promise.resolve({ data: null }),
+      editable
+        ? supabase.from("socios").select("id, nombre, email").is("deleted_at", null)
+        : Promise.resolve({ data: null }),
+      editable
+        ? supabase
+            .from("clientes")
+            .select("id, nombre, email")
+            .is("deleted_at", null)
+            .order("nombre")
+        : Promise.resolve({ data: null }),
+      editable
+        ? supabase
+            .from("proyectos")
+            .select("id, nombre, cliente_id")
+            .is("deleted_at", null)
+            .order("nombre")
+        : Promise.resolve({ data: null }),
+      fechaDeHoy(),
     ])
 
   const respuestas = (respuestasData ?? []) as RespuestaReunion[]
@@ -153,9 +185,28 @@ export default async function ReunionPage({
             {proyecto ? ` · ${proyecto.nombre}` : ""}
           </p>
         </div>
-        <Badge variant={ESTADOS_REUNION[solicitud.estado].variant}>
-          {ESTADOS_REUNION[solicitud.estado].label}
-        </Badge>
+        <div className="flex items-center gap-2">
+          {editable && (
+            <EditarSolicitud
+              solicitud={solicitud}
+              socios={(sociosData ?? []) as Socio[]}
+              clientes={
+                (clientesData ?? []) as Pick<Cliente, "id" | "nombre" | "email">[]
+              }
+              proyectos={
+                (proyectosData ?? []) as {
+                  id: string
+                  nombre: string
+                  cliente_id: string | null
+                }[]
+              }
+              hoy={hoy}
+            />
+          )}
+          <Badge variant={ESTADOS_REUNION[solicitud.estado].variant}>
+            {ESTADOS_REUNION[solicitud.estado].label}
+          </Badge>
+        </div>
       </div>
 
       {solicitud.notas && (
