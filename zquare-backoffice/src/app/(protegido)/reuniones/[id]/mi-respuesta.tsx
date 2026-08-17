@@ -303,7 +303,9 @@ export function MiRespuesta({
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
 
-        <div className="overflow-x-auto">
+        {/* El padding negativo/positivo deja lugar al anillo del día activo,
+            que si no queda recortado por el overflow del scroll horizontal. */}
+        <div className="-m-1 overflow-x-auto p-1">
           <div className="min-w-[560px]">
             <div className="grid grid-cols-7 gap-1 pb-1">
               {DIAS_SEMANA.map((d) => (
