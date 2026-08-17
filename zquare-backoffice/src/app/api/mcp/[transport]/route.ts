@@ -1,8 +1,23 @@
 import { createMcpHandler, withMcpAuth } from "mcp-handler"
 import { z } from "zod"
 
+import {
+  etiquetaHueco,
+  FORMATO_FECHA,
+  FORMATO_HORA,
+} from "@/lib/disponibilidad"
+import { codigoReunion, type SolicitudReunion } from "@/lib/dominio"
 import { generarEmbeddings } from "@/lib/embeddings"
 import { socioDelAccessToken } from "@/lib/mcp-oauth"
+import {
+  agendarSolicitud,
+  CAMPOS_SOLICITUD,
+  cancelarSolicitud,
+  crearSolicitudReunion,
+  guardarRespuestaDe,
+  huecosDeSolicitud,
+  solicitudesPendientes,
+} from "@/lib/reuniones"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 // MCP server del backoffice: expone los datos de la empresa a Claude
@@ -346,6 +361,56 @@ async function idPorNombre(
     .limit(1)
     .maybeSingle()
   return data?.id ?? null
+}
+
+// Las reuniones se referencian por su código corto ("REU-7" o 7).
+function numeroDeReunion(referencia: string | number): number | null {
+  const n = Number(String(referencia).replace(/^reu-?/i, "").trim())
+  return Number.isInteger(n) && n > 0 ? n : null
+}
+
+async function solicitudPorReferencia(
+  referencia: string | number,
+  supabase: ReturnType<typeof createAdminClient>
+): Promise<SolicitudReunion | null> {
+  const numero = numeroDeReunion(referencia)
+  if (!numero) return null
+  const { data } = await supabase
+    .from("solicitudes_reunion")
+    .select(CAMPOS_SOLICITUD)
+    .eq("numero", numero)
+    .is("deleted_at", null)
+    .maybeSingle()
+  return (data as SolicitudReunion | null) ?? null
+}
+
+// Resuelve los socios de una reunión por nombre o email. Sin lista, van todos:
+// es el caso normal en una empresa de cuatro.
+async function sociosRequeridosMcp(
+  referencias: string[] | undefined
+): Promise<{ id: string; nombre: string }[]> {
+  const supabase = createAdminClient()
+  const { data } = await supabase
+    .from("socios")
+    .select("id, nombre, email")
+    .is("deleted_at", null)
+  const socios = (data ?? []) as { id: string; nombre: string; email: string }[]
+
+  if (!referencias || referencias.length === 0) return socios
+
+  const elegidos = referencias
+    .map((ref) => {
+      const buscado = ref.trim().toLowerCase()
+      return socios.find(
+        (s) =>
+          s.email.toLowerCase() === buscado ||
+          s.nombre.toLowerCase().includes(buscado)
+      )
+    })
+    .filter((s): s is { id: string; nombre: string; email: string } => Boolean(s))
+
+  // Sin duplicados si dos referencias apuntan al mismo socio.
+  return [...new Map(elegidos.map((s) => [s.id, s])).values()]
 }
 
 // Embedding de la consulta (Workers AI bge-m3). Null si falla: la búsqueda
@@ -2391,6 +2456,320 @@ const handler = createMcpHandler(
           .single()
         if (error) throw new Error(error.message)
         return texto({ registrado: data })
+      }
+    )
+
+    // ── Reuniones ─────────────────────────────────────────────────────────
+
+    server.registerTool(
+      "crear_solicitud_reunion",
+      {
+        title: "Abrir una encuesta de disponibilidad",
+        description:
+          "Abre una reunión a coordinar: define con quién hay que reunirse y en qué rango de días puede caer. A cada socio requerido le queda pendiente marcar cuándo puede. Después se usan ver_huecos_reunion y agendar_reunion. Las fechas van en formato YYYY-MM-DD.",
+        inputSchema: {
+          titulo: z.string().min(3),
+          desde: z.string().regex(FORMATO_FECHA, "Usar formato YYYY-MM-DD"),
+          hasta: z.string().regex(FORMATO_FECHA, "Usar formato YYYY-MM-DD"),
+          cliente: z.string().optional(),
+          proyecto: z.string().optional(),
+          duracion_min: z.union([z.literal(30), z.literal(60)]).optional(),
+          socios: z.array(z.string()).optional(),
+          invitar_cliente: z.boolean().optional(),
+          notas: z.string().optional(),
+        },
+      },
+      async (entrada, extra) => {
+        const supabase = createAdminClient()
+
+        // Cuatro lecturas independientes: van juntas.
+        const [{ socioId }, requeridos, clienteId, proyectoId] =
+          await Promise.all([
+            actorMcp(extra),
+            sociosRequeridosMcp(entrada.socios),
+            idPorNombre("clientes", entrada.cliente),
+            idPorNombre("proyectos", entrada.proyecto),
+          ])
+
+        if (requeridos.length === 0) {
+          return texto("No pude identificar a ningún socio para la reunión.")
+        }
+        if (entrada.cliente && !clienteId) {
+          return texto(`No encontré ningún cliente parecido a "${entrada.cliente}".`)
+        }
+        if (entrada.proyecto && !proyectoId) {
+          return texto(
+            `No encontré ningún proyecto parecido a "${entrada.proyecto}".`
+          )
+        }
+
+        const resultado = await crearSolicitudReunion(
+          {
+            titulo: entrada.titulo,
+            notas: entrada.notas ?? null,
+            cliente_id: clienteId ?? null,
+            proyecto_id: proyectoId ?? null,
+            duracion_min: entrada.duracion_min ?? 30,
+            ventana_desde: entrada.desde,
+            ventana_hasta: entrada.hasta,
+            socios_requeridos: requeridos.map((s) => s.id),
+            invitar_cliente: entrada.invitar_cliente ?? true,
+            created_by: socioId,
+          },
+          { supabase }
+        )
+        if (!resultado.ok) return texto(resultado.error)
+
+        return texto({
+          reunion: codigoReunion(resultado.numero),
+          url: `/reuniones/${resultado.id}`,
+          dias: `${entrada.desde} al ${entrada.hasta}`,
+          esperando_respuesta_de: requeridos.map((s) => s.nombre),
+        })
+      }
+    )
+
+    server.registerTool(
+      "listar_solicitudes_reunion",
+      {
+        title: "Reuniones a coordinar",
+        description:
+          "Lista las reuniones abiertas (esperando disponibilidad), agendadas o canceladas. Con solo_pendientes_mias devuelve solo las que están esperando la respuesta del socio dueño del token.",
+        inputSchema: {
+          estado: z.enum(["abierta", "agendada", "cancelada"]).optional(),
+          solo_pendientes_mias: z.boolean().optional(),
+        },
+      },
+      async ({ estado, solo_pendientes_mias }, extra) => {
+        const supabase = createAdminClient()
+
+        if (solo_pendientes_mias) {
+          const { socioId } = await actorMcp(extra)
+          if (!socioId) {
+            return texto("No pude identificar al socio dueño del token.")
+          }
+          const pendientes = await solicitudesPendientes(socioId, { supabase })
+          return texto({
+            pendientes: pendientes.map((s) => ({
+              reunion: codigoReunion(s.numero),
+              titulo: s.titulo,
+              dias: `${s.ventana_desde} al ${s.ventana_hasta}`,
+              duracion_min: s.duracion_min,
+            })),
+          })
+        }
+
+        let consulta = supabase
+          .from("solicitudes_reunion")
+          .select(CAMPOS_SOLICITUD)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false })
+          .limit(30)
+        if (estado) consulta = consulta.eq("estado", estado)
+
+        const { data } = await consulta
+        const solicitudes = (data ?? []) as SolicitudReunion[]
+
+        return texto({
+          reuniones: solicitudes.map((s) => ({
+            reunion: codigoReunion(s.numero),
+            titulo: s.titulo,
+            estado: s.estado,
+            dias: `${s.ventana_desde} al ${s.ventana_hasta}`,
+            duracion_min: s.duracion_min,
+            cuando: s.inicio ? etiquetaHueco({
+              inicio: Date.parse(s.inicio),
+              fin: Date.parse(s.fin ?? s.inicio),
+            }) : null,
+            meet_url: s.meet_url,
+          })),
+        })
+      }
+    )
+
+    server.registerTool(
+      "responder_disponibilidad",
+      {
+        title: "Marcar cuándo puede el socio",
+        description:
+          "Registra en qué franjas puede reunirse el socio dueño del token, dentro de los días propuestos. Las horas van en hora de Montevideo ('14:00'). Reemplaza la respuesta anterior. Con no_puedo se avisa que no puede en ninguno de esos días, que es distinto de no haber respondido.",
+        inputSchema: {
+          reunion: z.union([z.string(), z.number()]),
+          franjas: z
+            .array(
+              z.object({
+                fecha: z.string().regex(FORMATO_FECHA, "Usar formato YYYY-MM-DD"),
+                desde: z.string().regex(FORMATO_HORA, "Usar formato HH:MM"),
+                hasta: z.string().regex(FORMATO_HORA, "Usar formato HH:MM"),
+              })
+            )
+            .optional(),
+          no_puedo: z.boolean().optional(),
+          comentario: z.string().optional(),
+        },
+      },
+      async ({ reunion, franjas, no_puedo, comentario }, extra) => {
+        const supabase = createAdminClient()
+        const solicitud = await solicitudPorReferencia(reunion, supabase)
+        if (!solicitud) return texto(`No encontré la reunión "${reunion}".`)
+
+        const { socioId } = await actorMcp(extra)
+        if (!socioId) {
+          return texto("No pude identificar al socio dueño del token.")
+        }
+
+        // Sin franjas y sin no_puedo no hay nada que guardar: la lib lo
+        // rechaza para que un olvido no se lea como "no puede".
+        const resultado = await guardarRespuestaDe({
+          solicitudId: solicitud.id,
+          socioId,
+          franjas: franjas ?? [],
+          noPuede: no_puedo === true,
+          comentario: comentario ?? null,
+          supabase,
+          solicitud,
+        })
+        if (!resultado.ok) return texto(resultado.error ?? "No se pudo guardar.")
+
+        const resumen = await huecosDeSolicitud(solicitud.id, {
+          supabase,
+          solicitud,
+        })
+        return texto({
+          reunion: codigoReunion(solicitud.numero),
+          respuesta: no_puedo ? "no puede en esos días" : "guardada",
+          respondieron: `${resumen?.respondieron} de ${resumen?.requeridos}`,
+          faltan:
+            resumen?.socios
+              .filter((s) => s.estado === "falta")
+              .map((s) => s.socio.nombre) ?? [],
+          huecos_ahora: resumen?.huecos.length ?? 0,
+        })
+      }
+    )
+
+    server.registerTool(
+      "ver_huecos_reunion",
+      {
+        title: "Huecos en común de una reunión",
+        description:
+          "Calcula los horarios que le sirven a todos los socios que ya respondieron y que además tienen libres en Google Calendar. Devuelve los huecos con su hora de inicio en formato ISO, que es lo que espera agendar_reunion.",
+        inputSchema: { reunion: z.union([z.string(), z.number()]) },
+      },
+      async ({ reunion }) => {
+        const supabase = createAdminClient()
+        const solicitud = await solicitudPorReferencia(reunion, supabase)
+        if (!solicitud) return texto(`No encontré la reunión "${reunion}".`)
+
+        const resumen = await huecosDeSolicitud(solicitud.id, {
+          supabase,
+          solicitud,
+        })
+        if (!resumen) return texto(`No encontré la reunión "${reunion}".`)
+
+        return texto({
+          reunion: codigoReunion(solicitud.numero),
+          titulo: solicitud.titulo,
+          estado: solicitud.estado,
+          duracion_min: solicitud.duracion_min,
+          dias: `${solicitud.ventana_desde} al ${solicitud.ventana_hasta}`,
+          respondieron: `${resumen.respondieron} de ${resumen.requeridos}`,
+          faltan: resumen.socios
+            .filter((s) => s.estado === "falta")
+            .map((s) => s.socio.nombre),
+          no_pueden: resumen.socios
+            .filter((s) => s.estado === "no_puede")
+            .map((s) => s.socio.nombre),
+          parcial: resumen.parcial,
+          sin_acceso_al_calendario: resumen.sinAcceso,
+          huecos: resumen.huecos.map((h) => ({
+            cuando: etiquetaHueco(h),
+            inicio: new Date(h.inicio).toISOString(),
+          })),
+        })
+      }
+    )
+
+    server.registerTool(
+      "agendar_reunion",
+      {
+        title: "Agendar la reunión en un hueco",
+        description:
+          "Reserva uno de los huecos que devolvió ver_huecos_reunion: crea el evento en Google Calendar con link de Meet e invita a los socios y al cliente. `inicio` es el ISO exacto que vino en el hueco.",
+        inputSchema: {
+          reunion: z.union([z.string(), z.number()]),
+          inicio: z.string(),
+        },
+      },
+      async ({ reunion, inicio }, extra) => {
+        const supabase = createAdminClient()
+        const solicitud = await solicitudPorReferencia(reunion, supabase)
+        if (!solicitud) return texto(`No encontré la reunión "${reunion}".`)
+
+        const email = extra.authInfo?.extra?.email as string | undefined
+        const { socioId } = await actorMcp(extra)
+        if (!email) {
+          return texto("No pude identificar la cuenta del socio para organizar.")
+        }
+
+        const resultado = await agendarSolicitud({
+          solicitudId: solicitud.id,
+          inicioIso: inicio,
+          organizadorEmail: email,
+          organizadorSocioId: socioId,
+          supabase,
+          solicitud,
+        })
+
+        if (!resultado.ok) return texto(resultado.error ?? "No se pudo agendar.")
+        return texto({
+          agendada: codigoReunion(solicitud.numero),
+          cuando: resultado.inicio
+            ? etiquetaHueco({
+                inicio: Date.parse(resultado.inicio),
+                fin:
+                  Date.parse(resultado.inicio) +
+                  solicitud.duracion_min * 60_000,
+              })
+            : null,
+          meet_url: resultado.meetUrl ?? null,
+          advertencia: resultado.advertencia,
+        })
+      }
+    )
+
+    server.registerTool(
+      "cancelar_reunion",
+      {
+        title: "Cancelar una reunión",
+        description:
+          "Cancela la reunión y borra el evento de Google Calendar si ya estaba agendada, avisando a los invitados.",
+        inputSchema: {
+          reunion: z.union([z.string(), z.number()]),
+          motivo: z.string().optional(),
+        },
+      },
+      async ({ reunion, motivo }) => {
+        const supabase = createAdminClient()
+        const solicitud = await solicitudPorReferencia(reunion, supabase)
+        if (!solicitud) return texto(`No encontré la reunión "${reunion}".`)
+
+        const resultado = await cancelarSolicitud({
+          solicitudId: solicitud.id,
+          motivo: motivo ?? null,
+          supabase,
+          solicitud,
+        })
+        if (!resultado.ok) return texto(resultado.error ?? "No se pudo cancelar.")
+        return texto({
+          cancelada: codigoReunion(solicitud.numero),
+          evento_calendario: solicitud.google_event_id
+            ? resultado.advertencia
+              ? "no se pudo borrar"
+              : "borrado"
+            : "no había",
+          advertencia: resultado.advertencia,
+        })
       }
     )
   },
