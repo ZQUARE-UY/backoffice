@@ -52,16 +52,14 @@ export default async function ReunionPage({
   const supabase = await createClient()
   const socioId = await idSocioActual()
 
-  const [{ data: miRespuestaData }, { data: clienteData }, { data: proyectoData }] =
+  // Se traen las respuestas de todos: la propia alimenta el editor y las
+  // demás muestran, día por día, quién ya dijo que puede.
+  const [{ data: respuestasData }, { data: clienteData }, { data: proyectoData }] =
     await Promise.all([
-      socioId
-        ? supabase
-            .from("reunion_respuestas")
-            .select("id, solicitud_id, socio_id, franjas, comentario, created_at, updated_at")
-            .eq("solicitud_id", id)
-            .eq("socio_id", socioId)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
+      supabase
+        .from("reunion_respuestas")
+        .select("id, solicitud_id, socio_id, franjas, comentario, created_at, updated_at")
+        .eq("solicitud_id", id),
       solicitud.cliente_id
         ? supabase
             .from("clientes")
@@ -78,7 +76,29 @@ export default async function ReunionPage({
         : Promise.resolve({ data: null }),
     ])
 
-  const miRespuesta = miRespuestaData as RespuestaReunion | null
+  const respuestas = (respuestasData ?? []) as RespuestaReunion[]
+  const miRespuesta =
+    respuestas.find((r) => r.socio_id === socioId) ?? null
+
+  // Por día, los nombres de los socios que marcaron alguna franja ese día
+  // (uno mismo incluido: el editor ya lo distingue por su estado local).
+  const nombrePorSocio = new Map(socios.map((s) => [s.socio.id, s.socio.nombre]))
+  const puedenPorDia: Record<string, string[]> = {}
+  for (const r of respuestas) {
+    const nombre = nombrePorSocio.get(r.socio_id)
+    if (!nombre || r.socio_id === socioId) continue
+    const dias = Object.keys(
+      franjasPorDia(
+        r.franjas.map((f) => ({
+          inicio: Date.parse(f.inicio),
+          fin: Date.parse(f.fin),
+        }))
+      )
+    )
+    for (const dia of dias) {
+      ;(puedenPorDia[dia] ??= []).push(nombre)
+    }
+  }
   const cliente = clienteData as { nombre: string; email: string | null } | null
   const proyecto = proyectoData as { nombre: string } | null
 
@@ -212,6 +232,7 @@ export default async function ReunionPage({
           ventanaDesde={solicitud.ventana_desde}
           ventanaHasta={solicitud.ventana_hasta}
           inicial={inicial}
+          puedenPorDia={puedenPorDia}
           yaRespondi={Boolean(miRespuesta)}
           noPuedo={Boolean(miRespuesta && miRespuesta.franjas.length === 0)}
         />
