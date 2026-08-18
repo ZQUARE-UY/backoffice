@@ -10,6 +10,17 @@ import { codigoReunion, type SolicitudReunion } from "@/lib/dominio"
 import { generarEmbeddings } from "@/lib/embeddings"
 import { socioDelAccessToken } from "@/lib/mcp-oauth"
 import {
+  completarSprint,
+  iniciarSprint,
+  moverTarjetaASprint,
+  numeroDeSprint,
+  sprintActivo,
+  sprintPorNumero,
+  ubicacionCoherente,
+  type SprintResumen,
+  type Ubicacion,
+} from "@/lib/sprints"
+import {
   agendarSolicitud,
   CAMPOS_SOLICITUD,
   cancelarSolicitud,
@@ -327,6 +338,17 @@ async function actorMcp(
     ? await supabase.from("socios").select("nombre").eq("id", socioId).maybeSingle()
     : { data: null }
   return { socioId, autor: `${socio?.nombre ?? email ?? "Agente"} (Claude)` }
+}
+
+// Resuelve un sprint por referencia ("3", "Sprint 3"). Devuelve undefined si
+// no se pidió, null si no existe (con el mensaje para el agente).
+async function sprintPorReferencia(
+  referencia: string | number | undefined
+): Promise<SprintResumen | null | undefined> {
+  if (referencia === undefined) return undefined
+  const numero = numeroDeSprint(referencia)
+  if (!numero) return null
+  return sprintPorNumero(createAdminClient(), numero)
 }
 
 // Una tarjeta movida o creada por un agente entra arriba de su columna, donde
@@ -1110,12 +1132,17 @@ const handler = createMcpHandler(
       {
         title: "Listar tareas del tablero",
         description:
-          "Tarjetas del tablero de la empresa, agrupadas por columna. 'backlog' es la lista priorizada fuera del tablero (ideas sin comprometer); el tablero va de 'por_hacer' a 'hecho'. Por defecto omite las que están en 'hecho'. `desarrollada` indica si la tarjeta tiene definido su resultado esperado, que es lo que la vuelve resoluble: las que no (típicamente las recién creadas o las que salen de graduar una idea, que traen contexto pero no criterios) necesitan una pasada por el prompt `desarrollar_tarea` antes de que un agente las resuelva. El brief completo se ve con `ficha_tarea`. Para planificar un sprint, filtrá por proyecto: cada tarjeta trae su `codigo_proyecto`, `estimacion`, `moscow` y `epica`; las que vengan con `estimacion` en null no pueden entrar a un sprint hasta que el equipo las estime.",
+          "Tarjetas del tablero de la empresa, agrupadas por columna. 'backlog' es la lista priorizada fuera del tablero (ideas sin comprometer); el tablero va de 'por_hacer' a 'hecho'. Por defecto omite las que están en 'hecho'. `desarrollada` indica si la tarjeta tiene definido su resultado esperado, que es lo que la vuelve resoluble: las que no (típicamente las recién creadas o las que salen de graduar una idea, que traen contexto pero no criterios) necesitan una pasada por el prompt `desarrollar_tarea` antes de que un agente las resuelva. El brief completo se ve con `ficha_tarea`. Cada tarjeta trae su `sprint` (número y nombre, o null): las del sprint activo son el tablero de este ciclo; las de sprints planificados están en 'backlog' esperando que se inicie. Filtrá con `sprint` (número, o 'activo') para ver un sprint completo, y con `sin_sprint` para el backlog libre. Para planificar, filtrá por proyecto: cada tarjeta trae `codigo_proyecto`, `estimacion`, `moscow` y `epica`; las que vengan con `estimacion` en null no pueden entrar a un sprint hasta que el equipo las estime.",
         inputSchema: {
           estado: z.enum(ESTADOS_TAREA).optional(),
           asignado_email: z.string().optional(),
           cliente_nombre: z.string().optional(),
           proyecto_nombre: z.string().optional(),
+          sprint: z
+            .union([z.string(), z.number()])
+            .describe("número del sprint (3, 'Sprint 3') o 'activo'")
+            .optional(),
+          sin_sprint: z.boolean().describe("solo tarjetas sin sprint").optional(),
           incluir_hechas: z.boolean().optional(),
           limite: z.number().int().min(1).max(200).optional(),
         },
@@ -1125,6 +1152,8 @@ const handler = createMcpHandler(
         asignado_email,
         cliente_nombre,
         proyecto_nombre,
+        sprint,
+        sin_sprint,
         incluir_hechas,
         limite,
       }) => {
@@ -1134,7 +1163,7 @@ const handler = createMcpHandler(
           .select(
             // `tareas` tiene dos FK a socios (asignado_a y created_by): sin el
             // hint del constraint, PostgREST no sabe cuál embeber.
-            "numero, titulo, descripcion, contexto, resultado, recursos, plan, estado, prioridad, codigo_proyecto, estimacion, moscow, epica, etiquetas, fecha_limite, orden, asignado:socios!tareas_asignado_a_fkey(nombre, email), clientes(nombre), proyectos(nombre)"
+            "numero, titulo, descripcion, contexto, resultado, recursos, plan, estado, prioridad, codigo_proyecto, estimacion, moscow, epica, etiquetas, fecha_limite, orden, asignado:socios!tareas_asignado_a_fkey(nombre, email), clientes(nombre), proyectos(nombre), sprints(numero, nombre, estado)"
           )
           .is("deleted_at", null)
           .order("estado")
@@ -1143,6 +1172,19 @@ const handler = createMcpHandler(
 
         if (estado) q = q.eq("estado", estado)
         else if (!incluir_hechas) q = q.neq("estado", "hecho")
+
+        if (sprint !== undefined) {
+          const s =
+            String(sprint).trim().toLowerCase() === "activo"
+              ? await sprintActivo(supabase)
+              : await sprintPorReferencia(sprint)
+          if (!s) return texto(`No encontré el sprint "${sprint}".`)
+          q = q.eq("sprint_id", s.id)
+          // Un sprint completo incluye lo hecho (es su resumen).
+          if (!estado) q = q.in("estado", [...ESTADOS_TAREA])
+        } else if (sin_sprint) {
+          q = q.is("sprint_id", null)
+        }
 
         if (asignado_email) {
           const socioId = await socioIdPorEmail(asignado_email)
@@ -1167,7 +1209,7 @@ const handler = createMcpHandler(
         for (const t of data ?? []) {
           // El texto del brief se descarta (inflaría la respuesta): queda el
           // flag `desarrollada`; el contenido se pide con ficha_tarea.
-          const { numero, orden, contexto, resultado, recursos, plan, ...resto } = t
+          const { numero, orden, contexto, resultado, recursos, plan, sprints, ...resto } = t
           void orden
           void contexto
           void recursos
@@ -1175,10 +1217,16 @@ const handler = createMcpHandler(
           // Desarrollada = tiene `resultado`. Tener contexto no alcanza: es el
           // resultado lo que la vuelve verificable (ver dominio.ts).
           const desarrollada = Boolean(resultado)
+          const sprintDe = sprints as unknown as
+            | { numero: number; nombre: string; estado: string }
+            | null
           ;(porColumna[t.estado] ??= []).push({
             codigo: `ZQ-${numero}`,
             desarrollada,
             ...resto,
+            sprint: sprintDe
+              ? { numero: sprintDe.numero, nombre: sprintDe.nombre, estado: sprintDe.estado }
+              : null,
           })
         }
         return texto({ columnas: porColumna })
@@ -1201,7 +1249,7 @@ const handler = createMcpHandler(
         const { data } = await supabase
           .from("tareas")
           .select(
-            "id, numero, titulo, descripcion, contexto, resultado, recursos, plan, estado, prioridad, codigo_proyecto, estimacion, moscow, epica, etiquetas, fecha_limite, created_at, updated_at, asignado:socios!tareas_asignado_a_fkey(nombre, email), clientes(nombre), proyectos(nombre)"
+            "id, numero, titulo, descripcion, contexto, resultado, recursos, plan, estado, prioridad, codigo_proyecto, estimacion, moscow, epica, etiquetas, fecha_limite, created_at, updated_at, asignado:socios!tareas_asignado_a_fkey(nombre, email), clientes(nombre), proyectos(nombre), sprint:sprints(numero, nombre, estado)"
           )
           .eq("numero", numero)
           .is("deleted_at", null)
@@ -1237,11 +1285,15 @@ const handler = createMcpHandler(
       {
         title: "Crear una tarjeta",
         description:
-          "Crea una tarjeta. Entra arriba de su columna (por defecto 'backlog', la lista de ideas fuera del tablero; usá 'por_hacer' para que entre directo al tablero). Cliente y proyecto se resuelven por nombre aproximado. Alcanza con el título: el brief (contexto/resultado/recursos/plan) se completa después con el prompt `desarrollar_tarea`. Los campos de planificación (`codigo_proyecto`, `estimacion`, `moscow`, `epica`) sólo aplican a proyectos que siguen el estándar de ingeniería; `codigo_proyecto` es único dentro de su proyecto.",
+          "Crea una tarjeta. Entra arriba de su columna (por defecto 'backlog', la lista de ideas fuera del tablero; usá 'por_hacer' para que entre directo al tablero). Cliente y proyecto se resuelven por nombre aproximado. Alcanza con el título: el brief (contexto/resultado/recursos/plan) se completa después con el prompt `desarrollar_tarea`. Los campos de planificación (`codigo_proyecto`, `estimacion`, `moscow`, `epica`) sólo aplican a proyectos que siguen el estándar de ingeniería; `codigo_proyecto` es único dentro de su proyecto. `sprint` la agrega a un sprint: al activo entra al tablero, a uno planificado queda en backlog hasta que se inicie. Sin `sprint`, una tarjeta que entra al tablero se suma sola al sprint activo si lo hay.",
         inputSchema: {
           titulo: z.string().min(3),
           descripcion: z.string().optional(),
           estado: z.enum(ESTADOS_TAREA).optional(),
+          sprint: z
+            .union([z.string(), z.number()])
+            .describe("número del sprint (3, 'Sprint 3'); omitir para no asignar")
+            .optional(),
           prioridad: z.enum(PRIORIDADES_TAREA).optional(),
           asignado_email: z
             .string()
@@ -1292,8 +1344,24 @@ const handler = createMcpHandler(
           )
         }
 
-        const estado = entrada.estado ?? "backlog"
+        const sprintPedido = await sprintPorReferencia(entrada.sprint)
+        if (entrada.sprint !== undefined && !sprintPedido) {
+          return texto(`No encontré el sprint "${entrada.sprint}"; no creé nada.`)
+        }
         const supabase = createAdminClient()
+        // Coherencia columna ↔ sprint (lib/sprints.ts): con sprint, la columna
+        // se acomoda a él; sin sprint, entrar al tablero suma al activo.
+        let ubicacion: Ubicacion
+        try {
+          ubicacion = await ubicacionCoherente(
+            supabase,
+            { estado: entrada.estado ?? "backlog", sprint_id: sprintPedido?.id ?? null },
+            sprintPedido ? "sprint" : "estado"
+          )
+        } catch (e) {
+          return texto(`${e instanceof Error ? e.message : e}; no creé nada.`)
+        }
+        const estado = ubicacion.estado
         const contenido = {
           titulo: entrada.titulo,
           descripcion: entrada.descripcion ?? null,
@@ -1318,11 +1386,12 @@ const handler = createMcpHandler(
             asignado_a: asignadoId,
             cliente_id: clienteId ?? null,
             proyecto_id: proyectoId ?? null,
+            sprint_id: ubicacion.sprint_id,
             orden: await ordenAlTopeDeColumna(estado),
             created_by: actorId,
             metadata: { origen: "mcp" },
           })
-          .select("id, numero, titulo, estado, prioridad")
+          .select("id, numero, titulo, estado, prioridad, sprint:sprints(numero, nombre)")
           .single()
         if (error) throw new Error(error.message)
         // Primer snapshot del historial, atribuido al agente.
@@ -1343,7 +1412,7 @@ const handler = createMcpHandler(
       {
         title: "Actualizar una tarjeta",
         description:
-          "Cambia campos de una tarjeta existente, incluido su brief de desarrollo (contexto / resultado / recursos / plan). Solo se tocan los campos que se pasan; string vacío limpia el campo (y desvincula cliente/proyecto/responsable). Cada edición queda en el historial de versiones.",
+          "Cambia campos de una tarjeta existente, incluido su brief de desarrollo (contexto / resultado / recursos / plan). Solo se tocan los campos que se pasan; string vacío limpia el campo (y desvincula cliente/proyecto/responsable). Cada edición queda en el historial de versiones. Para cambiarla de sprint usá `mover_a_sprint`.",
         inputSchema: {
           tarea: z.union([z.string(), z.number()]),
           titulo: z.string().min(3).optional(),
@@ -1381,7 +1450,7 @@ const handler = createMcpHandler(
         const supabase = createAdminClient()
         const { data: actual } = await supabase
           .from("tareas")
-          .select("id, estado")
+          .select("id, estado, sprint_id")
           .eq("numero", numero)
           .is("deleted_at", null)
           .maybeSingle()
@@ -1404,8 +1473,16 @@ const handler = createMcpHandler(
         Object.assign(cambios, normalizarPlanificacion(entrada))
 
         if (entrada.estado !== undefined && entrada.estado !== actual.estado) {
-          cambios.estado = entrada.estado
-          cambios.orden = await ordenAlTopeDeColumna(entrada.estado)
+          // El sprint se acomoda a la columna (entrar al tablero suma al
+          // activo; volver a backlog desde el activo saca del sprint).
+          const ubicacion = await ubicacionCoherente(
+            supabase,
+            { estado: entrada.estado, sprint_id: actual.sprint_id },
+            "estado"
+          )
+          cambios.estado = ubicacion.estado
+          cambios.sprint_id = ubicacion.sprint_id
+          cambios.orden = await ordenAlTopeDeColumna(ubicacion.estado)
         }
 
         if (entrada.asignado_email !== undefined) {
@@ -1480,12 +1557,25 @@ const handler = createMcpHandler(
         if (!numero) return texto(`"${tarea}" no parece un número de tarjeta.`)
 
         const supabase = createAdminClient()
-        const { data, error } = await supabase
+        const { data: actual } = await supabase
           .from("tareas")
-          .update({ estado, orden: await ordenAlTopeDeColumna(estado) })
+          .select("sprint_id")
           .eq("numero", numero)
           .is("deleted_at", null)
-          .select("numero, titulo, estado")
+          .maybeSingle()
+        if (!actual) return texto(`No existe la tarjeta ZQ-${numero}.`)
+        // El sprint se acomoda a la columna (ver lib/sprints.ts).
+        const ubicacion = await ubicacionCoherente(
+          supabase,
+          { estado, sprint_id: actual.sprint_id },
+          "estado"
+        )
+        const { data, error } = await supabase
+          .from("tareas")
+          .update({ ...ubicacion, orden: await ordenAlTopeDeColumna(ubicacion.estado) })
+          .eq("numero", numero)
+          .is("deleted_at", null)
+          .select("numero, titulo, estado, sprint:sprints(numero, nombre)")
           .maybeSingle()
         if (error) throw new Error(error.message)
         if (!data) return texto(`No existe la tarjeta ZQ-${numero}.`)
@@ -1627,6 +1717,243 @@ const handler = createMcpHandler(
         })
         if (error) throw new Error(error.message)
         return texto({ comentado: `ZQ-${numero}` })
+      }
+    )
+
+    // ── Sprints ───────────────────────────────────────────────────────────
+    // Ciclo estilo Jira sobre el mismo tablero: crear (planificado) → mover
+    // tarjetas → iniciar (entran al tablero) → completar (lo hecho queda
+    // archivado en el sprint, lo pendiente vuelve al backlog o pasa al
+    // siguiente; el tablero queda limpio). Uno activo a la vez.
+    server.registerTool(
+      "listar_sprints",
+      {
+        title: "Listar sprints",
+        description:
+          "Sprints del tablero con sus métricas (tarjetas, hechas, puntos). Por defecto los abiertos (activo + planificados); `incluir_cerrados` suma el historial con el resumen de cierre. Las tarjetas de cada sprint se ven con `listar_tareas` filtrando por `sprint`.",
+        inputSchema: {
+          incluir_cerrados: z.boolean().optional(),
+          limite: z.number().int().min(1).max(100).optional(),
+        },
+      },
+      async ({ incluir_cerrados, limite }) => {
+        const supabase = createAdminClient()
+        let q = supabase
+          .from("sprints")
+          .select(
+            "numero, nombre, objetivo, estado, fecha_inicio, fecha_fin, iniciado_at, cerrado_at, metadata, proyectos(nombre), tareas(estado, estimacion)"
+          )
+          .is("deleted_at", null)
+          // Las tarjetas embebidas también filtran su soft delete.
+          .is("tareas.deleted_at", null)
+          .order("numero", { ascending: false })
+          .limit(limite ?? 20)
+        if (!incluir_cerrados) q = q.neq("estado", "cerrado")
+        const { data, error } = await q
+        if (error) throw new Error(error.message)
+
+        const sprints = (data ?? []).map((s) => {
+          const tarjetas = (s.tareas ?? []) as { estado: string; estimacion: number | null }[]
+          const hechas = tarjetas.filter((t) => t.estado === "hecho")
+          const { tareas, proyectos, metadata, ...resto } = s
+          void tareas
+          const proyecto = proyectos as unknown as { nombre: string } | null
+          return {
+            codigo: `Sprint ${s.numero}`,
+            ...resto,
+            proyecto: proyecto?.nombre ?? null,
+            tarjetas: tarjetas.length,
+            hechas: hechas.length,
+            puntos: tarjetas.reduce((acc, t) => acc + (t.estimacion ?? 0), 0),
+            puntos_hechos: hechas.reduce((acc, t) => acc + (t.estimacion ?? 0), 0),
+            resumen_cierre: (metadata as { resumen?: unknown } | null)?.resumen ?? null,
+          }
+        })
+        return texto({ sprints })
+      }
+    )
+
+    server.registerTool(
+      "crear_sprint",
+      {
+        title: "Crear un sprint",
+        description:
+          "Crea un sprint planificado. Después se le agregan tarjetas con `mover_a_sprint` (o `crear_tarea` con `sprint`) y se arranca con `iniciar_sprint`. `proyecto_nombre` es opcional: marca el foco del sprint, no restringe qué tarjetas entran.",
+        inputSchema: {
+          nombre: z.string().min(2).describe("p. ej. 'Sprint 4' o 'Sprint 4 — Onboarding'"),
+          objetivo: z.string().optional(),
+          fecha_inicio: z.string().describe("YYYY-MM-DD").optional(),
+          fecha_fin: z.string().describe("YYYY-MM-DD").optional(),
+          proyecto_nombre: z.string().optional(),
+        },
+      },
+      async (entrada, extra) => {
+        const proyectoId = await idPorNombre("proyectos", entrada.proyecto_nombre)
+        if (entrada.proyecto_nombre && !proyectoId) {
+          return texto(`No encontré el proyecto "${entrada.proyecto_nombre}"; no creé nada.`)
+        }
+        const { socioId } = await actorMcp(extra)
+        const supabase = createAdminClient()
+        const { data, error } = await supabase
+          .from("sprints")
+          .insert({
+            nombre: entrada.nombre,
+            objetivo: entrada.objetivo ?? null,
+            fecha_inicio: entrada.fecha_inicio ?? null,
+            fecha_fin: entrada.fecha_fin ?? null,
+            proyecto_id: proyectoId ?? null,
+            created_by: socioId,
+            metadata: { origen: "mcp" },
+          })
+          .select("numero, nombre, estado, fecha_inicio, fecha_fin")
+          .single()
+        if (error) throw new Error(error.message)
+        return texto({
+          creado: { codigo: `Sprint ${data.numero}`, ...data },
+          ver: "/tareas?vista=backlog",
+        })
+      }
+    )
+
+    server.registerTool(
+      "mover_a_sprint",
+      {
+        title: "Mover una tarjeta a un sprint",
+        description:
+          "Agrega una tarjeta a un sprint, o la saca (sprint = 'backlog'). Al sprint activo entra al tablero (Por hacer, arriba); a un sprint planificado queda en backlog agrupada bajo él hasta que se inicie; sacarla del sprint la devuelve al backlog libre. No se agregan tarjetas a sprints cerrados.",
+        inputSchema: {
+          tarea: z.union([z.string(), z.number()]),
+          sprint: z
+            .union([z.string(), z.number()])
+            .describe("número del sprint (3, 'Sprint 3'), 'activo', o 'backlog' para sacarla"),
+        },
+      },
+      async ({ tarea, sprint }) => {
+        const numero = numeroDeTarea(tarea)
+        if (!numero) return texto(`"${tarea}" no parece un número de tarjeta.`)
+        const supabase = createAdminClient()
+        const { data: tarjeta } = await supabase
+          .from("tareas")
+          .select("id, titulo")
+          .eq("numero", numero)
+          .is("deleted_at", null)
+          .maybeSingle()
+        if (!tarjeta) return texto(`No existe la tarjeta ZQ-${numero}.`)
+
+        const ref = String(sprint).trim().toLowerCase()
+        let destino: SprintResumen | null = null
+        if (ref !== "backlog" && ref !== "") {
+          destino =
+            ref === "activo"
+              ? await sprintActivo(supabase)
+              : (await sprintPorReferencia(sprint)) ?? null
+          if (!destino) return texto(`No encontré el sprint "${sprint}".`)
+        }
+        try {
+          const ubicacion = await moverTarjetaASprint(supabase, tarjeta.id, destino?.id ?? null)
+          return texto({
+            movida: {
+              codigo: `ZQ-${numero}`,
+              titulo: tarjeta.titulo,
+              sprint: destino ? `Sprint ${destino.numero}` : null,
+              estado: ubicacion.estado,
+            },
+          })
+        } catch (e) {
+          return texto(`${e instanceof Error ? e.message : e}; no moví nada.`)
+        }
+      }
+    )
+
+    server.registerTool(
+      "iniciar_sprint",
+      {
+        title: "Iniciar un sprint",
+        description:
+          "Pasa un sprint planificado a activo: sus tarjetas entran al tope de Por hacer conservando su prioridad. Solo puede haber un sprint activo; si hay otro, hay que completarlo antes. Las fechas son opcionales (si no se pasan quedan las del sprint).",
+        inputSchema: {
+          sprint: z.union([z.string(), z.number()]),
+          fecha_inicio: z.string().describe("YYYY-MM-DD").optional(),
+          fecha_fin: z.string().describe("YYYY-MM-DD").optional(),
+        },
+      },
+      async ({ sprint, fecha_inicio, fecha_fin }) => {
+        const s = await sprintPorReferencia(sprint)
+        if (!s) return texto(`No encontré el sprint "${sprint}".`)
+        const supabase = createAdminClient()
+        const { data: fechas } = await supabase
+          .from("sprints")
+          .select("fecha_inicio, fecha_fin")
+          .eq("id", s.id)
+          .maybeSingle()
+        try {
+          const resultado = await iniciarSprint(supabase, s.id, {
+            fecha_inicio: fecha_inicio ?? fechas?.fecha_inicio ?? null,
+            fecha_fin: fecha_fin ?? fechas?.fecha_fin ?? null,
+          })
+          return texto({
+            iniciado: {
+              codigo: `Sprint ${resultado.sprint.numero}`,
+              nombre: resultado.sprint.nombre,
+              tarjetas_al_tablero: resultado.tarjetas,
+            },
+            ver: "/tareas",
+          })
+        } catch (e) {
+          return texto(`${e instanceof Error ? e.message : e}; no inicié nada.`)
+        }
+      }
+    )
+
+    server.registerTool(
+      "completar_sprint",
+      {
+        title: "Completar un sprint",
+        description:
+          "Cierra el sprint activo y limpia el tablero: las tarjetas en 'hecho' quedan archivadas en el sprint (dejan de verse en el tablero) y las pendientes vuelven al backlog o pasan al sprint planificado que se indique en `pendientes_a`. Devuelve el resumen (hechas, pendientes, puntos). Antes de completar conviene revisar con listar_tareas(sprint='activo') qué queda pendiente y consultar al socio si no está claro adónde va.",
+        inputSchema: {
+          sprint: z
+            .union([z.string(), z.number()])
+            .describe("número del sprint o 'activo'")
+            .optional(),
+          pendientes_a: z
+            .union([z.string(), z.number()])
+            .describe("'backlog' (default) o el número de un sprint planificado")
+            .optional(),
+        },
+      },
+      async ({ sprint, pendientes_a }) => {
+        const supabase = createAdminClient()
+        const s =
+          sprint === undefined || String(sprint).trim().toLowerCase() === "activo"
+            ? await sprintActivo(supabase)
+            : await sprintPorReferencia(sprint)
+        if (!s) return texto(sprint === undefined ? "No hay un sprint activo." : `No encontré el sprint "${sprint}".`)
+
+        let destino: { tipo: "backlog" } | { tipo: "sprint"; sprint_id: string } = {
+          tipo: "backlog",
+        }
+        if (pendientes_a !== undefined && String(pendientes_a).trim().toLowerCase() !== "backlog") {
+          const d = await sprintPorReferencia(pendientes_a)
+          if (!d) return texto(`No encontré el sprint destino "${pendientes_a}"; no cerré nada.`)
+          destino = { tipo: "sprint", sprint_id: d.id }
+        }
+        try {
+          const r = await completarSprint(supabase, s.id, destino)
+          return texto({
+            completado: {
+              codigo: `Sprint ${r.sprint.numero}`,
+              nombre: r.sprint.nombre,
+              hechas: r.hechas,
+              pendientes: r.pendientes,
+              puntos_hechos: r.puntos_hechos,
+              pendientes_a: r.pendientes_a,
+            },
+            ver: "/tareas",
+          })
+        } catch (e) {
+          return texto(`${e instanceof Error ? e.message : e}; no cerré nada.`)
+        }
       }
     )
 

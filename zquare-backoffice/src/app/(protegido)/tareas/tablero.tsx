@@ -1,9 +1,11 @@
 "use client"
 
 import { useOptimistic, useState, useTransition } from "react"
-import { CalendarIcon, UserIcon } from "lucide-react"
+import Link from "next/link"
+import { CalendarIcon, FlagIcon, UserIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import {
@@ -15,6 +17,7 @@ import {
   type ComentarioTarea,
   type EstadoTarea,
   type Socio,
+  type Sprint,
   type Tarea,
   type VersionTarea,
 } from "@/lib/dominio"
@@ -24,6 +27,7 @@ import { type ClienteOpcion, type ProyectoOpcion } from "./campos-tarea"
 import { DetalleTarea } from "./detalle-tarea"
 import { NuevaTarea } from "./nueva-tarea"
 import { ordenEntre } from "./orden"
+import { EncabezadoSprint, resumirSprint } from "./sprints"
 
 type Movimiento = { id: string; estado: EstadoTarea; orden: number }
 
@@ -34,6 +38,8 @@ export function Tablero({
   socios,
   clientes,
   proyectos,
+  sprints,
+  hrefBacklog,
   tareaAbierta,
 }: {
   tareas: Tarea[]
@@ -42,6 +48,9 @@ export function Tablero({
   socios: Socio[]
   clientes: ClienteOpcion[]
   proyectos: ProyectoOpcion[]
+  // Sprints abiertos (activo + planificados). El tablero muestra el activo.
+  sprints: Sprint[]
+  hrefBacklog: string
   tareaAbierta?: number
 }) {
   const [, iniciarTransicion] = useTransition()
@@ -57,6 +66,9 @@ export function Tablero({
 
   const nombreCliente = new Map(clientes.map((c) => [c.id, c.nombre]))
   const nombreSocio = new Map(socios.map((s) => [s.id, s.nombre]))
+
+  const activo = sprints.find((s) => s.estado === "activo") ?? null
+  const planificados = sprints.filter((s) => s.estado === "planificado")
 
   function columna(estado: EstadoTarea) {
     return vista
@@ -86,6 +98,41 @@ export function Tablero({
   }
 
   return (
+    <div className="flex flex-col gap-4">
+      {/* Banner del sprint: el tablero ES el sprint activo (más lo que no tiene
+          sprint). Sin activo, invita a iniciar el planificado o a crear uno. */}
+      {activo ? (
+        <div className="rounded-xl border bg-muted/30 px-3 py-2">
+          <EncabezadoSprint
+            sprint={activo}
+            resumen={resumirSprint(vista.filter((t) => t.sprint_id === activo.id))}
+            sprintsPlanificados={planificados}
+            proyectos={proyectos}
+          />
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-dashed px-3 py-2 text-sm text-muted-foreground">
+          <FlagIcon className="size-4" />
+          {planificados.length > 0 ? (
+            <span>
+              Sin sprint activo. {planificados[0].nombre} está planificado
+              {planificados.length > 1 && ` (y ${planificados.length - 1} más)`}.
+            </span>
+          ) : (
+            <span>Sin sprint activo: el tablero es un flujo continuo.</span>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={<Link href={hrefBacklog} />}
+            className="ml-auto"
+          >
+            {planificados.length > 0 ? "Ir a iniciarlo" : "Planificar un sprint"}
+          </Button>
+        </div>
+      )}
+
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       {ESTADOS_TABLERO.map((estado) => {
         const items = columna(estado)
@@ -155,6 +202,7 @@ export function Tablero({
               >
                 <DetalleTarea
                   tarea={tarea}
+                  sprints={sprints}
                   comentarios={comentarios.filter((c) => c.tarea_id === tarea.id)}
                   versiones={versiones.filter((v) => v.tarea_id === tarea.id)}
                   socios={socios}
@@ -218,12 +266,15 @@ export function Tablero({
               socios={socios}
               clientes={clientes}
               proyectos={proyectos}
+              sprints={sprints}
               estadoInicial={estado}
+              sprintInicial={activo?.id ?? null}
               variante="columna"
             />
           </div>
         )
       })}
+    </div>
     </div>
   )
 }

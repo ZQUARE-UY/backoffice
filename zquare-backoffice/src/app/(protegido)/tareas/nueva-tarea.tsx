@@ -13,7 +13,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Spinner } from "@/components/ui/spinner"
-import { type EstadoTarea, type Socio } from "@/lib/dominio"
+import { type EstadoTarea, type Socio, type Sprint } from "@/lib/dominio"
 
 import { crearTarea } from "./actions"
 import {
@@ -26,13 +26,17 @@ export function NuevaTarea({
   socios,
   clientes,
   proyectos,
+  sprints = [],
   estadoInicial,
+  sprintInicial,
   variante = "boton",
 }: {
   socios: Socio[]
   clientes: ClienteOpcion[]
   proyectos: ProyectoOpcion[]
+  sprints?: Sprint[]
   estadoInicial?: EstadoTarea
+  sprintInicial?: string | null
   variante?: "boton" | "columna"
 }) {
   const [abierto, setAbierto] = useState(false)
@@ -74,9 +78,11 @@ export function NuevaTarea({
             </DialogHeader>
             <CamposTarea
               estadoInicial={estadoInicial}
+              sprintInicial={sprintInicial}
               socios={socios}
               clientes={clientes}
               proyectos={proyectos}
+              sprints={sprints}
             />
             <DialogFooter>
               <Button type="submit" disabled={pendiente}>

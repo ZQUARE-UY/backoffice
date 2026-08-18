@@ -15,8 +15,10 @@ import {
   MOSCOW_TAREA,
   PRIORIDADES_TAREA,
   PUNTOS_TAREA,
+  ESTADOS_SPRINT,
   type EstadoTarea,
   type Socio,
+  type Sprint,
   type Tarea,
 } from "@/lib/dominio"
 
@@ -31,15 +33,21 @@ export type ClienteOpcion = { id: string; nombre: string }
 export function CamposTarea({
   tarea,
   estadoInicial,
+  sprintInicial,
   socios,
   clientes,
   proyectos,
+  sprints = [],
 }: {
   tarea?: Tarea
   estadoInicial?: EstadoTarea
+  sprintInicial?: string | null
   socios: Socio[]
   clientes: ClienteOpcion[]
   proyectos: ProyectoOpcion[]
+  // Sprints abiertos (activo + planificados) para el select. Vacío = sin
+  // sprints: el campo no se muestra.
+  sprints?: Sprint[]
 }) {
   // Cascada cliente → proyecto: con un cliente elegido solo se ofrecen sus
   // proyectos (evita guardar un proyecto de otro cliente); sin cliente se ven
@@ -112,6 +120,30 @@ export function CamposTarea({
             }))}
           />
         </Field>
+        {(sprints.length > 0 || tarea?.sprint_id) && (
+          <Field>
+            <FieldLabel htmlFor="sprint_id">Sprint</FieldLabel>
+            {/* Si se elige un sprint, la columna se acomoda a él (activo →
+                tablero, planificado → backlog); ver lib/sprints.ts. */}
+            <SelectCampo
+              id="sprint_id"
+              name="sprint_id"
+              defaultValue={tarea?.sprint_id ?? sprintInicial ?? ""}
+              opciones={[
+                { valor: "", label: "Sin sprint" },
+                ...sprints.map((s) => ({
+                  valor: s.id,
+                  label: `${s.nombre} (${ESTADOS_SPRINT[s.estado].label.toLowerCase()})`,
+                })),
+                // Tarjeta de un sprint ya cerrado (archivada): se conserva
+                // como opción para que editarla no la saque del sprint.
+                ...(tarea?.sprint_id && !sprints.some((s) => s.id === tarea.sprint_id)
+                  ? [{ valor: tarea.sprint_id, label: "Sprint cerrado (archivada)" }]
+                  : []),
+              ]}
+            />
+          </Field>
+        )}
         <Field>
           <FieldLabel htmlFor="prioridad">Prioridad</FieldLabel>
           <SelectCampo

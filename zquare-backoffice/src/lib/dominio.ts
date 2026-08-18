@@ -333,6 +333,52 @@ export function tareaDesarrollada(tarea: Pick<Tarea, CampoBrief>): boolean {
   return Boolean(tarea.resultado)
 }
 
+// Sprints del tablero (estilo Jira). Uno activo a la vez: se planifica en la
+// vista Backlog, se inicia (sus tarjetas entran al tablero) y se completa (lo
+// hecho queda archivado en él y lo pendiente vuelve al backlog o pasa al
+// siguiente; el tablero queda limpio).
+export const ESTADOS_SPRINT = {
+  planificado: { label: "Planificado", variant: "outline" as const },
+  activo: { label: "Activo", variant: "default" as const },
+  cerrado: { label: "Cerrado", variant: "secondary" as const },
+}
+
+export type EstadoSprint = keyof typeof ESTADOS_SPRINT
+
+export type Sprint = {
+  id: string
+  numero: number
+  nombre: string
+  objetivo: string | null
+  estado: EstadoSprint
+  fecha_inicio: string | null
+  fecha_fin: string | null
+  iniciado_at: string | null
+  cerrado_at: string | null
+  proyecto_id: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+// Nombre corto y estable de un sprint para hablar de él ("Sprint 3"), como
+// ZQ-N en tareas. `nombre` es el título libre que le pone el equipo.
+export function codigoSprint(numero: number): string {
+  return `Sprint ${numero}`
+}
+
+// Días que le quedan a un sprint activo (negativo si ya se pasó). Null si no
+// tiene fecha de fin.
+export function diasRestantesSprint(
+  sprint: Pick<Sprint, "fecha_fin">,
+  hoy: Date = new Date()
+): number | null {
+  if (!sprint.fecha_fin) return null
+  const fin = new Date(`${sprint.fecha_fin}T00:00:00`)
+  const inicioHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
+  return Math.round((fin.getTime() - inicioHoy.getTime()) / 86_400_000)
+}
+
 // Ciclo de vida de una idea del banco. El orden de las claves es el orden en
 // que se muestran las secciones en /ideas.
 export const ESTADOS_IDEA = {
@@ -547,6 +593,7 @@ export type Tarea = {
   asignado_a: string | null
   cliente_id: string | null
   proyecto_id: string | null
+  sprint_id: string | null
   etiquetas: string[]
   fecha_limite: string | null
   orden: number
