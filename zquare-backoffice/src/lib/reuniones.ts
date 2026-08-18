@@ -56,7 +56,7 @@ export async function fechaDeHoy(): Promise<string> {
 }
 
 export const CAMPOS_SOLICITUD =
-  "id, numero, titulo, notas, cliente_id, proyecto_id, duracion_min, ventana_desde, ventana_hasta, socios_requeridos, invitar_cliente, estado, inicio, fin, google_event_id, google_calendar_id, meet_url, agendada_por, agendada_at, metadata, created_by, created_at, updated_at"
+  "id, numero, titulo, notas, cliente_id, proyecto_id, duracion_min, ventana_desde, ventana_hasta, socios_requeridos, invitar_cliente, invitados_externos, estado, inicio, fin, google_event_id, google_calendar_id, meet_url, agendada_por, agendada_at, metadata, created_by, created_at, updated_at"
 
 // Ventana máxima de días candidatos; la migración lo refuerza con un check.
 export const MAX_DIAS_VENTANA = 60
@@ -86,7 +86,22 @@ export type DatosSolicitud = {
   ventana_hasta: string
   socios_requeridos: string[]
   invitar_cliente: boolean
+  invitados_externos: string[]
   created_by: string | null
+}
+
+const FORMATO_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+// "a@x.com, b@y.com" → ["a@x.com","b@y.com"], en minúsculas y sin repetir.
+export function parsearEmails(texto: string | null | undefined): string[] {
+  return Array.from(
+    new Set(
+      (texto ?? "")
+        .split(/[,;\s]+/)
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean)
+    )
+  )
 }
 
 // Alta de una solicitud. Las server actions y el MCP entran por acá: las
@@ -117,6 +132,10 @@ function validarDatosSolicitud(datos: DatosSolicitud): string | null {
   if (datos.duracion_min !== 30 && datos.duracion_min !== 60) {
     return "La duración tiene que ser de 30 o 60 minutos"
   }
+  const malos = datos.invitados_externos.filter((e) => !FORMATO_EMAIL.test(e))
+  if (malos.length > 0) {
+    return `Hay un mail que no entiendo: ${malos.join(", ")}`
+  }
   return null
 }
 
@@ -131,6 +150,7 @@ function filaDe(datos: DatosSolicitud) {
     ventana_hasta: datos.ventana_hasta,
     socios_requeridos: datos.socios_requeridos,
     invitar_cliente: datos.invitar_cliente,
+    invitados_externos: datos.invitados_externos,
   }
 }
 
@@ -534,6 +554,9 @@ export async function agendarSolicitud(params: {
       .maybeSingle()
     emailCliente = (cliente as { email: string | null } | null)?.email ?? null
     if (emailCliente) invitados.push(emailCliente)
+  }
+  for (const email of resumen.solicitud.invitados_externos ?? []) {
+    if (!invitados.includes(email)) invitados.push(email)
   }
 
   const inicio = new Date(hueco.inicio).toISOString()

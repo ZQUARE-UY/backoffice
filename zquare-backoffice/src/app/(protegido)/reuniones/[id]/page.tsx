@@ -154,6 +154,7 @@ export default async function ReunionPage({
 
   const invitados = socios.map((s) => s.socio.nombre)
   if (solicitud.invitar_cliente && cliente?.email) invitados.push(cliente.nombre)
+  invitados.push(...(solicitud.invitados_externos ?? []))
 
   const errorCalendario = (solicitud.metadata as { error_calendario?: string })
     ?.error_calendario

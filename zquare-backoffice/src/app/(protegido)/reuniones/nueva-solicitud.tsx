@@ -226,6 +226,25 @@ export function FormularioSolicitud({
               )}
 
               <Field>
+                <FieldLabel htmlFor="invitados_externos">
+                  Otros invitados (opcional)
+                </FieldLabel>
+                <Input
+                  id="invitados_externos"
+                  name="invitados_externos"
+                  type="text"
+                  inputMode="email"
+                  autoComplete="off"
+                  defaultValue={(solicitud?.invitados_externos ?? []).join(", ")}
+                  placeholder="ana@cliente.com, pedro@cliente.com"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Mails de gente del cliente que tiene que recibir la invitación
+                  al Meet, separados por coma.
+                </p>
+              </Field>
+
+              <Field>
                 <FieldLabel htmlFor="notas">Notas (opcional)</FieldLabel>
                 <Textarea
                   id="notas"

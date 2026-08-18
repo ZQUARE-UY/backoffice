@@ -17,6 +17,7 @@ import {
   crearSolicitudReunion,
   editarSolicitudReunion,
   guardarRespuestaDe,
+  parsearEmails,
   huecosDeSolicitud,
   solicitudesPendientes,
 } from "@/lib/reuniones"
@@ -2805,6 +2806,10 @@ const handler = createMcpHandler(
           duracion_min: z.union([z.literal(30), z.literal(60)]).optional(),
           socios: z.array(z.string()).optional(),
           invitar_cliente: z.boolean().optional(),
+          invitados: z
+            .array(z.string())
+            .optional()
+            .describe("Mails de gente del cliente que recibe la invitación"),
           notas: z.string().optional(),
         },
       },
@@ -2843,6 +2848,7 @@ const handler = createMcpHandler(
             ventana_hasta: entrada.hasta,
             socios_requeridos: requeridos.map((s) => s.id),
             invitar_cliente: entrada.invitar_cliente ?? true,
+            invitados_externos: parsearEmails((entrada.invitados ?? []).join(",")),
             created_by: socioId,
           },
           { supabase }
@@ -2874,6 +2880,10 @@ const handler = createMcpHandler(
           duracion_min: z.union([z.literal(30), z.literal(60)]).optional(),
           socios: z.array(z.string()).optional(),
           invitar_cliente: z.boolean().optional(),
+          invitados: z
+            .array(z.string())
+            .optional()
+            .describe("Reemplaza la lista de mails externos invitados"),
           notas: z.string().nullable().optional(),
         },
       },
@@ -2924,6 +2934,9 @@ const handler = createMcpHandler(
               ? requeridos.map((s) => s.id)
               : solicitud.socios_requeridos,
             invitar_cliente: entrada.invitar_cliente ?? solicitud.invitar_cliente,
+            invitados_externos: entrada.invitados
+              ? parsearEmails(entrada.invitados.join(","))
+              : (solicitud.invitados_externos ?? []),
           },
         })
         if (!resultado.ok) return texto(resultado.error ?? "No se pudo editar.")
