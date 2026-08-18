@@ -229,6 +229,28 @@ function PintorDeDia({
   )
 }
 
+// Disponibilidad de otro socio, en la misma escala que la tira propia, solo
+// lectura: sirve para pintar encima de lo que ya le sirve a los demás.
+function FilaDeOtro({ nombre, rangos }: { nombre: string; rangos: Rango[] }) {
+  const bloques = bloquesDe(rangos)
+  return (
+    <div className="relative" title={`${nombre}: ${resumenRangos(rangos)}`}>
+      <div
+        className="grid h-2.5 gap-px overflow-hidden rounded"
+        style={{ gridTemplateColumns: `repeat(${CANT_BLOQUES}, minmax(0, 1fr))` }}
+      >
+        {bloques.map((b, i) => (
+          <span key={i} className={b ? "bg-primary/40" : "bg-muted"} />
+        ))}
+      </div>
+      {/* Iniciales por fuera de la tira, a la izquierda, sin correr la escala. */}
+      <span className="absolute -left-7 top-1/2 w-6 -translate-y-1/2 text-right text-[10px] font-medium text-muted-foreground">
+        {iniciales(nombre)}
+      </span>
+    </div>
+  )
+}
+
 // ── Componente ────────────────────────────────────────────────────────────
 
 // Cada socio pinta acá los ratos en que le sirve reunirse, sobre una grilla
@@ -241,7 +263,7 @@ export function MiRespuesta({
   ventanaDesde,
   ventanaHasta,
   inicial,
-  puedenPorDia,
+  otrosPorDia,
   yaRespondi,
   noPuedo,
 }: {
@@ -250,8 +272,8 @@ export function MiRespuesta({
   ventanaHasta: string
   // Franjas ya guardadas, como hora de pared por día.
   inicial: Record<string, Rango[]>
-  // Nombres de los otros socios que marcaron algo cada día.
-  puedenPorDia: Record<string, string[]>
+  // Franjas de los otros socios que ya respondieron, por día.
+  otrosPorDia: Record<string, { nombre: string; rangos: Rango[] }[]>
   yaRespondi: boolean
   noPuedo: boolean
 }) {
@@ -340,7 +362,14 @@ export function MiRespuesta({
                     const bloques = porDia[fecha] ?? []
                     const rangos = rangosPorDia[fecha] ?? []
                     const marcado = rangos.length > 0
-                    const otros = puedenPorDia[fecha] ?? []
+                    const otros = otrosPorDia[fecha] ?? []
+                    // Bloques donde al menos otro socio dijo que puede.
+                    const deOtros = otros
+                      .map((o) => bloquesDe(o.rangos))
+                      .reduce<boolean[]>(
+                        (acc, b) => acc.map((v, i) => v || b[i]),
+                        Array<boolean>(CANT_BLOQUES).fill(false)
+                      )
                     const esActivo = activo === fecha
                     const dia = Number(fecha.slice(8, 10))
                     const primeroDeMes = dia === 1 || fecha === dias[0]
@@ -393,7 +422,11 @@ export function MiRespuesta({
                                 key={i}
                                 className={cn(
                                   "rounded-[1px]",
-                                  b ? "bg-primary" : "bg-muted"
+                                  b
+                                    ? "bg-primary"
+                                    : deOtros[i]
+                                      ? "bg-primary/30"
+                                      : "bg-muted"
                                 )}
                               />
                             ))}
@@ -409,14 +442,14 @@ export function MiRespuesta({
                         {dentro && otros.length > 0 && (
                           <span
                             className="mt-auto flex flex-wrap gap-0.5"
-                            title={`Pueden: ${otros.join(", ")}`}
+                            title={`Pueden: ${otros.map((o) => o.nombre).join(", ")}`}
                           >
-                            {otros.map((nombre) => (
+                            {otros.map((o) => (
                               <span
-                                key={nombre}
+                                key={o.nombre}
                                 className="rounded-full bg-muted px-1.5 text-[10px] font-medium text-muted-foreground"
                               >
-                                {iniciales(nombre)}
+                                {iniciales(o.nombre)}
                               </span>
                             ))}
                           </span>
@@ -431,7 +464,7 @@ export function MiRespuesta({
         </div>
 
         {activo && (
-          <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-3">
+          <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-3 pl-10">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <span className="text-sm font-medium capitalize">
                 {etiquetaLarga(activo)}
@@ -449,6 +482,14 @@ export function MiRespuesta({
                 setPorDia((previo) => ({ ...previo, [activo]: bloques }))
               }
             />
+
+            {(otrosPorDia[activo] ?? []).length > 0 && (
+              <div className="flex flex-col gap-1">
+                {(otrosPorDia[activo] ?? []).map((o) => (
+                  <FilaDeOtro key={o.nombre} nombre={o.nombre} rangos={o.rangos} />
+                ))}
+              </div>
+            )}
           </div>
         )}
 

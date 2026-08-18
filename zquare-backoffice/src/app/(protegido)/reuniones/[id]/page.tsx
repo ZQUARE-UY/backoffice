@@ -112,23 +112,24 @@ export default async function ReunionPage({
   const miRespuesta =
     respuestas.find((r) => r.socio_id === socioId) ?? null
 
-  // Por día, los nombres de los socios que marcaron alguna franja ese día
-  // (uno mismo incluido: el editor ya lo distingue por su estado local).
+  // Por día, las franjas (hora de pared) de los otros socios que ya
+  // respondieron, para dibujarlas en el calendario junto a las propias.
   const nombrePorSocio = new Map(socios.map((s) => [s.socio.id, s.socio.nombre]))
-  const puedenPorDia: Record<string, string[]> = {}
+  const otrosPorDia: Record<
+    string,
+    { nombre: string; rangos: { desde: string; hasta: string }[] }[]
+  > = {}
   for (const r of respuestas) {
     const nombre = nombrePorSocio.get(r.socio_id)
     if (!nombre || r.socio_id === socioId) continue
-    const dias = Object.keys(
-      franjasPorDia(
-        r.franjas.map((f) => ({
-          inicio: Date.parse(f.inicio),
-          fin: Date.parse(f.fin),
-        }))
-      )
+    const porDia = franjasPorDia(
+      r.franjas.map((f) => ({
+        inicio: Date.parse(f.inicio),
+        fin: Date.parse(f.fin),
+      }))
     )
-    for (const dia of dias) {
-      ;(puedenPorDia[dia] ??= []).push(nombre)
+    for (const [dia, rangos] of Object.entries(porDia)) {
+      ;(otrosPorDia[dia] ??= []).push({ nombre, rangos })
     }
   }
   const cliente = clienteData as { nombre: string; email: string | null } | null
@@ -283,7 +284,7 @@ export default async function ReunionPage({
           ventanaDesde={solicitud.ventana_desde}
           ventanaHasta={solicitud.ventana_hasta}
           inicial={inicial}
-          puedenPorDia={puedenPorDia}
+          otrosPorDia={otrosPorDia}
           yaRespondi={Boolean(miRespuesta)}
           noPuedo={Boolean(miRespuesta && miRespuesta.franjas.length === 0)}
         />
