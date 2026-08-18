@@ -14,13 +14,16 @@ import {
 import {
   codigoReunion,
   ESTADOS_REUNION,
+  type Cliente,
   type EstadoRespuesta,
   type RespuestaReunion,
+  type Socio,
 } from "@/lib/dominio"
-import { huecosDeSolicitud } from "@/lib/reuniones"
+import { fechaDeHoy, huecosDeSolicitud } from "@/lib/reuniones"
 import { idSocioActual } from "@/lib/socio-actual"
 import { createClient } from "@/lib/supabase/server"
 
+import { EditarSolicitud } from "../nueva-solicitud"
 import { Huecos, type HuecoVista } from "./huecos"
 import { MiRespuesta } from "./mi-respuesta"
 import { SolicitudAcciones } from "./solicitud-acciones"
@@ -52,16 +55,25 @@ export default async function ReunionPage({
   const supabase = await createClient()
   const socioId = await idSocioActual()
 
-  const [{ data: miRespuestaData }, { data: clienteData }, { data: proyectoData }] =
+  // Se traen las respuestas de todos: la propia alimenta el editor y las
+  // demás muestran, día por día, quién ya dijo que puede.
+  // Los catálogos (socios, clientes, proyectos) solo hacen falta para el
+  // diálogo de edición, que existe mientras la reunión sigue abierta.
+  const editable = solicitud.estado === "abierta"
+  const [
+    { data: respuestasData },
+    { data: clienteData },
+    { data: proyectoData },
+    { data: sociosData },
+    { data: clientesData },
+    { data: proyectosData },
+    hoy,
+  ] =
     await Promise.all([
-      socioId
-        ? supabase
-            .from("reunion_respuestas")
-            .select("id, solicitud_id, socio_id, franjas, comentario, created_at, updated_at")
-            .eq("solicitud_id", id)
-            .eq("socio_id", socioId)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
+      supabase
+        .from("reunion_respuestas")
+        .select("id, solicitud_id, socio_id, franjas, comentario, created_at, updated_at")
+        .eq("solicitud_id", id),
       solicitud.cliente_id
         ? supabase
             .from("clientes")
@@ -76,9 +88,49 @@ export default async function ReunionPage({
             .eq("id", solicitud.proyecto_id)
             .maybeSingle()
         : Promise.resolve({ data: null }),
+      editable
+        ? supabase.from("socios").select("id, nombre, email").is("deleted_at", null)
+        : Promise.resolve({ data: null }),
+      editable
+        ? supabase
+            .from("clientes")
+            .select("id, nombre, email")
+            .is("deleted_at", null)
+            .order("nombre")
+        : Promise.resolve({ data: null }),
+      editable
+        ? supabase
+            .from("proyectos")
+            .select("id, nombre, cliente_id")
+            .is("deleted_at", null)
+            .order("nombre")
+        : Promise.resolve({ data: null }),
+      fechaDeHoy(),
     ])
 
-  const miRespuesta = miRespuestaData as RespuestaReunion | null
+  const respuestas = (respuestasData ?? []) as RespuestaReunion[]
+  const miRespuesta =
+    respuestas.find((r) => r.socio_id === socioId) ?? null
+
+  // Por día, los nombres de los socios que marcaron alguna franja ese día
+  // (uno mismo incluido: el editor ya lo distingue por su estado local).
+  const nombrePorSocio = new Map(socios.map((s) => [s.socio.id, s.socio.nombre]))
+  const puedenPorDia: Record<string, string[]> = {}
+  for (const r of respuestas) {
+    const nombre = nombrePorSocio.get(r.socio_id)
+    if (!nombre || r.socio_id === socioId) continue
+    const dias = Object.keys(
+      franjasPorDia(
+        r.franjas.map((f) => ({
+          inicio: Date.parse(f.inicio),
+          fin: Date.parse(f.fin),
+        }))
+      )
+    )
+    for (const dia of dias) {
+      ;(puedenPorDia[dia] ??= []).push(nombre)
+    }
+  }
   const cliente = clienteData as { nombre: string; email: string | null } | null
   const proyecto = proyectoData as { nombre: string } | null
 
@@ -133,9 +185,28 @@ export default async function ReunionPage({
             {proyecto ? ` · ${proyecto.nombre}` : ""}
           </p>
         </div>
-        <Badge variant={ESTADOS_REUNION[solicitud.estado].variant}>
-          {ESTADOS_REUNION[solicitud.estado].label}
-        </Badge>
+        <div className="flex items-center gap-2">
+          {editable && (
+            <EditarSolicitud
+              solicitud={solicitud}
+              socios={(sociosData ?? []) as Socio[]}
+              clientes={
+                (clientesData ?? []) as Pick<Cliente, "id" | "nombre" | "email">[]
+              }
+              proyectos={
+                (proyectosData ?? []) as {
+                  id: string
+                  nombre: string
+                  cliente_id: string | null
+                }[]
+              }
+              hoy={hoy}
+            />
+          )}
+          <Badge variant={ESTADOS_REUNION[solicitud.estado].variant}>
+            {ESTADOS_REUNION[solicitud.estado].label}
+          </Badge>
+        </div>
       </div>
 
       {solicitud.notas && (
@@ -212,6 +283,7 @@ export default async function ReunionPage({
           ventanaDesde={solicitud.ventana_desde}
           ventanaHasta={solicitud.ventana_hasta}
           inicial={inicial}
+          puedenPorDia={puedenPorDia}
           yaRespondi={Boolean(miRespuesta)}
           noPuedo={Boolean(miRespuesta && miRespuesta.franjas.length === 0)}
         />

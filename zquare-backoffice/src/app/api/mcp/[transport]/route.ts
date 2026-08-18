@@ -10,6 +10,17 @@ import { codigoReunion, type SolicitudReunion } from "@/lib/dominio"
 import { generarEmbeddings } from "@/lib/embeddings"
 import { socioDelAccessToken } from "@/lib/mcp-oauth"
 import {
+  agendarSiTodosRespondieron,
+  agendarSolicitud,
+  CAMPOS_SOLICITUD,
+  cancelarSolicitud,
+  crearSolicitudReunion,
+  editarSolicitudReunion,
+  guardarRespuestaDe,
+  huecosDeSolicitud,
+  solicitudesPendientes,
+} from "@/lib/reuniones"
+import {
   completarSprint,
   iniciarSprint,
   moverTarjetaASprint,
@@ -20,15 +31,6 @@ import {
   type SprintResumen,
   type Ubicacion,
 } from "@/lib/sprints"
-import {
-  agendarSolicitud,
-  CAMPOS_SOLICITUD,
-  cancelarSolicitud,
-  crearSolicitudReunion,
-  guardarRespuestaDe,
-  huecosDeSolicitud,
-  solicitudesPendientes,
-} from "@/lib/reuniones"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 // MCP server del backoffice: expone los datos de la empresa a Claude
@@ -2857,6 +2859,82 @@ const handler = createMcpHandler(
     )
 
     server.registerTool(
+      "editar_solicitud_reunion",
+      {
+        title: "Editar una reunión a coordinar",
+        description:
+          "Cambia título, días candidatos, duración, socios, cliente/proyecto o notas de una reunión que sigue abierta. Solo hace falta pasar lo que cambia. Las respuestas ya cargadas se conservan; si se achica la ventana, las franjas que quedan afuera se descartan.",
+        inputSchema: {
+          reunion: z.union([z.string(), z.number()]),
+          titulo: z.string().min(3).optional(),
+          desde: z.string().regex(FORMATO_FECHA, "Usar formato YYYY-MM-DD").optional(),
+          hasta: z.string().regex(FORMATO_FECHA, "Usar formato YYYY-MM-DD").optional(),
+          cliente: z.string().nullable().optional(),
+          proyecto: z.string().nullable().optional(),
+          duracion_min: z.union([z.literal(30), z.literal(60)]).optional(),
+          socios: z.array(z.string()).optional(),
+          invitar_cliente: z.boolean().optional(),
+          notas: z.string().nullable().optional(),
+        },
+      },
+      async (entrada) => {
+        const supabase = createAdminClient()
+        const solicitud = await solicitudPorReferencia(entrada.reunion, supabase)
+        if (!solicitud) return texto(`No encontré la reunión "${entrada.reunion}".`)
+
+        const [requeridos, clienteId, proyectoId] = await Promise.all([
+          entrada.socios ? sociosRequeridosMcp(entrada.socios) : null,
+          entrada.cliente ? idPorNombre("clientes", entrada.cliente) : null,
+          entrada.proyecto ? idPorNombre("proyectos", entrada.proyecto) : null,
+        ])
+        if (entrada.socios && (!requeridos || requeridos.length === 0)) {
+          return texto("No pude identificar a ningún socio para la reunión.")
+        }
+        if (entrada.cliente && !clienteId) {
+          return texto(`No encontré ningún cliente parecido a "${entrada.cliente}".`)
+        }
+        if (entrada.proyecto && !proyectoId) {
+          return texto(`No encontré ningún proyecto parecido a "${entrada.proyecto}".`)
+        }
+
+        // null explícito = sacar; undefined = dejar como está.
+        const resultado = await editarSolicitudReunion({
+          solicitudId: solicitud.id,
+          solicitud,
+          supabase,
+          datos: {
+            titulo: entrada.titulo ?? solicitud.titulo,
+            notas: entrada.notas === undefined ? solicitud.notas : entrada.notas,
+            cliente_id:
+              entrada.cliente === undefined
+                ? solicitud.cliente_id
+                : entrada.cliente === null
+                  ? null
+                  : clienteId,
+            proyecto_id:
+              entrada.proyecto === undefined
+                ? solicitud.proyecto_id
+                : entrada.proyecto === null
+                  ? null
+                  : proyectoId,
+            duracion_min: entrada.duracion_min ?? solicitud.duracion_min,
+            ventana_desde: entrada.desde ?? solicitud.ventana_desde,
+            ventana_hasta: entrada.hasta ?? solicitud.ventana_hasta,
+            socios_requeridos: requeridos
+              ? requeridos.map((s) => s.id)
+              : solicitud.socios_requeridos,
+            invitar_cliente: entrada.invitar_cliente ?? solicitud.invitar_cliente,
+          },
+        })
+        if (!resultado.ok) return texto(resultado.error ?? "No se pudo editar.")
+        return texto({
+          editada: codigoReunion(solicitud.numero),
+          advertencia: resultado.advertencia,
+        })
+      }
+    )
+
+    server.registerTool(
       "listar_solicitudes_reunion",
       {
         title: "Reuniones a coordinar",
@@ -2958,10 +3036,27 @@ const handler = createMcpHandler(
         })
         if (!resultado.ok) return texto(resultado.error ?? "No se pudo guardar.")
 
-        const resumen = await huecosDeSolicitud(solicitud.id, {
+        // Si con esta respuesta quedaron todos, se agenda sola.
+        const auto = await agendarSiTodosRespondieron({
+          solicitudId: solicitud.id,
+          organizadorEmail:
+            (extra.authInfo?.extra?.email as string | undefined) ?? null,
+          organizadorSocioId: socioId,
           supabase,
-          solicitud,
         })
+        if (auto.agendada && auto.inicio) {
+          return texto({
+            reunion: codigoReunion(solicitud.numero),
+            respuesta: "guardada",
+            agendada: etiquetaHueco({
+              inicio: Date.parse(auto.inicio),
+              fin: Date.parse(auto.inicio) + solicitud.duracion_min * 60_000,
+            }),
+            advertencia: auto.advertencia,
+          })
+        }
+
+        const resumen = await huecosDeSolicitud(solicitud.id, { supabase })
         return texto({
           reunion: codigoReunion(solicitud.numero),
           respuesta: no_puedo ? "no puede en esos días" : "guardada",

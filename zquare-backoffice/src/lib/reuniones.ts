@@ -92,6 +92,48 @@ export type DatosSolicitud = {
 // Alta de una solicitud. Las server actions y el MCP entran por acá: las
 // reglas (ventana, socios, duración) viven una sola vez y los mensajes salen
 // en castellano en vez del texto crudo del check de Postgres.
+// Reglas de una solicitud, iguales al crear y al editar. Devuelve el error
+// en castellano o null.
+function validarDatosSolicitud(datos: DatosSolicitud): string | null {
+  if (datos.titulo.trim().length < 3) return "El título es obligatorio"
+  if (
+    !FORMATO_FECHA.test(datos.ventana_desde) ||
+    !FORMATO_FECHA.test(datos.ventana_hasta)
+  ) {
+    return "Las fechas van en formato YYYY-MM-DD"
+  }
+  if (datos.ventana_hasta < datos.ventana_desde) {
+    return "El último día no puede ser anterior al primero"
+  }
+  if (
+    diasDeVentana(datos.ventana_desde, datos.ventana_hasta).length >
+    MAX_DIAS_VENTANA
+  ) {
+    return `La ventana de días no puede superar los ${MAX_DIAS_VENTANA} días`
+  }
+  if (datos.socios_requeridos.length === 0) {
+    return "Elegí al menos un socio para la reunión"
+  }
+  if (datos.duracion_min !== 30 && datos.duracion_min !== 60) {
+    return "La duración tiene que ser de 30 o 60 minutos"
+  }
+  return null
+}
+
+function filaDe(datos: DatosSolicitud) {
+  return {
+    titulo: datos.titulo.trim(),
+    notas: datos.notas ?? null,
+    cliente_id: datos.cliente_id ?? null,
+    proyecto_id: datos.proyecto_id ?? null,
+    duracion_min: datos.duracion_min,
+    ventana_desde: datos.ventana_desde,
+    ventana_hasta: datos.ventana_hasta,
+    socios_requeridos: datos.socios_requeridos,
+    invitar_cliente: datos.invitar_cliente,
+  }
+}
+
 export async function crearSolicitudReunion(
   datos: DatosSolicitud,
   opciones: { supabase?: Cliente } = {}
@@ -99,56 +141,13 @@ export async function crearSolicitudReunion(
   | { ok: true; id: string; numero: number }
   | { ok: false; error: string }
 > {
-  const titulo = datos.titulo.trim()
-  if (titulo.length < 3) {
-    return { ok: false, error: "El título es obligatorio" }
-  }
-  if (
-    !FORMATO_FECHA.test(datos.ventana_desde) ||
-    !FORMATO_FECHA.test(datos.ventana_hasta)
-  ) {
-    return { ok: false, error: "Las fechas van en formato YYYY-MM-DD" }
-  }
-  if (datos.ventana_hasta < datos.ventana_desde) {
-    return {
-      ok: false,
-      error: "El último día no puede ser anterior al primero",
-    }
-  }
-  if (
-    diasDeVentana(datos.ventana_desde, datos.ventana_hasta).length >
-    MAX_DIAS_VENTANA
-  ) {
-    return {
-      ok: false,
-      error: `La ventana de días no puede superar los ${MAX_DIAS_VENTANA} días`,
-    }
-  }
-  if (datos.socios_requeridos.length === 0) {
-    return { ok: false, error: "Elegí al menos un socio para la reunión" }
-  }
-  if (datos.duracion_min !== 30 && datos.duracion_min !== 60) {
-    return {
-      ok: false,
-      error: "La duración tiene que ser de 30 o 60 minutos",
-    }
-  }
+  const invalido = validarDatosSolicitud(datos)
+  if (invalido) return { ok: false, error: invalido }
 
   const supabase = await clientePorDefecto(opciones.supabase)
   const { data, error } = await supabase
     .from("solicitudes_reunion")
-    .insert({
-      titulo,
-      notas: datos.notas ?? null,
-      cliente_id: datos.cliente_id ?? null,
-      proyecto_id: datos.proyecto_id ?? null,
-      duracion_min: datos.duracion_min,
-      ventana_desde: datos.ventana_desde,
-      ventana_hasta: datos.ventana_hasta,
-      socios_requeridos: datos.socios_requeridos,
-      invitar_cliente: datos.invitar_cliente,
-      created_by: datos.created_by,
-    })
+    .insert({ ...filaDe(datos), created_by: datos.created_by })
     .select("id, numero")
     .single()
 
@@ -156,6 +155,86 @@ export async function crearSolicitudReunion(
     return { ok: false, error: error?.message ?? "No se pudo crear" }
   }
   return { ok: true, id: data.id as string, numero: data.numero as number }
+}
+
+// Edita una solicitud abierta. Las respuestas ya cargadas se conservan; si la
+// ventana se achica, las franjas que quedan afuera se recortan para que
+// sigan siendo válidas (y el socio no tenga que volver a responder).
+export async function editarSolicitudReunion(params: {
+  solicitudId: string
+  datos: Omit<DatosSolicitud, "created_by">
+  supabase?: Cliente
+  solicitud?: SolicitudReunion
+}): Promise<{ ok: boolean; error?: string; advertencia?: string }> {
+  const supabase = await clientePorDefecto(params.supabase)
+  const solicitud =
+    params.solicitud ?? (await cargarSolicitud(supabase, params.solicitudId))
+  if (!solicitud) return { ok: false, error: "No encontré esa reunión" }
+  if (solicitud.estado !== "abierta") {
+    return {
+      ok: false,
+      error: "Solo se puede editar una reunión que sigue abierta",
+    }
+  }
+
+  const datos: DatosSolicitud = { ...params.datos, created_by: solicitud.created_by }
+  const invalido = validarDatosSolicitud(datos)
+  if (invalido) return { ok: false, error: invalido }
+
+  const { error } = await supabase
+    .from("solicitudes_reunion")
+    .update(filaDe(datos))
+    .eq("id", params.solicitudId)
+    .eq("estado", "abierta")
+  if (error) return { ok: false, error: error.message }
+
+  // Recorte de franjas fuera de la ventana nueva.
+  const seAchico =
+    datos.ventana_desde > solicitud.ventana_desde ||
+    datos.ventana_hasta < solicitud.ventana_hasta
+  if (!seAchico) return { ok: true }
+
+  const ventana = ventanaComoIntervalo(datos)
+  const { data: respuestas } = await supabase
+    .from("reunion_respuestas")
+    .select("id, franjas")
+    .eq("solicitud_id", params.solicitudId)
+
+  let recortadas = 0
+  for (const r of (respuestas ?? []) as { id: string; franjas: FranjaGuardada[] }[]) {
+    if (r.franjas.length === 0) continue
+    const dentro = r.franjas
+      .map((f) => ({ inicio: Date.parse(f.inicio), fin: Date.parse(f.fin) }))
+      .map((f) => ({
+        inicio: Math.max(f.inicio, ventana.inicio),
+        fin: Math.min(f.fin, ventana.fin),
+      }))
+      .filter((f) => f.fin > f.inicio)
+      .map((f) => ({
+        inicio: new Date(f.inicio).toISOString(),
+        fin: new Date(f.fin).toISOString(),
+      }))
+    if (dentro.length === r.franjas.length) continue
+    recortadas++
+    // Si no le queda nada dentro, mejor que vuelva a responder a que figure
+    // como "no puede": se borra la fila.
+    if (dentro.length === 0) {
+      await supabase.from("reunion_respuestas").delete().eq("id", r.id)
+    } else {
+      await supabase
+        .from("reunion_respuestas")
+        .update({ franjas: dentro })
+        .eq("id", r.id)
+    }
+  }
+
+  return {
+    ok: true,
+    advertencia:
+      recortadas > 0
+        ? "Se achicó la ventana: las franjas que quedaron afuera se descartaron."
+        : undefined,
+  }
 }
 
 // La ventana son días de calendario: arranca a las 00:00 del primero y
@@ -313,6 +392,65 @@ export const solicitudesPendientes = cache(async function solicitudesPendientes(
   return abiertas.filter((s) => !respondidas.has(s.id))
 })
 
+// Todas las reuniones abiertas ("a coordinar"), con quiénes ya respondieron:
+// alimenta la tarjeta del dashboard, que las muestra a todos los socios y no
+// solo a quien le falta responder.
+export type SolicitudACoordinar = {
+  solicitud: SolicitudReunion
+  respondieron: number
+  requeridos: number
+  faltan: string[]
+  meFalta: boolean
+}
+
+export const solicitudesACoordinar = cache(async function solicitudesACoordinar(
+  socioId: string | null
+): Promise<SolicitudACoordinar[]> {
+  const supabase = await clientePorDefecto()
+
+  const { data: solicitudes } = await supabase
+    .from("solicitudes_reunion")
+    .select(CAMPOS_SOLICITUD)
+    .eq("estado", "abierta")
+    .is("deleted_at", null)
+    .order("ventana_desde", { ascending: true })
+
+  const abiertas = (solicitudes ?? []) as SolicitudReunion[]
+  if (abiertas.length === 0) return []
+
+  const [{ data: respuestas }, { data: socios }] = await Promise.all([
+    supabase
+      .from("reunion_respuestas")
+      .select("solicitud_id, socio_id")
+      .in(
+        "solicitud_id",
+        abiertas.map((s) => s.id)
+      ),
+    supabase.from("socios").select("id, nombre").is("deleted_at", null),
+  ])
+
+  const nombre = new Map(
+    ((socios ?? []) as { id: string; nombre: string }[]).map((s) => [s.id, s.nombre])
+  )
+  const respondidoPor = new Map<string, Set<string>>()
+  for (const r of (respuestas ?? []) as { solicitud_id: string; socio_id: string }[]) {
+    ;(respondidoPor.get(r.solicitud_id) ??
+      respondidoPor.set(r.solicitud_id, new Set()).get(r.solicitud_id))!.add(r.socio_id)
+  }
+
+  return abiertas.map((solicitud) => {
+    const ya = respondidoPor.get(solicitud.id) ?? new Set<string>()
+    const faltanIds = solicitud.socios_requeridos.filter((id) => !ya.has(id))
+    return {
+      solicitud,
+      respondieron: solicitud.socios_requeridos.length - faltanIds.length,
+      requeridos: solicitud.socios_requeridos.length,
+      faltan: faltanIds.map((id) => nombre.get(id) ?? "?"),
+      meFalta: Boolean(socioId && faltanIds.includes(socioId)),
+    }
+  })
+})
+
 export type ResultadoAgenda = {
   ok: boolean
   error?: string
@@ -440,7 +578,12 @@ export async function agendarSolicitud(params: {
 
     return { ok: true, meetUrl: evento.meetUrl, inicio }
   } catch (error) {
-    const detalle = error instanceof Error ? error.message : String(error)
+    const crudo = error instanceof Error ? error.message : String(error)
+    // unauthorized_client es siempre lo mismo: falta la delegación de dominio
+    // para la cuenta de servicio (o los scopes autorizados no coinciden).
+    const detalle = crudo.includes("unauthorized_client")
+      ? `Falta habilitar la delegación de dominio para la cuenta de servicio en admin.google.com (ver README). Google dijo: ${crudo}`
+      : crudo
     await supabase
       .from("solicitudes_reunion")
       .update({
@@ -470,6 +613,46 @@ export type ResultadoCambio = {
 
 const AVISO_EVENTO_COLGADO =
   "No se pudo borrar el evento de Google Calendar: hay que sacarlo a mano para que los invitados no lo sigan viendo."
+
+// Cuando el último socio requerido responde, la reunión se agenda sola en el
+// primer hueco en común: no hace falta que nadie vuelva a entrar a elegir.
+// Quien respondió último queda como organizador del evento. Si no hay hueco
+// (alguien no puede, o los calendarios no dejan lugar) queda abierta y la
+// página lo muestra.
+export async function agendarSiTodosRespondieron(params: {
+  solicitudId: string
+  organizadorEmail: string | null
+  organizadorSocioId: string | null
+  supabase?: Cliente
+}): Promise<{
+  agendada: boolean
+  inicio?: string
+  duracionMin?: number
+  advertencia?: string
+}> {
+  const supabase = await clientePorDefecto(params.supabase)
+  const resumen = await huecosDeSolicitud(params.solicitudId, { supabase })
+  if (!resumen || resumen.solicitud.estado !== "abierta") return { agendada: false }
+  if (resumen.parcial || resumen.huecos.length === 0) return { agendada: false }
+  if (!params.organizadorEmail) return { agendada: false }
+
+  const primero = resumen.huecos[0]
+  const resultado = await agendarSolicitud({
+    solicitudId: params.solicitudId,
+    inicioIso: new Date(primero.inicio).toISOString(),
+    organizadorEmail: params.organizadorEmail,
+    organizadorSocioId: params.organizadorSocioId,
+    supabase,
+    solicitud: resumen.solicitud,
+  })
+  if (!resultado.ok) return { agendada: false }
+  return {
+    agendada: true,
+    inicio: resultado.inicio,
+    duracionMin: resumen.solicitud.duracion_min,
+    advertencia: resultado.advertencia,
+  }
+}
 
 // Cancelar o reabrir borran el evento si existe, pero nunca se traban por eso:
 // el estado en el backoffice manda. Si el borrado falla, devuelven el aviso

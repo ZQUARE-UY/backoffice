@@ -2,10 +2,14 @@
 
 import { revalidatePath } from "next/cache"
 
+import { etiquetaHueco } from "@/lib/disponibilidad"
+
 import {
+  agendarSiTodosRespondieron,
   agendarSolicitud,
   cancelarSolicitud as cancelarEnBase,
   crearSolicitudReunion,
+  editarSolicitudReunion,
   eliminarSolicitud as eliminarEnBase,
   guardarRespuestaDe,
   reabrirSolicitud as reabrirEnBase,
@@ -57,6 +61,21 @@ export async function crearSolicitud(formData: FormData): Promise<string> {
   return resultado.id
 }
 
+export async function editarSolicitud(
+  id: string,
+  formData: FormData
+): Promise<{ ok: boolean; error?: string; advertencia?: string }> {
+  let datos: ReturnType<typeof datosDesde>
+  try {
+    datos = datosDesde(formData)
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Datos inválidos" }
+  }
+  const resultado = await editarSolicitudReunion({ solicitudId: id, datos })
+  if (resultado.ok) refrescar(id)
+  return resultado
+}
+
 export async function eliminarSolicitud(id: string) {
   await eliminarEnBase({ solicitudId: id })
   refrescar(id)
@@ -64,12 +83,20 @@ export async function eliminarSolicitud(id: string) {
 
 // Las franjas llegan del editor como hora de pared ("2026-08-05", "14:00");
 // la conversión a instantes y las validaciones viven en guardarRespuestaDe.
+export type ResultadoRespuesta = {
+  ok: boolean
+  error?: string
+  // Si con esta respuesta quedaron todos, la reunión se agendó sola: cuándo.
+  agendada?: string
+  advertencia?: string
+}
+
 export async function guardarRespuesta(
   solicitudId: string,
   franjas: FranjaDePared[],
   comentario?: string | null,
   noPuede = false
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ResultadoRespuesta> {
   const socioId = await idSocioActual()
   if (!socioId) return { ok: false, error: "No pude identificarte como socio" }
 
@@ -80,9 +107,31 @@ export async function guardarRespuesta(
     noPuede,
     comentario,
   })
+  if (!resultado.ok) return resultado
 
-  if (resultado.ok) refrescar(solicitudId)
-  return resultado
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const auto = await agendarSiTodosRespondieron({
+    solicitudId,
+    organizadorEmail: user?.email ?? null,
+    organizadorSocioId: socioId,
+  })
+
+  refrescar(solicitudId)
+  return {
+    ok: true,
+    // Etiqueta ya armada en la zona de la empresa ("jue 20 de agosto, 13:00 a 14:00").
+    agendada:
+      auto.agendada && auto.inicio && auto.duracionMin
+        ? etiquetaHueco({
+            inicio: Date.parse(auto.inicio),
+            fin: Date.parse(auto.inicio) + auto.duracionMin * 60_000,
+          })
+        : undefined,
+    advertencia: auto.advertencia,
+  }
 }
 
 // "No puedo en ninguno de estos días": explícito, para que una lista vacía
