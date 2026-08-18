@@ -2869,7 +2869,7 @@ const handler = createMcpHandler(
       {
         title: "Editar una reunión a coordinar",
         description:
-          "Cambia título, días candidatos, duración, socios, cliente/proyecto o notas de una reunión que sigue abierta. Solo hace falta pasar lo que cambia. Las respuestas ya cargadas se conservan; si se achica la ventana, las franjas que quedan afuera se descartan.",
+          "Cambia título, días candidatos, duración, socios, cliente/proyecto, invitados o notas de una reunión abierta o ya agendada. Solo hace falta pasar lo que cambia. Si está agendada, el evento de Google se actualiza (título, notas, invitados, duración). Las respuestas ya cargadas se conservan; si se achica la ventana, las franjas que quedan afuera se descartan.",
         inputSchema: {
           reunion: z.union([z.string(), z.number()]),
           titulo: z.string().min(3).optional(),

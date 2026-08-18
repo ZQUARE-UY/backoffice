@@ -262,6 +262,41 @@ export async function crearEventoReunion(opciones: {
   }
 }
 
+// Actualiza título, descripción, invitados y horario de un evento ya creado,
+// avisando a los invitados. Se pasa la lista completa de invitados: Google
+// manda "invitación" a los nuevos y "cancelación" a los que salieron.
+export async function actualizarEventoReunion(opciones: {
+  organizador: string
+  eventId: string
+  titulo: string
+  descripcion?: string | null
+  inicio: Date
+  fin: Date
+  invitados: string[]
+}): Promise<void> {
+  const { organizador, eventId, titulo, descripcion, inicio, fin, invitados } =
+    opciones
+  const calendar = google.calendar({
+    version: "v3",
+    auth: clienteJwtComo(SCOPES_ESCRITURA, organizador),
+  })
+  const otros = invitados.filter(
+    (email) => email.toLowerCase() !== organizador.toLowerCase()
+  )
+  await calendar.events.patch({
+    calendarId: "primary",
+    eventId,
+    sendUpdates: "all",
+    requestBody: {
+      summary: titulo,
+      description: descripcion ?? "",
+      start: { dateTime: inicio.toISOString(), timeZone: ZONA_HORARIA },
+      end: { dateTime: fin.toISOString(), timeZone: ZONA_HORARIA },
+      attendees: otros.map((email) => ({ email })),
+    },
+  })
+}
+
 // Borra el evento avisando a los invitados. Que ya no exista no es un error:
 // alguien pudo haberlo borrado a mano desde su calendario.
 export async function eliminarEventoReunion(

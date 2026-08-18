@@ -5,6 +5,7 @@ import { cache } from "react"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import {
+  actualizarEventoReunion,
   consultarBusy,
   crearEventoReunion,
   eliminarEventoReunion,
@@ -190,10 +191,10 @@ export async function editarSolicitudReunion(params: {
   const solicitud =
     params.solicitud ?? (await cargarSolicitud(supabase, params.solicitudId))
   if (!solicitud) return { ok: false, error: "No encontré esa reunión" }
-  if (solicitud.estado !== "abierta") {
+  if (solicitud.estado === "cancelada") {
     return {
       ok: false,
-      error: "Solo se puede editar una reunión que sigue abierta",
+      error: "La reunión está cancelada: reabrila para editarla",
     }
   }
 
@@ -205,8 +206,49 @@ export async function editarSolicitudReunion(params: {
     .from("solicitudes_reunion")
     .update(filaDe(datos))
     .eq("id", params.solicitudId)
-    .eq("estado", "abierta")
+    .eq("estado", solicitud.estado)
   if (error) return { ok: false, error: error.message }
+
+  // Ya agendada: el evento de Google tiene que reflejar el cambio (título,
+  // notas, invitados, duración). Si falla, la edición igual queda; se avisa.
+  if (solicitud.estado === "agendada") {
+    if (
+      solicitud.google_event_id &&
+      solicitud.google_calendar_id &&
+      solicitud.inicio
+    ) {
+      try {
+        const editada: SolicitudReunion = { ...solicitud, ...filaDe(datos) }
+        const inicio = new Date(solicitud.inicio)
+        await actualizarEventoReunion({
+          organizador: solicitud.google_calendar_id,
+          eventId: solicitud.google_event_id,
+          titulo: datos.titulo.trim(),
+          descripcion: datos.notas ?? null,
+          inicio,
+          fin: new Date(inicio.getTime() + datos.duracion_min * 60_000),
+          invitados: await invitadosDe(supabase, editada),
+        })
+        if (datos.duracion_min !== solicitud.duracion_min) {
+          await supabase
+            .from("solicitudes_reunion")
+            .update({
+              fin: new Date(
+                inicio.getTime() + datos.duracion_min * 60_000
+              ).toISOString(),
+            })
+            .eq("id", params.solicitudId)
+        }
+      } catch (error) {
+        const detalle = error instanceof Error ? error.message : String(error)
+        return {
+          ok: true,
+          advertencia: `Se guardó, pero no se pudo actualizar el evento en Google Calendar (${detalle}). Hay que corregirlo a mano.`,
+        }
+      }
+    }
+    return { ok: true }
+  }
 
   // Recorte de franjas fuera de la ventana nueva.
   const seAchico =
@@ -544,20 +586,7 @@ export async function agendarSolicitud(params: {
     return { ok: false, error: "Otro socio agendó esta reunión recién" }
   }
 
-  const invitados = resumen.socios.map((s) => s.socio.email)
-  let emailCliente: string | null = null
-  if (resumen.solicitud.invitar_cliente && resumen.solicitud.cliente_id) {
-    const { data: cliente } = await supabase
-      .from("clientes")
-      .select("email")
-      .eq("id", resumen.solicitud.cliente_id)
-      .maybeSingle()
-    emailCliente = (cliente as { email: string | null } | null)?.email ?? null
-    if (emailCliente) invitados.push(emailCliente)
-  }
-  for (const email of resumen.solicitud.invitados_externos ?? []) {
-    if (!invitados.includes(email)) invitados.push(email)
-  }
+  const invitados = await invitadosDe(supabase, resumen.solicitud)
 
   const inicio = new Date(hueco.inicio).toISOString()
 
@@ -636,6 +665,32 @@ export type ResultadoCambio = {
 
 const AVISO_EVENTO_COLGADO =
   "No se pudo borrar el evento de Google Calendar: hay que sacarlo a mano para que los invitados no lo sigan viendo."
+
+// Quiénes reciben la invitación: los socios requeridos, el mail del cliente
+// (si se pidió) y los mails externos cargados.
+async function invitadosDe(
+  supabase: Cliente,
+  solicitud: SolicitudReunion
+): Promise<string[]> {
+  const { data: socios } = await supabase
+    .from("socios")
+    .select("id, email")
+    .in("id", solicitud.socios_requeridos)
+  const invitados = ((socios ?? []) as { email: string }[]).map((s) => s.email)
+  if (solicitud.invitar_cliente && solicitud.cliente_id) {
+    const { data: cliente } = await supabase
+      .from("clientes")
+      .select("email")
+      .eq("id", solicitud.cliente_id)
+      .maybeSingle()
+    const email = (cliente as { email: string | null } | null)?.email
+    if (email && !invitados.includes(email)) invitados.push(email)
+  }
+  for (const email of solicitud.invitados_externos ?? []) {
+    if (!invitados.includes(email)) invitados.push(email)
+  }
+  return invitados
+}
 
 // Cuando el último socio requerido responde, la reunión se agenda sola en el
 // primer hueco en común: no hace falta que nadie vuelva a entrar a elegir.

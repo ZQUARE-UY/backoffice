@@ -255,7 +255,14 @@ export function FormularioSolicitud({
                 />
               </Field>
 
-              {editando && (
+              {editando && solicitud?.estado === "agendada" && (
+                <p className="text-xs text-muted-foreground">
+                  La reunión ya está agendada: el evento de Google se actualiza
+                  con estos cambios (título, notas, invitados, duración). Para
+                  cambiar el horario usá &quot;Elegir otro horario&quot;.
+                </p>
+              )}
+              {editando && solicitud?.estado === "abierta" && (
                 <p className="text-xs text-muted-foreground">
                   Lo que ya respondieron los socios se conserva. Si achicás los
                   días, las horas que queden afuera se descartan.
