@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 import {
   type ComentarioTarea,
   type Socio,
+  type Sprint,
   type Tarea,
   type VersionTarea,
 } from "@/lib/dominio"
@@ -73,6 +74,18 @@ export default async function TareasPage({
     if (data?.estado === "backlog") vistaBacklog = true
   }
 
+  // Sprints abiertos (activo + planificados). Los cerrados son historial: sus
+  // tarjetas hechas quedan archivadas ahí y no se muestran en el tablero —
+  // esa es la "limpieza" al completar un sprint.
+  const { data: sprintsData } = await supabase
+    .from("sprints")
+    .select("*")
+    .is("deleted_at", null)
+    .neq("estado", "cerrado")
+    .order("numero", { ascending: true })
+  const sprints = (sprintsData ?? []) as Sprint[]
+  const sprintActivo = sprints.find((s) => s.estado === "activo") ?? null
+
   // El filtrado va en la query (no en el cliente): los índices parciales por
   // cliente/proyecto/responsable ya existen y el payload baja de "toda la base"
   // a lo que se ve.
@@ -82,11 +95,22 @@ export default async function TareasPage({
     .is("deleted_at", null)
     .order("orden", { ascending: true })
   if (vistaBacklog) {
-    tareasQuery = tareasQuery.eq("estado", "backlog")
+    // Backlog libre + tarjetas de sprints planificados (también en `backlog`)
+    // + las del sprint activo, que se muestran agrupadas bajo él.
+    tareasQuery = sprintActivo
+      ? tareasQuery.or(`estado.eq.backlog,sprint_id.eq.${sprintActivo.id}`)
+      : tareasQuery.eq("estado", "backlog")
   } else {
+    // El tablero es el sprint activo más lo que no tiene sprint. Las tarjetas
+    // de sprints cerrados no se ven (los `.or` sucesivos se combinan con AND).
     tareasQuery = tareasQuery
       .neq("estado", "backlog")
       .or(`estado.neq.hecho,updated_at.gte.${corteHechasVisibles()}`)
+      .or(
+        sprintActivo
+          ? `sprint_id.is.null,sprint_id.eq.${sprintActivo.id}`
+          : "sprint_id.is.null"
+      )
   }
   if (params.cliente) tareasQuery = tareasQuery.eq("cliente_id", params.cliente)
   if (params.proyecto) tareasQuery = tareasQuery.eq("proyecto_id", params.proyecto)
@@ -167,7 +191,7 @@ export default async function TareasPage({
           <h1 className="text-2xl font-semibold tracking-tight">Tareas</h1>
           <p className="text-muted-foreground">
             {vistaBacklog
-              ? "Backlog: ideas y pendientes priorizados. Arrastrá para priorizar y pasá al tablero lo que se encara."
+              ? "Backlog y sprints. Arrastrá tarjetas a un sprint para planificarlo, inicialo para que entren al tablero y completalo para dejar el tablero limpio."
               : "Tablero de la empresa. Arrastrá las tarjetas entre columnas o editalas para cambiarles el estado."}
           </p>
         </div>
@@ -175,7 +199,9 @@ export default async function TareasPage({
           socios={socios}
           clientes={clientes}
           proyectos={proyectos}
+          sprints={sprints}
           estadoInicial={vistaBacklog ? "backlog" : "por_hacer"}
+          sprintInicial={vistaBacklog ? null : (sprintActivo?.id ?? null)}
         />
       </div>
 
@@ -206,6 +232,7 @@ export default async function TareasPage({
       {vistaBacklog ? (
         <Backlog
           tareas={tareas}
+          sprints={sprints}
           comentarios={comentarios}
           versiones={versiones}
           socios={socios}
@@ -216,6 +243,8 @@ export default async function TareasPage({
       ) : (
         <Tablero
           tareas={tareas}
+          sprints={sprints}
+          hrefBacklog={hrefBacklog}
           comentarios={comentarios}
           versiones={versiones}
           socios={socios}

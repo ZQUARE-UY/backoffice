@@ -31,6 +31,7 @@ import {
   tareaDesarrollada,
   type ComentarioTarea,
   type Socio,
+  type Sprint,
   type Tarea,
   type VersionTarea,
 } from "@/lib/dominio"
@@ -58,6 +59,7 @@ export function DetalleTarea({
   socios,
   clientes,
   proyectos,
+  sprints = [],
   children,
   abiertoInicial,
 }: {
@@ -67,6 +69,8 @@ export function DetalleTarea({
   socios: Socio[]
   clientes: ClienteOpcion[]
   proyectos: ProyectoOpcion[]
+  // Sprints abiertos, para el select del formulario y el dato en la ficha.
+  sprints?: Sprint[]
   children: React.ReactNode
   // Deep link `?tarea=ZQ-N`: la tarjeta llega ya abierta desde el server.
   abiertoInicial?: boolean
@@ -81,6 +85,7 @@ export function DetalleTarea({
   const responsable = socios.find((s) => s.id === tarea.asignado_a)
   const cliente = clientes.find((c) => c.id === tarea.cliente_id)
   const proyecto = proyectos.find((p) => p.id === tarea.proyecto_id)
+  const sprint = sprints.find((s) => s.id === tarea.sprint_id)
 
   function onGuardar(formData: FormData) {
     iniciarTransicion(async () => {
@@ -134,6 +139,7 @@ export function DetalleTarea({
               socios={socios}
               clientes={clientes}
               proyectos={proyectos}
+              sprints={sprints}
             />
             <DialogFooter>
               <Button
@@ -165,6 +171,11 @@ export function DetalleTarea({
               </Dato>
               <Dato label="Responsable">{responsable?.nombre ?? "Sin asignar"}</Dato>
               <Dato label="Fecha límite">{tarea.fecha_limite ?? "—"}</Dato>
+              {tarea.sprint_id && (
+                <Dato label="Sprint">
+                  {sprint ? sprint.nombre : "Sprint cerrado (archivada)"}
+                </Dato>
+              )}
               {/* Planificación: sólo se muestra lo que está cargado. Una tarea
                   de empresa no lleva nada de esto y no tiene por qué mostrar
                   cuatro guiones. */}

@@ -5,7 +5,7 @@
 > **Documento vivo.** Esto es la versión 1 de una idea que va a evolucionar:
 > nada de lo escrito acá es definitivo. Cualquier módulo, prioridad o decisión
 > se puede cambiar en cualquier momento — se actualiza este documento y se
-> registra en el historial de cambios al final. Última actualización: 2026-07-28.
+> registra en el historial de cambios al final. Última actualización: 2026-08-18.
 
 ## 1. Objetivo
 
@@ -313,6 +313,53 @@ agente la desarrolle después. Mismo patrón que el one-pager de ideas.
   necesitaban `desarrollar_tarea` y el tablero las declaraba resueltas.
   Alcanza al punto ámbar, al flag `desarrollada` del MCP y a las
   descripciones de las tools; el diálogo avisa cuando el brief está a medias.
+
+#### Tablero v4 — Campos de planificación (2026-08-15)
+
+- [x] Migración `20260815000001_planificacion_tareas.sql`: `codigo_proyecto`
+  (US-014 / DEF-07 / SC-3 / TEC-2, único por proyecto), `estimacion`
+  (Fibonacci), `moscow` y `epica` (EP-N). Vienen del contrato del plugin
+  `zquare` con el backoffice; sin ellos no se puede calcular la capacidad de
+  un sprint. Sección "Planificación" plegada en el formulario y en el MCP.
+
+#### Tablero v5 — Sprints (2026-08-18)
+
+Pedido de Joaquín: gestionar sprints como en Jira — armar un sprint con
+tarjetas y, al terminarlo, que el tablero quede limpio. Hasta acá el tablero
+era un flujo continuo (Hecho se limpiaba solo por edad).
+
+- [x] Migración `20260818000001_sprints.sql`: tabla `sprints` (`numero` →
+  "Sprint N", nombre, objetivo, estado planificado / activo / cerrado, fechas,
+  foco opcional en un proyecto, `metadata.resumen` al cerrar) + columna
+  `tareas.sprint_id`. **Un solo sprint activo a la vez** (índice parcial
+  único): el tablero de la empresa es uno solo.
+- [x] Reglas de coherencia columna ↔ sprint en `src/lib/sprints.ts`
+  (compartido por server actions y MCP): las tarjetas de un sprint
+  **planificado** siguen en `backlog` (vista Backlog, agrupadas bajo el
+  sprint); **iniciar** el sprint las pasa a Por hacer conservando el orden;
+  una tarjeta que entra al tablero sin sprint se suma sola al activo; volver
+  a `backlog` desde el activo la saca del sprint; a un sprint cerrado no se
+  agregan tarjetas. **Completar** archiva lo hecho en el sprint (deja de
+  verse en el tablero — esa es la limpieza) y manda lo pendiente al backlog o
+  al sprint planificado que se elija, conservando el orden del tablero.
+- [x] Vista Backlog = backlog de Jira: secciones por sprint (activo primero,
+  planificados después) con métricas (tarjetas, hechas, puntos), drag & drop
+  entre secciones para planificar, botón "Iniciar sprint" / "Completar
+  sprint", crear/editar/eliminar sprint (solo planificados), y menú "Mover
+  a…" por tarjeta. Sin sprints creados todo sigue igual que antes (botón "Al
+  tablero").
+- [x] Tablero: banner del sprint activo (fechas, días restantes, hechas /
+  total, puntos, objetivo, "Completar sprint"); sin activo, aviso con link
+  al backlog. El tablero muestra el sprint activo + lo que no tiene sprint;
+  las tarjetas de sprints cerrados no aparecen. Select "Sprint" en el
+  formulario de tarjeta y dato "Sprint" en el detalle.
+- [x] MCP: `listar_sprints`, `crear_sprint`, `mover_a_sprint`,
+  `iniciar_sprint`, `completar_sprint`; `listar_tareas` filtra por `sprint`
+  (número o "activo") / `sin_sprint` y devuelve el sprint de cada tarjeta;
+  `crear_tarea` acepta `sprint`; `mover_tarea` / `actualizar_tarea` aplican
+  las mismas reglas de coherencia que la UI.
+- [ ] Release: PR → merge → migración en SQL Editor (Joaquín) → verificación
+  en prod (UI + tools nuevas desde conector reconectado).
 
 ### Post-MVP — Calendario de reuniones
 - [x] Panel "Próximas reuniones" en el dashboard: agenda unificada de los 4
@@ -653,3 +700,9 @@ de Google en la consola del Workspace.
   recién graduadas —contexto sí, criterios no— se mostraban como listas justo
   cuando eran las que más necesitaban `desarrollar_tarea`), y la ficha del
   proyecto interno ahora linkea a la idea que lo originó.
+- **2026-08-18** — Tablero v5: sprints al estilo Jira sobre el mismo tablero
+  (tabla `sprints` + `tareas.sprint_id`, uno activo a la vez). Se planifica en
+  la vista Backlog arrastrando tarjetas a un sprint, se inicia (entran a Por
+  hacer) y se completa: lo hecho queda archivado en el sprint y desaparece del
+  tablero, lo pendiente vuelve al backlog o pasa al siguiente. Cinco tools MCP
+  nuevas y filtro por sprint en `listar_tareas`. Ver "Tablero v5 — Sprints".
