@@ -10,6 +10,7 @@ import {
   cancelarSolicitud as cancelarEnBase,
   crearSolicitudReunion,
   editarSolicitudReunion,
+  parsearEmails,
   eliminarSolicitud as eliminarEnBase,
   guardarRespuestaDe,
   reabrirSolicitud as reabrirEnBase,
@@ -47,6 +48,7 @@ function datosDesde(formData: FormData) {
     ventana_hasta: hasta,
     socios_requeridos: formData.getAll("socios_requeridos") as string[],
     invitar_cliente: formData.get("invitar_cliente") === "on",
+    invitados_externos: parsearEmails(formData.get("invitados_externos") as string | null),
   }
 }
 

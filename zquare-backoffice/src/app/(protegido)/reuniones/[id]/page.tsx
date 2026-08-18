@@ -59,7 +59,7 @@ export default async function ReunionPage({
   // demás muestran, día por día, quién ya dijo que puede.
   // Los catálogos (socios, clientes, proyectos) solo hacen falta para el
   // diálogo de edición, que existe mientras la reunión sigue abierta.
-  const editable = solicitud.estado === "abierta"
+  const editable = solicitud.estado !== "cancelada"
   const [
     { data: respuestasData },
     { data: clienteData },
@@ -154,6 +154,7 @@ export default async function ReunionPage({
 
   const invitados = socios.map((s) => s.socio.nombre)
   if (solicitud.invitar_cliente && cliente?.email) invitados.push(cliente.nombre)
+  invitados.push(...(solicitud.invitados_externos ?? []))
 
   const errorCalendario = (solicitud.metadata as { error_calendario?: string })
     ?.error_calendario

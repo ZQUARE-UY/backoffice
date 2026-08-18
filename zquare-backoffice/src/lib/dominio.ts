@@ -739,6 +739,8 @@ export type SolicitudReunion = {
   ventana_hasta: string
   socios_requeridos: string[]
   invitar_cliente: boolean
+  // Mails de afuera (gente del cliente) que reciben la invitación.
+  invitados_externos: string[]
   estado: EstadoReunion
   inicio: string | null
   fin: string | null

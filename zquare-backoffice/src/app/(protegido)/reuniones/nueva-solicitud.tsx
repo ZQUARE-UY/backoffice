@@ -226,6 +226,25 @@ export function FormularioSolicitud({
               )}
 
               <Field>
+                <FieldLabel htmlFor="invitados_externos">
+                  Otros invitados (opcional)
+                </FieldLabel>
+                <Input
+                  id="invitados_externos"
+                  name="invitados_externos"
+                  type="text"
+                  inputMode="email"
+                  autoComplete="off"
+                  defaultValue={(solicitud?.invitados_externos ?? []).join(", ")}
+                  placeholder="ana@cliente.com, pedro@cliente.com"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Mails de gente del cliente que tiene que recibir la invitación
+                  al Meet, separados por coma.
+                </p>
+              </Field>
+
+              <Field>
                 <FieldLabel htmlFor="notas">Notas (opcional)</FieldLabel>
                 <Textarea
                   id="notas"
@@ -236,7 +255,14 @@ export function FormularioSolicitud({
                 />
               </Field>
 
-              {editando && (
+              {editando && solicitud?.estado === "agendada" && (
+                <p className="text-xs text-muted-foreground">
+                  La reunión ya está agendada: el evento de Google se actualiza
+                  con estos cambios (título, notas, invitados, duración). Para
+                  cambiar el horario usá &quot;Elegir otro horario&quot;.
+                </p>
+              )}
+              {editando && solicitud?.estado === "abierta" && (
                 <p className="text-xs text-muted-foreground">
                   Lo que ya respondieron los socios se conserva. Si achicás los
                   días, las horas que queden afuera se descartan.
