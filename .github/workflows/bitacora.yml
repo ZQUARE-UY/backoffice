@@ -1,0 +1,15 @@
+name: bitacora
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  log:
+    if: github.event.pull_request.merged == true
+    permissions:
+      contents: write
+      pull-requests: read
+    uses: ZQUARE-UY/toolkit/.github/workflows/bitacora.yml@main
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
