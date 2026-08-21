@@ -43,17 +43,44 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  ref,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
 }) {
+  const popupRef = React.useRef<HTMLDivElement | null>(null)
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
+        ref={(nodo) => {
+          popupRef.current = nodo
+          if (typeof ref === "function") ref(nodo)
+          else if (ref) ref.current = nodo
+        }}
+        // Foco inicial: el primer control enfocable (comportamiento por
+        // defecto, p. ej. el título de un formulario), salvo que ese control
+        // quede fuera de la parte visible del diálogo —el textarea de
+        // comentarios al final de una ficha larga—: ahí el foco va al diálogo
+        // mismo para que no aparezca ya scrolleado hasta el fondo.
+        initialFocus={() => {
+          const popup = popupRef.current
+          if (!popup) return null
+          const primero = popup.querySelector<HTMLElement>(
+            'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]):not([data-slot="dialog-close"]), a[href], [tabindex]:not([tabindex="-1"])'
+          )
+          if (!primero) return null
+          const visible =
+            primero.getBoundingClientRect().bottom <=
+            popup.getBoundingClientRect().bottom
+          return visible ? null : popup
+        }}
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          // max-h + overflow: un diálogo largo (ficha de tarea con brief y comentarios,
+          // formularios con muchos campos) scrollea adentro en vez de pasarse del
+          // viewport y obligar a hacer zoom-out del navegador para ver el footer.
+          "fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
         {...props}

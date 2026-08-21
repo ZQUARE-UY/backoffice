@@ -361,6 +361,58 @@ era un flujo continuo (Hecho se limpiaba solo por edad).
 - [ ] Release: PR → merge → migración en SQL Editor (Joaquín) → verificación
   en prod (UI + tools nuevas desde conector reconectado).
 
+#### Tablero v6 — Calendario, ceremonias y atajos (2026-08-19)
+
+Pedido de Joaquín: dos bugs (modales que se pasaban del viewport y obligaban
+a hacer zoom-out; el tablero crecía con la página en vez de scrollear por
+columna) y dos features (calendario de sprints y ceremonias por proyecto;
+atajo de tareas rápidas). Decisiones tomadas en entrevista: las ceremonias
+se **generan desde el sprint** (tabla nueva, no reuniones del módulo
+Reuniones) y el atajo es una **tecla global** que abre el modal completo.
+
+- [x] Modales: `DialogContent` limita su alto al viewport y scrollea adentro;
+  el foco inicial va al primer control salvo que quede fuera de la parte
+  visible (la ficha de tarea con comentarios arrancaba scrolleada al fondo).
+- [x] Tablero: en la vista Tablero la página fija su alto al viewport y cada
+  columna scrollea por su cuenta (encabezado y "Agregar tarjeta" fijos). El
+  Backlog y el móvil siguen con scroll de página.
+- [x] **Captura rápida** con la tecla **N** (fuera de inputs y sin otro
+  diálogo abierto), desde cualquier pantalla: una caja mínima con una línea de
+  texto y Tarea / Idea (Tab alterna). Enter guarda y deja la caja abierta para
+  seguir anotando (lista de lo recién capturado con link "Ver"); Esc cierra.
+  La tarea nace en el backlog con prioridad media y **proyecto opcional**
+  (select que aparece solo en modo Tarea, con los proyectos cargados al abrir;
+  elegir uno también setea el cliente y se mantiene entre capturas seguidas;
+  las ideas no llevan proyecto: en una idea `proyecto_id` significa
+  "graduada"). La idea nace como semilla;
+  se desarrollan después desde su ficha o con Claude. Joaquín lo pidió así
+  (primera versión abría el formulario completo: "me lo imaginaba más como
+  una tarea sencilla… ideas, bugs o cosas chiquitas que se me ocurran en el
+  momento"). `crearTarea` / `crearIdea` devuelven id y número.
+- [x] Bug preexistente arreglado de paso: el `<Toaster />` de sonner nunca
+  estuvo montado, así que ningún `toast` (p. ej. los de sprints) se veía. Va
+  en el layout protegido.
+- [x] Migración `20260819000001_ceremonias.sql`: tabla `ceremonias`
+  (sprint_id, tipo planning/daily/review/retro, `inicio` timestamptz,
+  duración, notas, columnas previstas para el evento de Google). Una fila por
+  ocurrencia; "definir" reemplaza el juego completo del sprint
+  (`src/lib/ceremonias.ts`, compartido por server actions y MCP). La daily se
+  expande a un día hábil por fila entre las fechas del sprint.
+- [x] Diálogo "Ceremonias" en el menú ⋯ del sprint (backlog y banner del
+  tablero) y al clickear la barra del sprint en el calendario: defaults
+  planning primer día 10:00, daily L–V 09:30 (15'), review 15:00 y retro 16:30
+  el último día; hora de Montevideo.
+- [x] Vista **Calendario** en `/tareas` (`?vista=calendario&mes=YYYY-MM`):
+  grilla mensual con sprints como barras (activo lleno, planificado
+  punteado, cerrado gris) y ceremonias como chips por día; filtro por
+  proyecto/cliente de la barra de filtros existente.
+- [x] MCP: `calendario_sprints` (sprints + ceremonias de un rango, filtrable
+  por proyecto) y `definir_ceremonias` (plan explícito o el de siempre).
+- [ ] Release: PR → merge → migración en SQL Editor (Joaquín) → verificación
+  en prod (UI + tools nuevas desde conector reconectado).
+- [ ] Siguiente iteración posible: crear el evento de Google Calendar por
+  ceremonia (las columnas ya están) reutilizando `crearEventoReunion`.
+
 ### Post-MVP — Calendario de reuniones
 - [x] Panel "Próximas reuniones" en el dashboard: agenda unificada de los 4
   socios (próximos 7 días) leída de sus Google Calendars vía la cuenta de
@@ -706,6 +758,12 @@ de Google en la consola del Workspace.
   hacer) y se completa: lo hecho queda archivado en el sprint y desaparece del
   tablero, lo pendiente vuelve al backlog o pasa al siguiente. Cinco tools MCP
   nuevas y filtro por sprint en `listar_tareas`. Ver "Tablero v5 — Sprints".
+- **2026-08-19** — Tablero v6: modales con alto máximo y scroll interno,
+  scroll por columna en el tablero, captura rápida con la tecla **N** (tarea
+  o idea en una línea, desde cualquier pantalla), Toaster montado, tabla `ceremonias` + diálogo "Ceremonias" por
+  sprint + vista Calendario (sprints y ceremonias por mes, filtrable por
+  proyecto), y tools MCP `calendario_sprints` / `definir_ceremonias`. Ver
+  "Tablero v6 — Calendario, ceremonias y atajos".
 - **2026-08-21** — Reuniones: grabación y transcripción. Desde la página de la
   reunión se graba el audio (micrófono, y en videollamadas también el audio de
   la pestaña del Meet compartida, mezclados en el navegador) o se sube un

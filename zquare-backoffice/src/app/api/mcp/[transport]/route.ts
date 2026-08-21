@@ -5,6 +5,8 @@ import {
   etiquetaHueco,
   FORMATO_FECHA,
   FORMATO_HORA,
+  paredEnZona,
+  sumarDias,
 } from "@/lib/disponibilidad"
 import { codigoReunion, type SolicitudReunion } from "@/lib/dominio"
 import { generarEmbeddings } from "@/lib/embeddings"
@@ -32,6 +34,7 @@ import {
   type SprintResumen,
   type Ubicacion,
 } from "@/lib/sprints"
+import { definirCeremonias, planPorDefecto, type PlanCeremonias } from "@/lib/ceremonias"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { listarGrabaciones } from "@/lib/transcripcion"
 
@@ -1957,6 +1960,163 @@ const handler = createMcpHandler(
           })
         } catch (e) {
           return texto(`${e instanceof Error ? e.message : e}; no cerré nada.`)
+        }
+      }
+    )
+
+    // ── Calendario y ceremonias ───────────────────────────────────────────
+    // Las ceremonias (planning, daily, review, retro) son datos del sprint,
+    // una fila por ocurrencia; se ven en /tareas?vista=calendario.
+    server.registerTool(
+      "calendario_sprints",
+      {
+        title: "Calendario de sprints y ceremonias",
+        description:
+          "Sprints con fechas y sus ceremonias (planning, daily, review, retro) en un rango de días, opcionalmente filtrado por proyecto. Por defecto, el mes en curso. Sirve para responder '¿cuándo es la review?', '¿qué ceremonias hay esta semana?' o para revisar el calendario de un proyecto. Las horas se devuelven en hora de Montevideo.",
+        inputSchema: {
+          desde: z.string().describe("YYYY-MM-DD (default: primer día del mes actual)").optional(),
+          hasta: z.string().describe("YYYY-MM-DD (default: último día del mes actual)").optional(),
+          proyecto_nombre: z.string().optional(),
+        },
+      },
+      async ({ desde, hasta, proyecto_nombre }) => {
+        const hoy = paredEnZona(Date.now()).fecha
+        const mes = hoy.slice(0, 7)
+        const [a, m] = mes.split("-").map(Number)
+        const ultimo = new Date(Date.UTC(a, m, 0)).getUTCDate()
+        const d = desde ?? `${mes}-01`
+        const h = hasta ?? `${mes}-${String(ultimo).padStart(2, "0")}`
+        if (!FORMATO_FECHA.test(d) || !FORMATO_FECHA.test(h) || h < d) {
+          return texto("Rango inválido: desde/hasta en formato YYYY-MM-DD y hasta ≥ desde.")
+        }
+        const proyectoId = await idPorNombre("proyectos", proyecto_nombre)
+        if (proyecto_nombre && !proyectoId) {
+          return texto(`No encontré el proyecto "${proyecto_nombre}".`)
+        }
+        const supabase = createAdminClient()
+        let sprintsQ = supabase
+          .from("sprints")
+          .select("id, numero, nombre, estado, objetivo, fecha_inicio, fecha_fin, proyectos(nombre)")
+          .is("deleted_at", null)
+          .not("fecha_inicio", "is", null)
+          .not("fecha_fin", "is", null)
+          .lte("fecha_inicio", h)
+          .gte("fecha_fin", d)
+          .order("numero", { ascending: true })
+        let ceremoniasQ = supabase
+          .from("ceremonias")
+          .select("tipo, inicio, duracion_min, notas, sprint:sprints!inner(numero, nombre, proyecto_id)")
+          .is("deleted_at", null)
+          .is("sprint.deleted_at", null)
+          .gte("inicio", `${sumarDias(d, -1)}T00:00:00Z`)
+          .lt("inicio", `${sumarDias(h, 2)}T00:00:00Z`)
+          .order("inicio", { ascending: true })
+        if (proyectoId) {
+          sprintsQ = sprintsQ.eq("proyecto_id", proyectoId)
+          ceremoniasQ = ceremoniasQ.eq("sprint.proyecto_id", proyectoId)
+        }
+        const [{ data: sprints, error: e1 }, { data: ceremonias, error: e2 }] =
+          await Promise.all([sprintsQ, ceremoniasQ])
+        if (e1) throw new Error(e1.message)
+        if (e2) throw new Error(e2.message)
+
+        return texto({
+          rango: { desde: d, hasta: h },
+          proyecto: proyecto_nombre ?? null,
+          sprints: (sprints ?? []).map((s) => {
+            const { proyectos, id, ...resto } = s
+            void id
+            return {
+              codigo: `Sprint ${s.numero}`,
+              ...resto,
+              proyecto: (proyectos as unknown as { nombre: string } | null)?.nombre ?? null,
+            }
+          }),
+          ceremonias: (ceremonias ?? [])
+            .map((c) => {
+              const pared = paredEnZona(Date.parse(c.inicio))
+              const sprint = c.sprint as unknown as { numero: number; nombre: string }
+              return {
+                fecha: pared.fecha,
+                hora: pared.hora,
+                tipo: c.tipo,
+                duracion_min: c.duracion_min,
+                sprint: `Sprint ${sprint.numero}`,
+                notas: c.notas,
+              }
+            })
+            .filter((c) => c.fecha >= d && c.fecha <= h),
+          ver: "/tareas?vista=calendario",
+        })
+      }
+    )
+
+    server.registerTool(
+      "definir_ceremonias",
+      {
+        title: "Definir las ceremonias de un sprint",
+        description:
+          "Define (reemplazando las anteriores) las ceremonias de un sprint: planning, daily, review y retro. La daily se genera una por día hábil elegido entre las fechas del sprint; las otras son una cada una. Sin parámetros de ceremonias usa el plan de siempre: planning el primer día 10:00, daily L–V 09:30 (15 min), review 15:00 y retro 16:30 el último día. Horas en hora de Montevideo. Pasar `null` en una ceremonia la omite. El sprint necesita fecha de inicio y fin (para las dailies).",
+        inputSchema: {
+          sprint: z.union([z.string(), z.number()]).describe("número del sprint o 'activo'"),
+          planning: z
+            .object({ fecha: z.string(), hora: z.string(), duracion_min: z.number().int().optional() })
+            .nullable()
+            .optional(),
+          daily: z
+            .object({
+              hora: z.string(),
+              duracion_min: z.number().int().optional(),
+              dias: z.array(z.number().int().min(1).max(7)).describe("1=lunes … 5=viernes").optional(),
+            })
+            .nullable()
+            .optional(),
+          review: z
+            .object({ fecha: z.string(), hora: z.string(), duracion_min: z.number().int().optional() })
+            .nullable()
+            .optional(),
+          retro: z
+            .object({ fecha: z.string(), hora: z.string(), duracion_min: z.number().int().optional() })
+            .nullable()
+            .optional(),
+        },
+      },
+      async (entrada, extra) => {
+        const supabase = createAdminClient()
+        const s =
+          String(entrada.sprint).trim().toLowerCase() === "activo"
+            ? await sprintActivo(supabase)
+            : await sprintPorReferencia(entrada.sprint)
+        if (!s) return texto(`No encontré el sprint "${entrada.sprint}".`)
+        const { data: fechas } = await supabase
+          .from("sprints")
+          .select("fecha_inicio, fecha_fin")
+          .eq("id", s.id)
+          .maybeSingle()
+        const seDioAlguna =
+          entrada.planning !== undefined ||
+          entrada.daily !== undefined ||
+          entrada.review !== undefined ||
+          entrada.retro !== undefined
+        const plan: PlanCeremonias = seDioAlguna
+          ? {
+              planning: entrada.planning ?? null,
+              daily: entrada.daily ?? null,
+              review: entrada.review ?? null,
+              retro: entrada.retro ?? null,
+            }
+          : planPorDefecto(fechas ?? { fecha_inicio: null, fecha_fin: null })
+        const { socioId } = await actorMcp(extra)
+        try {
+          const r = await definirCeremonias(supabase, s.id, plan, socioId)
+          return texto({
+            sprint: `Sprint ${s.numero}`,
+            ceremonias_creadas: r.creadas,
+            reemplazadas: r.reemplazadas,
+            ver: "/tareas?vista=calendario",
+          })
+        } catch (e) {
+          return texto(`${e instanceof Error ? e.message : e}; no cambié nada.`)
         }
       }
     )
