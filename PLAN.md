@@ -706,3 +706,16 @@ de Google en la consola del Workspace.
   hacer) y se completa: lo hecho queda archivado en el sprint y desaparece del
   tablero, lo pendiente vuelve al backlog o pasa al siguiente. Cinco tools MCP
   nuevas y filtro por sprint en `listar_tareas`. Ver "Tablero v5 — Sprints".
+- **2026-08-21** — Reuniones: grabación y transcripción. Desde la página de la
+  reunión se graba el audio (micrófono, y en videollamadas también el audio de
+  la pestaña del Meet compartida, mezclados en el navegador) o se sube un
+  archivo ya grabado. El audio va directo a Drive en partes de ~15 min
+  (subida resumable), se transcribe con Whisper en Cloudflare Workers AI
+  (mismo token que los embeddings, sin credenciales nuevas) y la transcripción
+  final queda como Google Doc en Minutas/ del cliente (o Reuniones/ si es
+  interna) — el indexador semántico la levanta solo en la pasada siguiente.
+  Tabla nueva `reunion_grabaciones` (una fila por parte, reintentable),
+  columnas `drive_transcripcion_id/url` en la solicitud, y tool MCP
+  `transcripcion_reunion` para resumir o sacar tareas/decisiones de lo
+  hablado. Indiferente de la plataforma (Meet/Zoom/presencial): no depende
+  del plan de Workspace.

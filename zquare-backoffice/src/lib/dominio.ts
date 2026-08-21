@@ -747,6 +747,9 @@ export type SolicitudReunion = {
   google_event_id: string | null
   google_calendar_id: string | null
   meet_url: string | null
+  // Google Doc con la transcripción completa, cuando ya se generó.
+  drive_transcripcion_id: string | null
+  drive_transcripcion_url: string | null
   agendada_por: string | null
   agendada_at: string | null
   metadata: Record<string, unknown>
@@ -768,3 +771,22 @@ export type RespuestaReunion = {
 // Qué hizo cada socio requerido con la solicitud. Sale de una sola fuente:
 // sin fila de respuesta es "falta"; con franjas vacías es "no_puede".
 export type EstadoRespuesta = "respondio" | "no_puede" | "falta"
+
+// Una parte de audio de la reunión: el grabador corta cada ~15 minutos y cada
+// corte (o cada archivo subido a mano) es una fila con su transcripción.
+export type EstadoGrabacion = "subida" | "transcripta" | "error"
+
+export type GrabacionReunion = {
+  id: string
+  solicitud_id: string
+  parte: number
+  nombre: string
+  drive_audio_id: string
+  drive_audio_url: string | null
+  estado: EstadoGrabacion
+  texto: string | null
+  error: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
