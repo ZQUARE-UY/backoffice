@@ -94,7 +94,7 @@ export function BriefProyecto({ proyecto }: { proyecto: Proyecto }) {
       )}
 
       <Dialog open={abierto} onOpenChange={setAbierto}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="sm:max-w-2xl">
           {abierto && (
             <form action={onSubmit}>
               <DialogHeader>

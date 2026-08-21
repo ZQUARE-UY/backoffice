@@ -2,7 +2,18 @@
 
 import { revalidatePath } from "next/cache"
 
-import { RE_CODIGO_PROYECTO, RE_EPICA } from "@/lib/dominio"
+import {
+  definirCeremonias as definirCeremoniasDb,
+  type CeremoniaPuntual,
+  type DailyPlan,
+  type PlanCeremonias,
+} from "@/lib/ceremonias"
+import {
+  RE_CODIGO_PROYECTO,
+  RE_EPICA,
+  TIPOS_CEREMONIA,
+  type Ceremonia,
+} from "@/lib/dominio"
 import { idSocioActual } from "@/lib/socio-actual"
 import {
   completarSprint as completarSprintDb,
@@ -124,11 +135,40 @@ export async function crearTarea(formData: FormData) {
       orden: await ordenAlTope(ubicacion.estado),
       created_by: await idSocioActual(),
     })
-    .select("id")
+    .select("id, numero")
     .single()
   if (error) throw new Error(error.message)
   await guardarVersion(data.id, datos)
   revalidatePath("/tareas")
+  // La captura rápida (tecla N) crea tarjetas desde cualquier pantalla:
+  // devuelve el número para que el toast pueda linkear a la ficha.
+  return { id: data.id as string, numero: data.numero as number }
+}
+
+// Proyectos activos para el select de la captura rápida (tecla N). Se cargan
+// recién al abrirla, así el resto de las pantallas no paga esta query.
+export async function proyectosParaCaptura(): Promise<
+  { id: string; nombre: string; cliente: string | null; cliente_id: string | null }[]
+> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("proyectos")
+    .select("id, nombre, cliente_id, clientes(nombre)")
+    .is("deleted_at", null)
+    .order("nombre")
+  if (error) throw new Error(error.message)
+  type Fila = {
+    id: string
+    nombre: string
+    cliente_id: string | null
+    clientes: { nombre: string } | null
+  }
+  return ((data ?? []) as unknown as Fila[]).map((p) => ({
+    id: p.id,
+    nombre: p.nombre,
+    cliente: p.clientes?.nombre ?? null,
+    cliente_id: p.cliente_id,
+  }))
 }
 
 export async function actualizarTarea(id: string, formData: FormData) {
@@ -326,4 +366,62 @@ export async function comentarTarea(tareaId: string, formData: FormData) {
   })
   if (error) throw new Error(error.message)
   revalidatePath("/tareas")
+}
+
+// ── Ceremonias ──────────────────────────────────────────────────────────────
+
+// Las del sprint, para precargar el formulario "Ceremonias" al abrirlo (el
+// encabezado del sprint no las trae: se piden recién ahí).
+export async function ceremoniasDeSprint(sprintId: string): Promise<Ceremonia[]> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("ceremonias")
+    .select("*")
+    .eq("sprint_id", sprintId)
+    .is("deleted_at", null)
+    .order("inicio", { ascending: true })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as Ceremonia[]
+}
+
+// Campos del formulario: `<tipo>_on` (checkbox), `<tipo>_fecha`, `<tipo>_hora`,
+// `<tipo>_duracion`; la daily no lleva fecha y suma `daily_dias` (1..5, varios).
+function planDesde(formData: FormData): PlanCeremonias {
+  const puntual = (tipo: "planning" | "review" | "retro"): CeremoniaPuntual | null => {
+    if (!formData.get(`${tipo}_on`)) return null
+    const fecha = textoOpcional(formData.get(`${tipo}_fecha`))
+    const hora = textoOpcional(formData.get(`${tipo}_hora`))
+    if (!fecha || !hora) throw new Error(`${TIPOS_CEREMONIA[tipo].label}: falta la fecha o la hora`)
+    const dur = textoOpcional(formData.get(`${tipo}_duracion`))
+    return { fecha, hora, duracion_min: dur ? Number(dur) : undefined }
+  }
+  let daily: DailyPlan | null = null
+  if (formData.get("daily_on")) {
+    const hora = textoOpcional(formData.get("daily_hora"))
+    if (!hora) throw new Error("Daily: falta la hora")
+    const dur = textoOpcional(formData.get("daily_duracion"))
+    const dias = formData
+      .getAll("daily_dias")
+      .map((d) => Number(d))
+      .filter((d) => Number.isInteger(d) && d >= 1 && d <= 7)
+    if (dias.length === 0) throw new Error("Daily: elegí al menos un día de la semana")
+    daily = { hora, duracion_min: dur ? Number(dur) : undefined, dias }
+  }
+  return {
+    planning: puntual("planning"),
+    daily,
+    review: puntual("review"),
+    retro: puntual("retro"),
+  }
+}
+
+export async function definirCeremonias(sprintId: string, formData: FormData) {
+  const resultado = await definirCeremoniasDb(
+    await createClient(),
+    sprintId,
+    planDesde(formData),
+    await idSocioActual()
+  )
+  revalidatePath("/tareas")
+  return resultado
 }
