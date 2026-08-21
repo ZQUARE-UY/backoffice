@@ -36,6 +36,7 @@ import {
 } from "@/lib/sprints"
 import { definirCeremonias, planPorDefecto, type PlanCeremonias } from "@/lib/ceremonias"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { listarGrabaciones } from "@/lib/transcripcion"
 
 // MCP server del backoffice: expone los datos de la empresa a Claude
 // (Claude Code / Desktop / claude.ai) vía Streamable HTTP en /api/mcp/mcp.
@@ -3364,6 +3365,47 @@ const handler = createMcpHandler(
               : "borrado"
             : "no había",
           advertencia: resultado.advertencia,
+        })
+      }
+    )
+
+    server.registerTool(
+      "transcripcion_reunion",
+      {
+        title: "Transcripción de una reunión",
+        description:
+          "Devuelve la transcripción de una reunión grabada desde el backoffice (Whisper), con el link al Google Doc en Drive y el estado de cada parte de audio. Sirve para resumir la reunión, sacar acuerdos o crear tareas y decisiones a partir de lo hablado.",
+        inputSchema: { reunion: z.union([z.string(), z.number()]) },
+      },
+      async ({ reunion }) => {
+        const supabase = createAdminClient()
+        const solicitud = await solicitudPorReferencia(reunion, supabase)
+        if (!solicitud) return texto(`No encontré la reunión "${reunion}".`)
+
+        const partes = await listarGrabaciones(supabase, solicitud.id)
+        if (partes.length === 0) {
+          return texto(
+            `La reunión ${codigoReunion(solicitud.numero)} no tiene grabaciones. Se graba desde su página en el backoffice (/reuniones/${solicitud.id}).`
+          )
+        }
+
+        return texto({
+          reunion: codigoReunion(solicitud.numero),
+          titulo: solicitud.titulo,
+          documento_drive: solicitud.drive_transcripcion_url,
+          partes: partes.map((p) => ({
+            parte: p.parte,
+            estado: p.estado,
+            error: p.error ?? undefined,
+          })),
+          transcripcion: partes
+            .filter((p) => p.estado === "transcripta" && p.texto)
+            .map((p) =>
+              partes.length > 1 ? `— Parte ${p.parte} —\n${p.texto}` : p.texto
+            )
+            .join("\n\n")
+            // Techo defensivo para no reventar el contexto del cliente MCP.
+            .slice(0, 150_000),
         })
       }
     )

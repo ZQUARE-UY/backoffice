@@ -16,19 +16,26 @@ import {
   ESTADOS_REUNION,
   type Cliente,
   type EstadoRespuesta,
+  type GrabacionReunion,
   type RespuestaReunion,
   type Socio,
 } from "@/lib/dominio"
 import { fechaDeHoy, huecosDeSolicitud } from "@/lib/reuniones"
 import { idSocioActual } from "@/lib/socio-actual"
 import { createClient } from "@/lib/supabase/server"
+import { CAMPOS_GRABACION } from "@/lib/transcripcion"
 
 import { EditarSolicitud } from "../nueva-solicitud"
+import { Grabacion } from "./grabacion"
 import { Huecos, type HuecoVista } from "./huecos"
 import { MiRespuesta } from "./mi-respuesta"
 import { SolicitudAcciones } from "./solicitud-acciones"
 
 export const metadata = { title: "Reunión" }
+
+// Transcribir una parte de audio con Whisper puede pasar de los 60s default;
+// aplica también a las server actions que se invocan desde esta ruta.
+export const maxDuration = 300
 
 const ETIQUETA_RESPUESTA: Record<
   EstadoRespuesta,
@@ -62,6 +69,7 @@ export default async function ReunionPage({
   const editable = solicitud.estado !== "cancelada"
   const [
     { data: respuestasData },
+    { data: grabacionesData },
     { data: clienteData },
     { data: proyectoData },
     { data: sociosData },
@@ -74,6 +82,11 @@ export default async function ReunionPage({
         .from("reunion_respuestas")
         .select("id, solicitud_id, socio_id, franjas, comentario, created_at, updated_at")
         .eq("solicitud_id", id),
+      supabase
+        .from("reunion_grabaciones")
+        .select(CAMPOS_GRABACION)
+        .eq("solicitud_id", id)
+        .order("parte"),
       solicitud.cliente_id
         ? supabase
             .from("clientes")
@@ -109,6 +122,7 @@ export default async function ReunionPage({
     ])
 
   const respuestas = (respuestasData ?? []) as RespuestaReunion[]
+  const grabaciones = (grabacionesData ?? []) as GrabacionReunion[]
   const miRespuesta =
     respuestas.find((r) => r.socio_id === socioId) ?? null
 
@@ -254,6 +268,15 @@ export default async function ReunionPage({
             )}
           </CardContent>
         </Card>
+      )}
+
+      {(solicitud.estado === "agendada" || grabaciones.length > 0) && (
+        <Grabacion
+          solicitudId={solicitud.id}
+          codigo={codigoReunion(solicitud.numero)}
+          partes={grabaciones}
+          transcripcionUrl={solicitud.drive_transcripcion_url}
+        />
       )}
 
       <Card>

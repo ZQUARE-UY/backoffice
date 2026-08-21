@@ -33,7 +33,7 @@ export type ArchivoDrive = {
 const CARPETA_MIME = "application/vnd.google-apps.folder"
 
 // Busca una subcarpeta por nombre dentro de un padre; si no existe, la crea.
-async function asegurarCarpeta(
+export async function asegurarCarpeta(
   nombre: string,
   padreId: string
 ): Promise<string> {
@@ -290,6 +290,49 @@ export async function resolverCarpetaDestino(
 ): Promise<string> {
   if (!subcarpeta) return padreId
   return asegurarCarpeta(subcarpeta, padreId)
+}
+
+// Crea un Google Doc a partir de texto plano (Drive lo convierte al subirlo
+// con mimeType de Doc), o reemplaza el contenido si ya existe: así regenerar
+// una transcripción conserva el mismo doc y la misma URL.
+export async function guardarDocumentoTexto(
+  nombre: string,
+  carpetaId: string,
+  texto: string,
+  docIdExistente?: string | null
+): Promise<{ id: string; url: string }> {
+  const drive = driveClient()
+  const media = { mimeType: "text/plain", body: texto }
+
+  if (docIdExistente) {
+    const { data } = await drive.files.update({
+      fileId: docIdExistente,
+      media,
+      supportsAllDrives: true,
+      fields: "id, webViewLink",
+    })
+    if (!data.id) throw new Error("No se pudo actualizar el documento en Drive")
+    return {
+      id: data.id,
+      url: data.webViewLink ?? `https://docs.google.com/document/d/${data.id}`,
+    }
+  }
+
+  const { data } = await drive.files.create({
+    requestBody: {
+      name: nombre,
+      mimeType: "application/vnd.google-apps.document",
+      parents: [carpetaId],
+    },
+    media,
+    supportsAllDrives: true,
+    fields: "id, webViewLink",
+  })
+  if (!data.id) throw new Error("No se pudo crear el documento en Drive")
+  return {
+    id: data.id,
+    url: data.webViewLink ?? `https://docs.google.com/document/d/${data.id}`,
+  }
 }
 
 // Inicia una subida "resumable" contra Drive con la cuenta de servicio y

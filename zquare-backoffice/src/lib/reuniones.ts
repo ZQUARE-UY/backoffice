@@ -57,7 +57,7 @@ export async function fechaDeHoy(): Promise<string> {
 }
 
 export const CAMPOS_SOLICITUD =
-  "id, numero, titulo, notas, cliente_id, proyecto_id, duracion_min, ventana_desde, ventana_hasta, socios_requeridos, invitar_cliente, invitados_externos, estado, inicio, fin, google_event_id, google_calendar_id, meet_url, agendada_por, agendada_at, metadata, created_by, created_at, updated_at"
+  "id, numero, titulo, notas, cliente_id, proyecto_id, duracion_min, ventana_desde, ventana_hasta, socios_requeridos, invitar_cliente, invitados_externos, estado, inicio, fin, google_event_id, google_calendar_id, meet_url, drive_transcripcion_id, drive_transcripcion_url, agendada_por, agendada_at, metadata, created_by, created_at, updated_at"
 
 // Ventana máxima de días candidatos; la migración lo refuerza con un check.
 export const MAX_DIAS_VENTANA = 60
