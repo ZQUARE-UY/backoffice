@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react"
 import {
+  CalendarDaysIcon,
   CalendarIcon,
   CheckCircle2Icon,
   FlagIcon,
@@ -64,6 +65,7 @@ import {
   iniciarSprint,
 } from "./actions"
 import { type ProyectoOpcion } from "./campos-tarea"
+import { CeremoniasSprint } from "./ceremonias-sprint"
 
 // Métricas de un sprint calculadas por quien lo renderiza (backlog o tablero),
 // a partir de las tarjetas que ya tiene cargadas.
@@ -345,6 +347,7 @@ function SprintAcciones({
   proyectos: ProyectoOpcion[]
 }) {
   const [editar, setEditar] = useState(false)
+  const [ceremonias, setCeremonias] = useState(false)
   const [iniciar, setIniciar] = useState(false)
   const [completar, setCompletar] = useState(false)
   const [eliminar, setEliminar] = useState(false)
@@ -408,6 +411,12 @@ function SprintAcciones({
               <PencilIcon />
               Editar
             </DropdownMenuItem>
+            {sprint.estado !== "cerrado" && (
+              <DropdownMenuItem onClick={() => setCeremonias(true)}>
+                <CalendarDaysIcon />
+                Ceremonias
+              </DropdownMenuItem>
+            )}
             {sprint.estado === "planificado" && (
               <>
                 <DropdownMenuSeparator />
@@ -420,6 +429,12 @@ function SprintAcciones({
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <CeremoniasSprint
+        sprint={sprint}
+        abierto={ceremonias}
+        onAbiertoChange={setCeremonias}
+      />
 
       <Dialog open={editar} onOpenChange={setEditar}>
         <DialogContent className="sm:max-w-lg">

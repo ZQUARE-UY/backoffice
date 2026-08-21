@@ -98,7 +98,9 @@ export function Tablero({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    // `flex-1 min-h-0`: cuando la página fija su alto al viewport (vista
+    // Tablero), el tablero toma lo que queda y las columnas scrollean adentro.
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       {/* Banner del sprint: el tablero ES el sprint activo (más lo que no tiene
           sprint). Sin activo, invita a iniciar el planificado o a crear uno. */}
       {activo ? (
@@ -133,7 +135,10 @@ export function Tablero({
         </div>
       )}
 
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    {/* Scroll interno por columna: cada una tiene su propia barra, así una
+        columna larga (Hecho) no obliga a scrollear toda la página para llegar
+        al resto. El encabezado y el "Agregar tarjeta" quedan fijos. */}
+    <div className="grid min-h-0 flex-1 gap-4 md:auto-rows-fr md:grid-cols-2 xl:grid-cols-4">
       {ESTADOS_TABLERO.map((estado) => {
         const items = columna(estado)
         return (
@@ -153,17 +158,21 @@ export function Tablero({
               soltar(estado, items.filter((t) => t.id !== id).length, id)
             }}
             className={cn(
-              "flex min-h-40 flex-col gap-2 rounded-xl border bg-muted/30 p-2 transition-colors",
+              "flex min-h-40 flex-col gap-2 overflow-hidden rounded-xl border bg-muted/30 p-2 transition-colors",
               columnaActiva === estado && arrastrada && "border-primary bg-muted"
             )}
           >
-            <div className="flex items-center justify-between px-1 py-1">
+            <div className="flex shrink-0 items-center justify-between px-1 py-1">
               <span className="text-sm font-medium">
                 {ESTADOS_TAREA[estado].label}
               </span>
               <span className="text-xs text-muted-foreground">{items.length}</span>
             </div>
 
+            {/* -mx-2 px-2: el área scrolleable llega hasta el borde de la
+                columna para que la barra quede pegada al borde y las sombras
+                de las tarjetas no se recorten. */}
+            <div className="-mx-2 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 py-0.5">
             {items.map((tarea) => (
               <div
                 key={tarea.id}
@@ -261,6 +270,7 @@ export function Tablero({
                 </DetalleTarea>
               </div>
             ))}
+            </div>
 
             <NuevaTarea
               socios={socios}

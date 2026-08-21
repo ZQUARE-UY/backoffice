@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation"
 
 import { AppSidebar } from "@/components/app-sidebar"
+import { CapturaRapida } from "@/components/captura-rapida"
+import { Toaster } from "@/components/ui/sonner"
 import {
   SidebarInset,
   SidebarProvider,
@@ -43,6 +45,10 @@ export default async function ProtegidoLayout({
         </header>
         <div className="flex flex-1 flex-col gap-6 p-6">{children}</div>
       </SidebarInset>
+      {/* Tecla N: captura rápida de tareas e ideas desde cualquier pantalla. */}
+      <CapturaRapida />
+      {/* Sin esto los toast (sonner) no se muestran en ninguna pantalla. */}
+      <Toaster />
     </SidebarProvider>
   )
 }

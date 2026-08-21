@@ -60,11 +60,14 @@ export async function crearIdea(formData: FormData) {
   const { data, error } = await supabase
     .from("ideas")
     .insert({ ...datos, created_by: await idSocioActual() })
-    .select("id")
+    .select("id, numero")
     .single()
   if (error) throw new Error(error.message)
   await guardarVersion(data.id, datos)
   revalidatePath("/ideas")
+  // La captura rápida (tecla N) crea ideas desde cualquier pantalla: devuelve
+  // id y número para que el toast pueda linkear a la ficha.
+  return { id: data.id as string, numero: data.numero as number }
 }
 
 export async function actualizarIdea(id: string, formData: FormData) {

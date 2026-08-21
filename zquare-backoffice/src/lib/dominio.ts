@@ -379,6 +379,35 @@ export function diasRestantesSprint(
   return Math.round((fin.getTime() - inicioHoy.getTime()) / 86_400_000)
 }
 
+// Ceremonias de un sprint. Una fila por ocurrencia (la daily se repite por
+// día hábil). El orden de las claves es el orden en que se muestran; los
+// defaults son los que propone el formulario "Ceremonias" del sprint.
+export const TIPOS_CEREMONIA = {
+  planning: { label: "Planning", corto: "Plan", duracion: 60, hora: "10:00" },
+  daily: { label: "Daily", corto: "Daily", duracion: 15, hora: "09:30" },
+  review: { label: "Review", corto: "Review", duracion: 60, hora: "15:00" },
+  retro: { label: "Retro", corto: "Retro", duracion: 45, hora: "16:30" },
+}
+
+export type TipoCeremonia = keyof typeof TIPOS_CEREMONIA
+
+export const TIPOS_CEREMONIA_ORDEN = Object.keys(TIPOS_CEREMONIA) as TipoCeremonia[]
+
+export type Ceremonia = {
+  id: string
+  sprint_id: string
+  tipo: TipoCeremonia
+  inicio: string // ISO (instante)
+  duracion_min: number
+  notas: string | null
+  google_event_id: string | null
+  google_calendar_id: string | null
+  meet_url: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
 // Ciclo de vida de una idea del banco. El orden de las claves es el orden en
 // que se muestran las secciones en /ideas.
 export const ESTADOS_IDEA = {
