@@ -248,6 +248,11 @@ export type DestinoPendientes = { tipo: "backlog" } | { tipo: "sprint"; sprint_i
 // en el tablero) y lo pendiente vuelve al backlog o pasa a otro sprint
 // planificado, conservando el orden del tablero. Devuelve el resumen que
 // también queda en `metadata`.
+//
+// "Lo hecho" es todo lo que está en Hecho en el tablero, no solo lo que tenía
+// `sprint_id`: las tarjetas que llegaron a Hecho sin sprint (p. ej. antes de
+// que hubiera uno activo) también se archivan en el sprint que se cierra, que
+// es lo que hace que la columna quede realmente vacía.
 export async function completarSprint(
   db: Db,
   sprintId: string,
@@ -275,12 +280,30 @@ export async function completarSprint(
 
   const { data: tarjetas } = await db
     .from("tareas")
-    .select("id, estado, estimacion")
-    .eq("sprint_id", sprintId)
+    .select("id, estado, estimacion, sprint_id")
+    .or(`sprint_id.eq.${sprintId},and(sprint_id.is.null,estado.eq.hecho)`)
     .is("deleted_at", null)
     .order("orden", { ascending: true })
-  const todas = (tarjetas ?? []) as { id: string; estado: string; estimacion: number | null }[]
+  const todas = (tarjetas ?? []) as {
+    id: string
+    estado: string
+    estimacion: number | null
+    sprint_id: string | null
+  }[]
   const hechas = todas.filter((t) => t.estado === "hecho")
+  // Las hechas sueltas del tablero se adjuntan al sprint que se cierra: con
+  // `sprint_id` puesto salen del tablero junto con el resto.
+  const sueltas = hechas.filter((t) => t.sprint_id === null)
+  if (sueltas.length > 0) {
+    const { error: errorSueltas } = await db
+      .from("tareas")
+      .update({ sprint_id: sprintId })
+      .in(
+        "id",
+        sueltas.map((t) => t.id)
+      )
+    if (errorSueltas) throw new Error(errorSueltas.message)
+  }
   // Orden del tablero: la columna más avanzada primero y dentro de cada una su
   // posición, para que en el destino queden priorizadas como estaban.
   const rango = (estado: string) => ESTADOS_TAREA_ORDEN.indexOf(estado as EstadoTarea)
