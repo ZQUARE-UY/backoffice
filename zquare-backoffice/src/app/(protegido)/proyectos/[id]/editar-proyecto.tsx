@@ -196,6 +196,15 @@ export function EditarProyecto({
                   />
                 </div>
               </Field>
+              <Field>
+                <FieldLabel htmlFor="github_repo">Repo de GitHub</FieldLabel>
+                <Input
+                  id="github_repo"
+                  name="github_repo"
+                  placeholder="owner/repo"
+                  defaultValue={proyecto.github_repo ?? ""}
+                />
+              </Field>
             </FieldGroup>
             <DialogFooter>
               <Button type="submit" disabled={pendiente}>

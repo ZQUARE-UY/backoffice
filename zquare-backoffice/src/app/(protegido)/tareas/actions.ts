@@ -24,6 +24,7 @@ import {
   type DestinoPendientes,
 } from "@/lib/sprints"
 import { createClient } from "@/lib/supabase/server"
+import { sincronizarTareaSilencioso } from "@/lib/tareas-github"
 
 function textoOpcional(valor: FormDataEntryValue | null): string | null {
   const t = (valor as string | null)?.trim()
@@ -139,6 +140,7 @@ export async function crearTarea(formData: FormData) {
     .single()
   if (error) throw new Error(error.message)
   await guardarVersion(data.id, datos)
+  await sincronizarTareaSilencioso(data.id)
   revalidatePath("/tareas")
   // La captura rápida (tecla N) crea tarjetas desde cualquier pantalla:
   // devuelve el número para que el toast pueda linkear a la ficha.
@@ -206,6 +208,7 @@ export async function actualizarTarea(id: string, formData: FormData) {
   const { error } = await supabase.from("tareas").update(cambios).eq("id", id)
   if (error) throw new Error(error.message)
   await guardarVersion(id, datos)
+  await sincronizarTareaSilencioso(id)
   revalidatePath("/tareas")
 }
 
@@ -224,6 +227,7 @@ export async function pasarAlTablero(id: string) {
     .update({ ...ubicacion, orden: await ordenAlTope("por_hacer") })
     .eq("id", id)
   if (error) throw new Error(error.message)
+  await sincronizarTareaSilencioso(id)
   revalidatePath("/tareas")
 }
 
@@ -249,6 +253,7 @@ export async function moverTarea(id: string, estado: string, orden: number) {
     .update({ ...ubicacion, orden })
     .eq("id", id)
   if (error) throw new Error(error.message)
+  await sincronizarTareaSilencioso(id)
   revalidatePath("/tareas")
 }
 
@@ -345,6 +350,7 @@ export async function eliminarTarea(id: string) {
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id)
   if (error) throw new Error(error.message)
+  await sincronizarTareaSilencioso(id)
   revalidatePath("/tareas")
 }
 
@@ -365,6 +371,7 @@ export async function comentarTarea(tareaId: string, formData: FormData) {
     autor_socio_id: socioId,
   })
   if (error) throw new Error(error.message)
+  await sincronizarTareaSilencioso(tareaId)
   revalidatePath("/tareas")
 }
 

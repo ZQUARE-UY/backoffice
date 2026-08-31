@@ -36,6 +36,7 @@ import {
 } from "@/lib/sprints"
 import { definirCeremonias, planPorDefecto, type PlanCeremonias } from "@/lib/ceremonias"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { reconciliarTareas, sincronizarTareaSilencioso } from "@/lib/tareas-github"
 import { listarGrabaciones } from "@/lib/transcripcion"
 
 // MCP server del backoffice: expone los datos de la empresa a Claude
@@ -930,6 +931,12 @@ const handler = createMcpHandler(
           fecha_fin_real: z.string().describe("YYYY-MM-DD").optional(),
           horas_estimadas: z.coerce.number().optional(),
           horas_reales: z.coerce.number().optional(),
+          github_repo: z
+            .string()
+            .describe(
+              "repo de GitHub del proyecto, formato owner/repo; las tarjetas del proyecto se espejan ahí. String vacío lo desvincula"
+            )
+            .optional(),
           ...ESQUEMA_BRIEF_PROYECTO,
         },
       },
@@ -945,6 +952,8 @@ const handler = createMcpHandler(
           cambios.descripcion = entrada.descripcion || null
         if (entrada.estado !== undefined) cambios.estado = entrada.estado
         if (entrada.tipo !== undefined) cambios.tipo = entrada.tipo
+        if (entrada.github_repo !== undefined)
+          cambios.github_repo = entrada.github_repo || null
         for (const campo of CAMPOS_BRIEF_PROYECTO) {
           if (entrada[campo] !== undefined) cambios[campo] = entrada[campo] || null
         }
@@ -1408,6 +1417,7 @@ const handler = createMcpHandler(
           autor,
           autor_socio_id: actorId,
         })
+        await sincronizarTareaSilencioso(data.id)
         const { id: _id, ...creada } = data
         void _id
         return texto({ creada: { codigo: `ZQ-${data.numero}`, ...creada }, ver: "/tareas" })
@@ -1537,6 +1547,8 @@ const handler = createMcpHandler(
           autor_socio_id: socioId,
         })
 
+        await sincronizarTareaSilencioso(actual.id)
+
         return texto({
           actualizada: {
             codigo: `ZQ-${data.numero}`,
@@ -1582,11 +1594,14 @@ const handler = createMcpHandler(
           .update({ ...ubicacion, orden: await ordenAlTopeDeColumna(ubicacion.estado) })
           .eq("numero", numero)
           .is("deleted_at", null)
-          .select("numero, titulo, estado, sprint:sprints(numero, nombre)")
+          .select("id, numero, titulo, estado, sprint:sprints(numero, nombre)")
           .maybeSingle()
         if (error) throw new Error(error.message)
         if (!data) return texto(`No existe la tarjeta ZQ-${numero}.`)
-        return texto({ movida: { codigo: `ZQ-${data.numero}`, ...data } })
+        await sincronizarTareaSilencioso(data.id)
+        const { id: _id, ...movida } = data
+        void _id
+        return texto({ movida: { codigo: `ZQ-${data.numero}`, ...movida } })
       }
     )
 
@@ -1723,7 +1738,32 @@ const handler = createMcpHandler(
           autor_socio_id: socioId,
         })
         if (error) throw new Error(error.message)
+        await sincronizarTareaSilencioso(tarjeta.id)
         return texto({ comentado: `ZQ-${numero}` })
+      }
+    )
+
+    server.registerTool(
+      "sincronizar_tareas_github",
+      {
+        title: "Espejar las tarjetas pendientes en GitHub",
+        description:
+          "Fuerza el espejo en GitHub de las tarjetas que quedaron sin sincronizar (nunca espejadas, o cambiadas después del último push). Sirve para el backfill inicial. Es idempotente: si todo está al día no hace nada. Requiere GITHUB_TOKEN y GITHUB_DEFAULT_REPO configurados.",
+        inputSchema: {},
+      },
+      async () => {
+        const inicio = Date.now()
+        let procesadas = 0
+        const errores: string[] = []
+        // Loopea de a lotes hasta terminar o acercarse al límite de tiempo;
+        // lo que quede se resuelve en la corrida siguiente (o en el cron).
+        let paso: { procesadas: number; errores: string[] }
+        do {
+          paso = await reconciliarTareas(30)
+          procesadas += paso.procesadas
+          errores.push(...paso.errores)
+        } while (paso.procesadas > 0 && Date.now() - inicio < 45_000)
+        return texto({ procesadas, errores })
       }
     )
 

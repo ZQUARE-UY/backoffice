@@ -225,6 +225,18 @@ export function DetalleTarea({
                   "—"
                 )}
               </Dato>
+              {tarea.github_repo && tarea.github_issue_number && (
+                <Dato label="GitHub">
+                  <a
+                    href={`https://github.com/${tarea.github_repo}/issues/${tarea.github_issue_number}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    {tarea.github_repo}#{tarea.github_issue_number}
+                  </a>
+                </Dato>
+              )}
             </div>
 
             {tarea.descripcion && (
