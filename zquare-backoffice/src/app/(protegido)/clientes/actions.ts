@@ -134,6 +134,7 @@ export async function actualizarProyecto(id: string, formData: FormData) {
       horas_reales: numeroOpcional(formData.get("horas_reales")),
       monto_acordado: numeroOpcional(formData.get("monto_acordado")),
       moneda: textoOpcional(formData.get("moneda")),
+      github_repo: textoOpcional(formData.get("github_repo")),
     })
     .eq("id", id)
 

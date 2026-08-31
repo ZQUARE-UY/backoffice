@@ -67,6 +67,33 @@ disponibilidad y se ven los huecos), pero al agendar la reunión queda guardada
 en el backoffice sin evento de Google: la UI avisa que hay que mandar la
 invitación a mano.
 
+### 6. GitHub: espejar el tablero en issues
+
+El tablero (`tareas`) se espeja en issues de GitHub para que un agente que lee
+GitHub vea todas las tareas de cada proyecto. Es una sola dirección
+(backoffice → GitHub); nadie edita las issues a mano.
+
+Cada proyecto apunta a su repo (campo `github_repo`, formato `owner/repo`). Las
+tareas sin proyecto van al repo por defecto.
+
+```
+GITHUB_TOKEN        # fine-grained PAT con permiso Issues read/write
+GITHUB_OWNER        # org o usuario dueño de los repos
+GITHUB_DEFAULT_REPO # owner/repo para las tareas sin proyecto
+```
+
+Sin estas variables el espejo queda apagado y el backoffice funciona igual.
+
+Pasos para prenderlo:
+
+1. Correr la migración `supabase/migrations/20260831000001_github_sync.sql`.
+2. Setear las tres env vars (arriba) en `.env.local` y en Vercel.
+3. En cada proyecto, cargar su `github_repo` (Editar proyecto, o la tool MCP
+   `actualizar_proyecto`).
+4. Backfill de lo viejo: correr la tool MCP `sincronizar_tareas_github`. El
+   push de las tarjetas nuevas es automático al guardarlas; un cron diario
+   reenvía lo que haya quedado pendiente.
+
 ## Seguridad
 
 Tres capas para que solo entren los 4 socios:

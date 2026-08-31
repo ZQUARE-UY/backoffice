@@ -544,6 +544,7 @@ export type Proyecto = {
   monto_acordado: number | null
   moneda: Moneda | null
   drive_folder_id: string | null
+  github_repo: string | null
   created_at: string
   updated_at: string
 }
@@ -626,6 +627,9 @@ export type Tarea = {
   etiquetas: string[]
   fecha_limite: string | null
   orden: number
+  github_repo: string | null
+  github_issue_number: number | null
+  github_synced_at: string | null
   created_at: string
   updated_at: string
 }
