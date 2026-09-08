@@ -1,14 +1,14 @@
-import Link from "next/link";
-import { WalletIcon } from "lucide-react";
+import Link from "next/link"
+import { WalletIcon } from "lucide-react"
 
-import { BalanceSociosTabla } from "@/components/balance-socios-tabla";
-import { Badge } from "@/components/ui/badge";
+import { BalanceSociosTabla } from "@/components/balance-socios-tabla"
+import { Badge } from "@/components/ui/badge"
 import {
   Card,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
+} from "@/components/ui/card"
 import {
   Empty,
   EmptyContent,
@@ -16,7 +16,7 @@ import {
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from "@/components/ui/empty";
+} from "@/components/ui/empty"
 import {
   Table,
   TableBody,
@@ -24,7 +24,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/table"
 import {
   ESTADOS_MOVIMIENTO,
   formatearMonto,
@@ -33,24 +33,28 @@ import {
   type BalanceSocio,
   type Cliente,
   type Movimiento,
+  type MovimientoParticipacion,
+  type Proyecto,
   type Socio,
-} from "@/lib/dominio";
-import { createClient } from "@/lib/supabase/server";
+} from "@/lib/dominio"
+import { createClient } from "@/lib/supabase/server"
 
-import { MovimientoAcciones } from "./movimiento-acciones";
-import { NuevoMovimiento } from "./nuevo-movimiento";
+import { MovimientoAcciones } from "./movimiento-acciones"
+import { NuevoMovimiento } from "./nuevo-movimiento"
 
-export const metadata = { title: "Finanzas" };
+export const metadata = { title: "Finanzas" }
 
-const usd = formatearUsd;
+const usd = formatearUsd
 
 export default async function FinanzasPage() {
-  const supabase = await createClient();
+  const supabase = await createClient()
 
   const [
     { data: movimientosData },
     { data: sociosData },
     { data: clientesData },
+    { data: proyectosData },
+    { data: participacionesData },
     { data: balanceData },
   ] = await Promise.all([
     supabase
@@ -65,18 +69,40 @@ export default async function FinanzasPage() {
       .select("id, nombre")
       .is("deleted_at", null)
       .order("nombre"),
+    supabase
+      .from("proyectos")
+      .select("id, nombre, cliente_id")
+      .is("deleted_at", null)
+      .order("nombre"),
+    supabase.from("movimiento_participaciones").select("*"),
     supabase.from("balance_socios").select("*").order("nombre"),
-  ]);
+  ])
 
-  const movimientos = (movimientosData ?? []) as Movimiento[];
-  const socios = (sociosData ?? []) as Socio[];
-  const clientes = (clientesData ?? []) as Pick<Cliente, "id" | "nombre">[];
-  const balance = (balanceData ?? []) as BalanceSocio[];
-  const nombreSocio = new Map(socios.map((s) => [s.id, s.nombre]));
+  const movimientos = (movimientosData ?? []) as Movimiento[]
+  const socios = (sociosData ?? []) as Socio[]
+  const clientes = (clientesData ?? []) as Pick<Cliente, "id" | "nombre">[]
+  const proyectos = (proyectosData ?? []) as Pick<
+    Proyecto,
+    "id" | "nombre" | "cliente_id"
+  >[]
+  const participaciones = (participacionesData ??
+    []) as MovimientoParticipacion[]
+  const balance = (balanceData ?? []) as BalanceSocio[]
+  const nombreSocio = new Map(socios.map((s) => [s.id, s.nombre]))
+  const nombreProyecto = new Map(proyectos.map((p) => [p.id, p.nombre]))
+
+  // Participaciones agrupadas por movimiento, para el formulario de edición.
+  const repartoPorMovimiento = new Map<string, MovimientoParticipacion[]>()
+  for (const p of participaciones) {
+    const filas = repartoPorMovimiento.get(p.movimiento_id) ?? []
+    filas.push(p)
+    repartoPorMovimiento.set(p.movimiento_id, filas)
+  }
 
   // Los previstos son compromisos a futuro: no cuentan en el resultado ni en la
   // caja, se muestran aparte.
-  const confirmados = movimientos.filter((m) => m.estado !== "previsto");
+  const confirmados = movimientos.filter((m) => m.estado !== "previsto")
+  const previstos = movimientos.filter((m) => m.estado === "previsto")
   const total = (
     lista: Movimiento[],
     tipo: Movimiento["tipo"],
@@ -84,24 +110,22 @@ export default async function FinanzasPage() {
   ) =>
     lista
       .filter((m) => m.tipo === tipo && filtro(m))
-      .reduce((acc, m) => acc + m.monto_usd, 0);
+      .reduce((acc, m) => acc + m.monto_usd, 0)
 
   // Resultado del período (todo consolidado a USD).
-  const ingresos = total(confirmados, "ingreso");
-  const gastos = total(confirmados, "gasto");
-  const resultado = ingresos - gastos;
+  const ingresos = total(confirmados, "ingreso")
+  const gastos = total(confirmados, "gasto")
+  const resultado = ingresos - gastos
 
   // Caja del fondo común: solo lo que entró y salió de la cuenta de la empresa.
-  // Lo que un socio cobró o pagó de su bolsillo no pasó por la caja: se salda
-  // en el balance entre socios.
-  const enFondo = (m: Movimiento) => m.socio_id == null;
+  // Lo que un socio cobró o pagó de su bolsillo no pasó por la caja; eso se
+  // salda en el balance entre socios.
+  const enFondo = (m: Movimiento) => m.socio_id == null
   const caja =
-    total(confirmados, "ingreso", enFondo) -
-    total(confirmados, "gasto", enFondo);
+    total(confirmados, "ingreso", enFondo) - total(confirmados, "gasto", enFondo)
 
   // Comprometido a futuro: neto de los movimientos previstos.
-  const previstos = movimientos.filter((m) => m.estado === "previsto");
-  const comprometido = total(previstos, "ingreso") - total(previstos, "gasto");
+  const comprometido = total(previstos, "ingreso") - total(previstos, "gasto")
 
   return (
     <>
@@ -112,7 +136,11 @@ export default async function FinanzasPage() {
             Ingresos y gastos de la empresa, consolidado en USD.
           </p>
         </div>
-        <NuevoMovimiento socios={socios} clientes={clientes} />
+        <NuevoMovimiento
+          socios={socios}
+          clientes={clientes}
+          proyectos={proyectos}
+        />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -176,7 +204,11 @@ export default async function FinanzasPage() {
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
-            <NuevoMovimiento socios={socios} clientes={clientes} />
+            <NuevoMovimiento
+              socios={socios}
+              clientes={clientes}
+              proyectos={proyectos}
+            />
           </EmptyContent>
         </Empty>
       ) : (
@@ -187,7 +219,7 @@ export default async function FinanzasPage() {
                 <TableHead>Fecha</TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Detalle</TableHead>
-                <TableHead>Pagado por</TableHead>
+                <TableHead>Puso / cobró</TableHead>
                 <TableHead className="text-right">Monto</TableHead>
                 <TableHead className="text-right">USD</TableHead>
                 <TableHead className="w-0" />
@@ -195,9 +227,12 @@ export default async function FinanzasPage() {
             </TableHeader>
             <TableBody>
               {movimientos.map((m) => {
-                const tipo = TIPOS_MOVIMIENTO[m.tipo];
+                const tipo = TIPOS_MOVIMIENTO[m.tipo]
                 return (
-                  <TableRow key={m.id}>
+                  <TableRow
+                    key={m.id}
+                    className={m.estado === "previsto" ? "opacity-60" : ""}
+                  >
                     <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">
                       {m.fecha}
                     </TableCell>
@@ -214,16 +249,23 @@ export default async function FinanzasPage() {
                     <TableCell>
                       <div className="flex flex-col">
                         <span>{m.descripcion ?? m.categoria ?? "—"}</span>
-                        {m.descripcion && m.categoria && (
+                        {(m.proyecto_id || (m.descripcion && m.categoria)) && (
                           <span className="text-xs text-muted-foreground">
-                            {m.categoria}
+                            {[
+                              m.descripcion && m.categoria ? m.categoria : null,
+                              m.proyecto_id
+                                ? nombreProyecto.get(m.proyecto_id)
+                                : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
                           </span>
                         )}
                       </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {m.socio_id
-                        ? (nombreSocio.get(m.socio_id) ?? "—")
+                        ? nombreSocio.get(m.socio_id) ?? "—"
                         : "Fondo común"}
                     </TableCell>
                     <TableCell className="text-right whitespace-nowrap tabular-nums">
@@ -247,15 +289,17 @@ export default async function FinanzasPage() {
                         movimiento={m}
                         socios={socios}
                         clientes={clientes}
+                        proyectos={proyectos}
+                        reparto={repartoPorMovimiento.get(m.id) ?? []}
                       />
                     </TableCell>
                   </TableRow>
-                );
+                )
               })}
             </TableBody>
           </Table>
         </div>
       )}
     </>
-  );
+  )
 }

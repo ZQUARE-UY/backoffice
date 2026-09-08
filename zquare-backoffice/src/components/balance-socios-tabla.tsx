@@ -4,7 +4,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
+} from "@/components/ui/card"
 import {
   Table,
   TableBody,
@@ -12,15 +12,15 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { formatearUsd, type BalanceSocio } from "@/lib/dominio";
+} from "@/components/ui/table"
+import { formatearUsd, type BalanceSocio } from "@/lib/dominio"
 
 // Balance entre socios (Splitwise): cuánto puso y cuánto cobró cada uno de su
 // bolsillo, cuánto de eso le correspondía según el reparto de cada movimiento,
 // y el saldo resultante. Positivo = los demás le deben; negativo = debe.
 // Compartido entre Finanzas y el Dashboard.
 export function BalanceSociosTabla({ balance }: { balance: BalanceSocio[] }) {
-  if (balance.length === 0) return null;
+  if (balance.length === 0) return null
 
   return (
     <Card>
@@ -76,5 +76,5 @@ export function BalanceSociosTabla({ balance }: { balance: BalanceSocio[] }) {
         </Table>
       </CardContent>
     </Card>
-  );
+  )
 }

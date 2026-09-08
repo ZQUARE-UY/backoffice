@@ -29,7 +29,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Spinner } from "@/components/ui/spinner"
-import { type Cliente, type Movimiento, type Socio } from "@/lib/dominio"
+import {
+  type Cliente,
+  type Movimiento,
+  type MovimientoParticipacion,
+  type Proyecto,
+  type Socio,
+} from "@/lib/dominio"
 
 import { actualizarMovimiento, eliminarMovimiento } from "./actions"
 import { CamposMovimiento } from "./campos-movimiento"
@@ -38,10 +44,14 @@ export function MovimientoAcciones({
   movimiento,
   socios,
   clientes,
+  proyectos,
+  reparto,
 }: {
   movimiento: Movimiento
   socios: Socio[]
   clientes: Pick<Cliente, "id" | "nombre">[]
+  proyectos: Pick<Proyecto, "id" | "nombre" | "cliente_id">[]
+  reparto: MovimientoParticipacion[]
 }) {
   const [editar, setEditar] = useState(false)
   const [eliminar, setEliminar] = useState(false)
@@ -99,6 +109,8 @@ export function MovimientoAcciones({
                 movimiento={movimiento}
                 socios={socios}
                 clientes={clientes}
+                proyectos={proyectos}
+                reparto={reparto}
               />
               <DialogFooter>
                 <Button type="submit" disabled={pendiente}>

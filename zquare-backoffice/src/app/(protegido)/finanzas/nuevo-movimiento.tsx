@@ -13,7 +13,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Spinner } from "@/components/ui/spinner"
-import { type Cliente, type Socio } from "@/lib/dominio"
+import { type Cliente, type Proyecto, type Socio } from "@/lib/dominio"
 
 import { crearMovimiento } from "./actions"
 import { CamposMovimiento } from "./campos-movimiento"
@@ -21,9 +21,11 @@ import { CamposMovimiento } from "./campos-movimiento"
 export function NuevoMovimiento({
   socios,
   clientes,
+  proyectos,
 }: {
   socios: Socio[]
   clientes: Pick<Cliente, "id" | "nombre">[]
+  proyectos: Pick<Proyecto, "id" | "nombre" | "cliente_id">[]
 }) {
   const [abierto, setAbierto] = useState(false)
   const [pendiente, iniciarTransicion] = useTransition()
@@ -51,7 +53,11 @@ export function NuevoMovimiento({
             <DialogHeader>
               <DialogTitle>Nuevo movimiento</DialogTitle>
             </DialogHeader>
-            <CamposMovimiento socios={socios} clientes={clientes} />
+            <CamposMovimiento
+              socios={socios}
+              clientes={clientes}
+              proyectos={proyectos}
+            />
             <DialogFooter>
               <Button type="submit" disabled={pendiente}>
                 {pendiente && <Spinner data-icon="inline-start" />}
