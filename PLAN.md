@@ -202,7 +202,11 @@ ZQUARE (Unidad compartida del Workspace)
 ### Fase 2 — Finanzas *(2 sesiones)*
 - [x] Movimientos: ingresos, gastos, aportes y retiros, multi-moneda con TC (monto en moneda original + `monto_usd` calculado por la DB; alta/edición/borrado; verificado build el 2026-07-24, pendiente aplicar migración y probar end-to-end)
 - [x] Categorías de gasto/ingreso (catálogo sugerido con datalist, categoría libre)
-- [x] Balance entre socios (vista `balance_socios`: aporte neto por socio vs. promedio, quién está abajo y por cuánto)
+- [x] Balance entre socios (vista `balance_socios`, modelo Splitwise)
+- [x] Finanzas v2 (2026-09-08): reparto explícito por movimiento
+  (`movimiento_participaciones`), ingresos cobrados por un socio en su cuenta
+  personal, proyecto en el formulario y movimientos previstos. Ver la sección
+  "Finanzas v2 — Reparto por movimiento"
 - [x] Carga de movimientos históricos: seña diseñadora (gasto + aporte de Joaquín, 230 USD) vía `supabase/seeds/`; dominio + Workspace cargados por Martín desde la app (2026-07-27)
 
 ### Fase 3 — Dashboard *(1-2 sesiones)*
@@ -667,6 +671,43 @@ Arrancar la **Fase 0**: crear el proyecto Next.js, el proyecto en Supabase
 (crear cuenta en supabase.com con un mail de zquare.uy) y configurar el OAuth
 de Google en la consola del Workspace.
 
+## 9 bis. Finanzas v2 — Reparto por movimiento
+
+El modelo de julio asumía que la plata tiene un solo lado (quién la puso) y que
+todo se divide en cuatro partes iguales. Eso dejaba sin registrar el caso real
+que apareció el 2026-09-08: un socio cobra un proyecto en su cuenta personal y
+hay que repartirlo entre los que lo desarrollaron, que no siempre son los
+cuatro.
+
+- **Los dos lados del movimiento.** `socio_id` sigue siendo de quién salió o a
+  quién entró la plata, pero ahora vale también para ingresos: los ingresos
+  dejan de ir siempre al fondo común. `movimiento_participaciones` dice entre
+  quiénes se reparte y con cuántas partes (relativas: 1 y 2 = un tercio y dos
+  tercios). Sin filas, partes iguales entre los socios activos — que es lo que
+  hacía la vista anterior, así que los movimientos históricos no se migran.
+- **Regla única del balance:** un movimiento mueve las cuentas entre socios
+  solo si lo puso o lo cobró un socio. Lo que entra o sale del fondo común no le
+  genera deuda a nadie. `saldo = (puso − le tocaba) − (cobró − le
+  correspondía)`; positivo = los demás le deben. La suma de los saldos da cero.
+- **Previstos.** `movimientos.estado` (`previsto` / `confirmado`): un compromiso
+  a futuro se ve en la proyección pero no toca la caja ni el balance hasta
+  confirmarse.
+- **Caja del fondo común** pasa a contar solo lo que pasó por la cuenta de la
+  empresa, en Finanzas y en el dashboard. Antes sumaba ingresos que nunca
+  entraron a esa cuenta.
+- **Formulario:** proyecto (la columna existía pero nunca se había expuesto;
+  elegir cliente filtra sus proyectos y elegir proyecto completa el cliente),
+  "Pagado por" / "Cobrado por" según el tipo, bloque de reparto con la cuota de
+  cada socio en vivo, y estado previsto/confirmado.
+- **MCP:** `crear_movimiento` acepta `de_quien` (email del socio o
+  `fondo_comun`), `reparto`, `cliente`/`proyecto` por nombre y `estado`;
+  `listar_movimientos` filtra por estado y muestra proyecto;
+  `resumen_finanzas` agrega caja del fondo, comprometido a futuro y el balance
+  nuevo. De paso, las tools dejan de ofrecer `aporte_socio`/`retiro_socio`, que
+  ya no existían en la base desde julio.
+- [ ] Release: PR → merge → migración `20260908000001_finanzas_reparto.sql` en
+  el SQL Editor (Joaquín) → verificación en prod.
+
 ## 10. Historial de cambios
 
 - **2026-07-22** — v1 inicial: decisiones de stack, modelo de datos y fases
@@ -777,3 +818,11 @@ de Google en la consola del Workspace.
   `transcripcion_reunion` para resumir o sacar tareas/decisiones de lo
   hablado. Indiferente de la plataforma (Meet/Zoom/presencial): no depende
   del plan de Workspace.
+- **2026-09-08** — Finanzas v2: reparto explícito por movimiento. Un socio
+  puede cobrar un proyecto en su cuenta personal y repartirlo entre quienes lo
+  desarrollaron; el reparto deja de ser implícito (cuatro partes iguales) y se
+  declara por movimiento en `movimiento_participaciones`. `balance_socios`
+  cruza ingresos y gastos en un único saldo, aparecen los movimientos
+  `previsto`, el formulario gana proyecto / cobrado por / reparto editable, y
+  la caja del fondo común deja de contar plata que nunca pasó por la cuenta de
+  la empresa. Ver "Finanzas v2 — Reparto por movimiento".

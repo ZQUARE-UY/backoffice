@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
+import { FONDO_COMUN } from "@/lib/dominio"
 import { idSocioActual } from "@/lib/socio-actual"
 import { createClient } from "@/lib/supabase/server"
 
@@ -28,16 +29,20 @@ function datosDesde(formData: FormData) {
   const tc_a_usd = moneda === "USD" ? 1 : tcIngresado
   if (tc_a_usd <= 0) throw new Error("El tipo de cambio debe ser mayor a 0")
 
-  // "Pagado por": un socio (su id) o el fondo común (socio_id NULL). Los
-  // ingresos siempre van al fondo común.
-  const pagadoPor = textoOpcional(formData.get("pagado_por"))
-  const socio_id =
-    tipo === "gasto" && pagadoPor && pagadoPor !== "fondo_comun"
-      ? pagadoPor
-      : null
+  // Quién puso la plata (gasto) o quién la cobró (ingreso): un socio o el
+  // fondo común (socio_id NULL). Vale para los dos tipos: un socio puede
+  // cobrarle a un cliente en su cuenta personal.
+  const deQuien = textoOpcional(formData.get("pagado_por"))
+  const socio_id = deQuien && deQuien !== FONDO_COMUN ? deQuien : null
+
+  const estado = (formData.get("estado") as string) || "confirmado"
+  if (estado !== "previsto" && estado !== "confirmado") {
+    throw new Error("Estado de movimiento inválido")
+  }
 
   return {
     tipo,
+    estado,
     fecha: textoOpcional(formData.get("fecha")) ?? undefined,
     moneda,
     monto,
@@ -46,27 +51,70 @@ function datosDesde(formData: FormData) {
     descripcion: textoOpcional(formData.get("descripcion")),
     socio_id,
     cliente_id: textoOpcional(formData.get("cliente_id")),
+    proyecto_id: textoOpcional(formData.get("proyecto_id")),
     comprobante_url: textoOpcional(formData.get("comprobante_url")),
   }
 }
 
+// Entre quiénes se reparte el movimiento. Solo tiene sentido cuando lo puso o
+// lo cobró un socio: lo del fondo común no le genera deuda a nadie, así que en
+// ese caso se guarda sin participaciones.
+function repartoDesde(formData: FormData, socioId: string | null) {
+  if (!socioId) return []
+  const socios = formData.getAll("participante").map(String)
+  if (socios.length === 0) {
+    throw new Error("Elegí entre quiénes se reparte el movimiento")
+  }
+  return socios.map((socio_id) => {
+    const partes = numero(formData.get(`partes_${socio_id}`))
+    if (partes <= 0) throw new Error("Las partes deben ser mayores a 0")
+    return { socio_id, partes }
+  })
+}
+
+async function guardarReparto(
+  movimientoId: string,
+  reparto: { socio_id: string; partes: number }[],
+) {
+  const supabase = await createClient()
+  // Se reemplaza entero: es la forma más simple de que editar no deje filas
+  // viejas de un socio que se sacó del reparto.
+  const { error: errorBorrado } = await supabase
+    .from("movimiento_participaciones")
+    .delete()
+    .eq("movimiento_id", movimientoId)
+  if (errorBorrado) throw new Error(errorBorrado.message)
+  if (reparto.length === 0) return
+  const { error } = await supabase
+    .from("movimiento_participaciones")
+    .insert(reparto.map((r) => ({ ...r, movimiento_id: movimientoId })))
+  if (error) throw new Error(error.message)
+}
+
 export async function crearMovimiento(formData: FormData) {
   const supabase = await createClient()
-  const { error } = await supabase.from("movimientos").insert({
-    ...datosDesde(formData),
-    created_by: await idSocioActual(),
-  })
+  const datos = datosDesde(formData)
+  const reparto = repartoDesde(formData, datos.socio_id)
+  const { data, error } = await supabase
+    .from("movimientos")
+    .insert({ ...datos, created_by: await idSocioActual() })
+    .select("id")
+    .single()
   if (error) throw new Error(error.message)
+  await guardarReparto(data.id, reparto)
   revalidatePath("/finanzas")
 }
 
 export async function actualizarMovimiento(id: string, formData: FormData) {
   const supabase = await createClient()
+  const datos = datosDesde(formData)
+  const reparto = repartoDesde(formData, datos.socio_id)
   const { error } = await supabase
     .from("movimientos")
-    .update(datosDesde(formData))
+    .update(datos)
     .eq("id", id)
   if (error) throw new Error(error.message)
+  await guardarReparto(id, reparto)
   revalidatePath("/finanzas")
 }
 

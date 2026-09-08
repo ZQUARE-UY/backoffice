@@ -15,9 +15,10 @@ import {
 } from "@/components/ui/table"
 import { formatearUsd, type BalanceSocio } from "@/lib/dominio"
 
-// Balance entre socios (Splitwise): cuánto puso de su bolsillo cada uno y su
-// saldo respecto a lo que le corresponde. Saldo positivo = los demás le deben;
-// negativo = debe. Compartido entre Finanzas y el Dashboard.
+// Balance entre socios (Splitwise): cuánto puso y cuánto cobró cada uno de su
+// bolsillo, cuánto de eso le correspondía según el reparto de cada movimiento,
+// y el saldo resultante. Positivo = los demás le deben; negativo = debe.
+// Compartido entre Finanzas y el Dashboard.
 export function BalanceSociosTabla({ balance }: { balance: BalanceSocio[] }) {
   if (balance.length === 0) return null
 
@@ -26,7 +27,8 @@ export function BalanceSociosTabla({ balance }: { balance: BalanceSocio[] }) {
       <CardHeader>
         <CardTitle>Balance de socios</CardTitle>
         <CardDescription>
-          Cuánto puso cada socio de su bolsillo y su saldo. Un saldo a favor
+          Puso y cobró son de su bolsillo; le toca es la parte que le
+          corresponde según el reparto de cada movimiento. Un saldo a favor
           (verde) significa que los demás le deben; en contra (rojo), que debe.
         </CardDescription>
       </CardHeader>
@@ -36,6 +38,8 @@ export function BalanceSociosTabla({ balance }: { balance: BalanceSocio[] }) {
             <TableRow>
               <TableHead>Socio</TableHead>
               <TableHead className="text-right">Puso</TableHead>
+              <TableHead className="text-right">Cobró</TableHead>
+              <TableHead className="text-right">Le toca</TableHead>
               <TableHead className="text-right">Saldo</TableHead>
             </TableRow>
           </TableHeader>
@@ -45,6 +49,14 @@ export function BalanceSociosTabla({ balance }: { balance: BalanceSocio[] }) {
                 <TableCell className="font-medium">{b.nombre}</TableCell>
                 <TableCell className="text-right tabular-nums">
                   {formatearUsd(b.pagado_usd)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {formatearUsd(b.cobrado_usd)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums text-muted-foreground">
+                  {formatearUsd(
+                    b.gastos_asignados_usd - b.ingresos_asignados_usd,
+                  )}
                 </TableCell>
                 <TableCell
                   className={`text-right tabular-nums ${

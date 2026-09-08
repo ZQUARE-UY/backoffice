@@ -464,6 +464,15 @@ export const TIPOS_MOVIMIENTO = {
 
 export type TipoMovimiento = keyof typeof TIPOS_MOVIMIENTO
 
+// Un movimiento previsto es un compromiso a futuro: se ve en la proyección
+// pero no toca la caja ni el balance entre socios hasta confirmarse.
+export const ESTADOS_MOVIMIENTO = {
+  confirmado: { label: "Confirmado", variant: "secondary" as const },
+  previsto: { label: "Previsto", variant: "outline" as const },
+}
+
+export type EstadoMovimiento = keyof typeof ESTADOS_MOVIMIENTO
+
 // Valor especial para "pagado por" cuando el pago sale del fondo común de la
 // empresa (en la base se guarda como socio_id NULL).
 export const FONDO_COMUN = "fondo_comun"
@@ -713,6 +722,7 @@ export type Socio = {
 export type Movimiento = {
   id: string
   tipo: TipoMovimiento
+  estado: EstadoMovimiento
   fecha: string
   moneda: Moneda
   monto: number
@@ -728,11 +738,25 @@ export type Movimiento = {
   updated_at: string
 }
 
+// Cuánto puso y cobró cada socio de su bolsillo, cuánto de eso le correspondía
+// y el saldo resultante. Positivo = los demás le deben; negativo = debe.
 export type BalanceSocio = {
   socio_id: string
   nombre: string
   pagado_usd: number
+  cobrado_usd: number
+  gastos_asignados_usd: number
+  ingresos_asignados_usd: number
   saldo_usd: number
+}
+
+// Con cuántas partes participa un socio en el reparto de un movimiento. Las
+// partes son relativas entre sí; sin filas, el movimiento se reparte en partes
+// iguales entre los socios activos.
+export type MovimientoParticipacion = {
+  movimiento_id: string
+  socio_id: string
+  partes: number
 }
 
 export const ESTADOS_REUNION = {

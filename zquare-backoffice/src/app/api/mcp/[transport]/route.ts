@@ -8,7 +8,11 @@ import {
   paredEnZona,
   sumarDias,
 } from "@/lib/disponibilidad"
-import { codigoReunion, type SolicitudReunion } from "@/lib/dominio"
+import {
+  codigoReunion,
+  FONDO_COMUN,
+  type SolicitudReunion,
+} from "@/lib/dominio"
 import { generarEmbeddings } from "@/lib/embeddings"
 import { socioDelAccessToken } from "@/lib/mcp-oauth"
 import {
@@ -637,7 +641,7 @@ const handler = createMcpHandler(
       {
         title: "Resumen de finanzas",
         description:
-          "Totales de ingresos/gastos/aportes/retiros en USD (histórico y mes actual) y balance entre socios.",
+          "Totales de ingresos y gastos en USD (histórico y mes actual), caja del fondo común, comprometido a futuro y balance entre socios.",
         inputSchema: {},
       },
       async () => {
@@ -645,7 +649,7 @@ const handler = createMcpHandler(
         const [{ data: movimientos }, { data: balance }] = await Promise.all([
           supabase
             .from("movimientos")
-            .select("tipo, fecha, monto_usd")
+            .select("tipo, estado, fecha, monto_usd, socio_id")
             .is("deleted_at", null),
           supabase.from("balance_socios").select("*"),
         ])
@@ -655,10 +659,22 @@ const handler = createMcpHandler(
         const mesActual = inicioMes.toISOString().slice(0, 10)
 
         const totales: Record<string, { historico: number; mes_actual: number }> = {}
+        // Caja del fondo común: solo lo que entró y salió de la cuenta de la
+        // empresa. Lo que un socio puso o cobró de su bolsillo se salda en el
+        // balance entre socios, no en la caja.
+        let caja = 0
+        let comprometido = 0
         for (const m of movimientos ?? []) {
+          const monto = Number(m.monto_usd)
+          const signo = m.tipo === "ingreso" ? 1 : -1
+          if (m.estado === "previsto") {
+            comprometido += signo * monto
+            continue
+          }
           const t = (totales[m.tipo] ??= { historico: 0, mes_actual: 0 })
-          t.historico += Number(m.monto_usd)
-          if (m.fecha >= mesActual) t.mes_actual += Number(m.monto_usd)
+          t.historico += monto
+          if (m.fecha >= mesActual) t.mes_actual += monto
+          if (m.socio_id == null) caja += signo * monto
         }
         const resultado =
           (totales.ingreso?.historico ?? 0) - (totales.gasto?.historico ?? 0)
@@ -666,7 +682,11 @@ const handler = createMcpHandler(
         return texto({
           totales_usd: totales,
           resultado_historico_usd: Number(resultado.toFixed(2)),
+          caja_fondo_comun_usd: Number(caja.toFixed(2)),
+          comprometido_previsto_usd: Number(comprometido.toFixed(2)),
           balance_socios: balance ?? [],
+          como_leer_el_balance:
+            "saldo_usd positivo = los demás socios le deben; negativo = debe. Los totales y la caja no cuentan los movimientos previstos.",
         })
       }
     )
@@ -675,25 +695,28 @@ const handler = createMcpHandler(
       "listar_movimientos",
       {
         title: "Listar movimientos",
-        description: "Movimientos financieros, opcionalmente filtrados por tipo o rango de fechas.",
+        description:
+          "Movimientos financieros, opcionalmente filtrados por tipo, estado o rango de fechas. `socios.nombre` es de quién salió o a quién entró la plata; null = fondo común.",
         inputSchema: {
-          tipo: z.enum(["ingreso", "gasto", "aporte_socio", "retiro_socio"]).optional(),
+          tipo: z.enum(["ingreso", "gasto"]).optional(),
+          estado: z.enum(["previsto", "confirmado"]).optional(),
           desde: z.string().describe("fecha YYYY-MM-DD").optional(),
           hasta: z.string().describe("fecha YYYY-MM-DD").optional(),
           limite: z.number().int().min(1).max(200).optional(),
         },
       },
-      async ({ tipo, desde, hasta, limite }) => {
+      async ({ tipo, estado, desde, hasta, limite }) => {
         const supabase = createAdminClient()
         let q = supabase
           .from("movimientos")
           .select(
-            "fecha, tipo, moneda, monto, tc_a_usd, monto_usd, categoria, descripcion, socios(nombre), clientes(nombre)"
+            "fecha, tipo, estado, moneda, monto, tc_a_usd, monto_usd, categoria, descripcion, socios(nombre), clientes(nombre), proyectos(nombre)"
           )
           .is("deleted_at", null)
           .order("fecha", { ascending: false })
           .limit(limite ?? 50)
         if (tipo) q = q.eq("tipo", tipo)
+        if (estado) q = q.eq("estado", estado)
         if (desde) q = q.gte("fecha", desde)
         if (hasta) q = q.lte("fecha", hasta)
         const { data, error } = await q
@@ -2938,29 +2961,62 @@ const handler = createMcpHandler(
       {
         title: "Registrar un movimiento",
         description:
-          "Registra un movimiento financiero (ingreso, gasto, aporte o retiro de socio). tc_a_usd: unidades de la moneda original por 1 USD (USD=1; UYU ej. 40).",
+          "Registra un ingreso o un gasto. `de_quien` dice de qué bolsillo salió o entró la plata: un socio, o el fondo común (la cuenta de la empresa). Si la puso o la cobró un socio, el movimiento se reparte entre los socios que correspondan y queda como deuda entre ellos, tipo Splitwise; lo del fondo común no le genera deuda a nadie. tc_a_usd: unidades de la moneda original por 1 USD (USD=1; UYU ej. 40).",
         inputSchema: {
-          tipo: z.enum(["ingreso", "gasto", "aporte_socio", "retiro_socio"]),
+          tipo: z.enum(["ingreso", "gasto"]),
           monto: z.number().positive(),
           moneda: z.enum(["USD", "UYU"]).optional(),
           tc_a_usd: z.number().positive().optional(),
           fecha: z.string().describe("YYYY-MM-DD, default hoy").optional(),
           categoria: z.string().optional(),
           descripcion: z.string().optional(),
-          socio_email: z
+          cliente: z.string().describe("nombre del cliente").optional(),
+          proyecto: z.string().describe("nombre del proyecto").optional(),
+          estado: z
+            .enum(["previsto", "confirmado"])
+            .describe(
+              "previsto = comprometido a futuro, no toca caja ni balance hasta confirmarse. Default confirmado"
+            )
+            .optional(),
+          de_quien: z
             .string()
-            .describe("socio del aporte/retiro; default el dueño del token")
+            .describe(
+              "quién puso la plata (gasto) o quién la cobró (ingreso): email del socio, o \"fondo_comun\" para la cuenta de la empresa. Default: el dueño del token"
+            )
+            .optional(),
+          reparto: z
+            .array(
+              z.object({
+                socio_email: z.string(),
+                partes: z
+                  .number()
+                  .positive()
+                  .describe("peso relativo; 1 y 2 = un tercio y dos tercios")
+                  .optional(),
+              })
+            )
+            .describe(
+              "entre quiénes se divide. Default: partes iguales entre todos los socios. Se ignora si lo puso o cobró el fondo común"
+            )
             .optional(),
         },
       },
       async (entrada, extra) => {
         const email = extra.authInfo?.extra?.email as string | undefined
         const actorId = email ? await socioIdPorEmail(email) : null
-        const socioId = entrada.socio_email
-          ? await socioIdPorEmail(entrada.socio_email)
-          : actorId
-        if (entrada.socio_email && !socioId) {
-          return texto(`No encontré un socio con email ${entrada.socio_email}.`)
+
+        // De qué bolsillo salió/entró: un socio o el fondo común. Por default
+        // el dueño del token, que es quien está registrando el movimiento.
+        let socioId: string | null = actorId
+        if (entrada.de_quien === FONDO_COMUN) {
+          socioId = null
+        } else if (entrada.de_quien) {
+          socioId = await socioIdPorEmail(entrada.de_quien)
+          if (!socioId) {
+            return texto(
+              `No encontré un socio con email ${entrada.de_quien}. Para la cuenta de la empresa usá "${FONDO_COMUN}".`
+            )
+          }
         }
         if (entrada.moneda === "UYU" && !entrada.tc_a_usd) {
           return texto(
@@ -2968,11 +3024,36 @@ const handler = createMcpHandler(
           )
         }
 
+        // El reparto solo aplica si la plata la movió un socio.
+        const reparto: { socio_id: string; partes: number }[] = []
+        if (socioId && entrada.reparto?.length) {
+          for (const r of entrada.reparto) {
+            const id = await socioIdPorEmail(r.socio_email)
+            if (!id) {
+              return texto(`No encontré un socio con email ${r.socio_email}.`)
+            }
+            reparto.push({ socio_id: id, partes: r.partes ?? 1 })
+          }
+        }
+
+        const proyecto = entrada.proyecto
+          ? await proyectoPorNombre(entrada.proyecto)
+          : null
+        if (proyecto?.error) return texto(proyecto.error)
+        const proyectoId = (proyecto?.proyecto?.id as string | undefined) ?? null
+        // El proyecto manda sobre el cliente: son del mismo cliente por
+        // definición, y así no hay que nombrar los dos.
+        const clienteId =
+          (proyecto?.proyecto?.cliente_id as string | null | undefined) ??
+          (await idPorNombre("clientes", entrada.cliente)) ??
+          null
+
         const supabase = createAdminClient()
         const { data, error } = await supabase
           .from("movimientos")
           .insert({
             tipo: entrada.tipo,
+            estado: entrada.estado ?? "confirmado",
             monto: entrada.monto,
             moneda: entrada.moneda ?? "USD",
             tc_a_usd: entrada.tc_a_usd ?? 1,
@@ -2980,13 +3061,34 @@ const handler = createMcpHandler(
             categoria: entrada.categoria ?? null,
             descripcion: entrada.descripcion ?? null,
             socio_id: socioId,
+            cliente_id: clienteId,
+            proyecto_id: proyectoId,
             created_by: actorId,
             metadata: { origen: "mcp" },
           })
-          .select("id, fecha, tipo, monto, moneda, monto_usd")
+          .select("id, fecha, tipo, estado, monto, moneda, monto_usd")
           .single()
         if (error) throw new Error(error.message)
-        return texto({ registrado: data })
+
+        if (reparto.length > 0) {
+          const { error: errorReparto } = await supabase
+            .from("movimiento_participaciones")
+            .insert(
+              reparto.map((r) => ({ ...r, movimiento_id: data.id as string }))
+            )
+          if (errorReparto) throw new Error(errorReparto.message)
+        }
+
+        return texto({
+          registrado: data,
+          de_quien: socioId ? entrada.de_quien ?? email : "fondo_comun",
+          reparto:
+            reparto.length > 0
+              ? entrada.reparto
+              : socioId
+                ? "partes iguales entre todos los socios"
+                : "sin reparto (no genera deuda entre socios)",
+        })
       }
     )
 

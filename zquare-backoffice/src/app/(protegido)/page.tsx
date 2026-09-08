@@ -44,7 +44,7 @@ export default async function InicioPage() {
     supabase.auth.getUser(),
     supabase
       .from("movimientos")
-      .select("tipo, fecha, monto_usd, socio_id")
+      .select("tipo, estado, fecha, monto_usd, socio_id")
       .is("deleted_at", null),
     supabase.from("clientes").select("estado").is("deleted_at", null),
     supabase.from("proyectos").select("estado").is("deleted_at", null),
@@ -77,20 +77,27 @@ export default async function InicioPage() {
   const tareasAbiertas = (tareasData ?? []) as Tarea[]
   const misTareas = tareasAbiertas.filter((t) => t.asignado_a === socioId)
 
-  const ingresos = movimientos
+  // Los previstos son compromisos a futuro: no cuentan hasta confirmarse.
+  const confirmados = movimientos.filter((m) => m.estado !== "previsto")
+  const ingresos = confirmados
     .filter((m) => m.tipo === "ingreso")
     .reduce((acc, m) => acc + m.monto_usd, 0)
-  const gastos = movimientos
+  const gastos = confirmados
     .filter((m) => m.tipo === "gasto")
     .reduce((acc, m) => acc + m.monto_usd, 0)
   const resultado = ingresos - gastos
 
-  // Caja (fondo común): entra por ingresos, sale por gastos pagados con el
-  // fondo (socio_id null). Los gastos que fronteó un socio no tocan la caja.
-  const gastosFondo = movimientos
-    .filter((m) => m.tipo === "gasto" && m.socio_id == null)
-    .reduce((acc, m) => acc + m.monto_usd, 0)
-  const caja = ingresos - gastosFondo
+  // Caja (fondo común): solo lo que pasó por la cuenta de la empresa
+  // (socio_id null). Lo que un socio puso o cobró de su bolsillo no toca la
+  // caja: se salda en el balance entre socios.
+  const delFondo = confirmados.filter((m) => m.socio_id == null)
+  const caja =
+    delFondo
+      .filter((m) => m.tipo === "ingreso")
+      .reduce((acc, m) => acc + m.monto_usd, 0) -
+    delFondo
+      .filter((m) => m.tipo === "gasto")
+      .reduce((acc, m) => acc + m.monto_usd, 0)
 
   const clientesActivos = clientes.filter((c) => c.estado === "activo").length
   const proyectosEnCurso = proyectos.filter(
@@ -158,7 +165,7 @@ export default async function InicioPage() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <EvolucionMensual movimientos={movimientos} />
+          <EvolucionMensual movimientos={confirmados} />
         </div>
         <Card>
           <CardHeader>
