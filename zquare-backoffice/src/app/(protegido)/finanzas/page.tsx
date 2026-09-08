@@ -1,14 +1,14 @@
-import Link from "next/link"
-import { WalletIcon } from "lucide-react"
+import Link from "next/link";
+import { WalletIcon } from "lucide-react";
 
-import { BalanceSociosTabla } from "@/components/balance-socios-tabla"
-import { Badge } from "@/components/ui/badge"
+import { BalanceSociosTabla } from "@/components/balance-socios-tabla";
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
+} from "@/components/ui/card";
 import {
   Empty,
   EmptyContent,
@@ -16,7 +16,7 @@ import {
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from "@/components/ui/empty"
+} from "@/components/ui/empty";
 import {
   Table,
   TableBody,
@@ -24,8 +24,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "@/components/ui/table";
 import {
+  ESTADOS_MOVIMIENTO,
   formatearMonto,
   formatearUsd,
   TIPOS_MOVIMIENTO,
@@ -33,18 +34,18 @@ import {
   type Cliente,
   type Movimiento,
   type Socio,
-} from "@/lib/dominio"
-import { createClient } from "@/lib/supabase/server"
+} from "@/lib/dominio";
+import { createClient } from "@/lib/supabase/server";
 
-import { MovimientoAcciones } from "./movimiento-acciones"
-import { NuevoMovimiento } from "./nuevo-movimiento"
+import { MovimientoAcciones } from "./movimiento-acciones";
+import { NuevoMovimiento } from "./nuevo-movimiento";
 
-export const metadata = { title: "Finanzas" }
+export const metadata = { title: "Finanzas" };
 
-const usd = formatearUsd
+const usd = formatearUsd;
 
 export default async function FinanzasPage() {
-  const supabase = await createClient()
+  const supabase = await createClient();
 
   const [
     { data: movimientosData },
@@ -65,28 +66,42 @@ export default async function FinanzasPage() {
       .is("deleted_at", null)
       .order("nombre"),
     supabase.from("balance_socios").select("*").order("nombre"),
-  ])
+  ]);
 
-  const movimientos = (movimientosData ?? []) as Movimiento[]
-  const socios = (sociosData ?? []) as Socio[]
-  const clientes = (clientesData ?? []) as Pick<Cliente, "id" | "nombre">[]
-  const balance = (balanceData ?? []) as BalanceSocio[]
-  const nombreSocio = new Map(socios.map((s) => [s.id, s.nombre]))
+  const movimientos = (movimientosData ?? []) as Movimiento[];
+  const socios = (sociosData ?? []) as Socio[];
+  const clientes = (clientesData ?? []) as Pick<Cliente, "id" | "nombre">[];
+  const balance = (balanceData ?? []) as BalanceSocio[];
+  const nombreSocio = new Map(socios.map((s) => [s.id, s.nombre]));
+
+  // Los previstos son compromisos a futuro: no cuentan en el resultado ni en la
+  // caja, se muestran aparte.
+  const confirmados = movimientos.filter((m) => m.estado !== "previsto");
+  const total = (
+    lista: Movimiento[],
+    tipo: Movimiento["tipo"],
+    filtro: (m: Movimiento) => boolean = () => true,
+  ) =>
+    lista
+      .filter((m) => m.tipo === tipo && filtro(m))
+      .reduce((acc, m) => acc + m.monto_usd, 0);
 
   // Resultado del período (todo consolidado a USD).
-  const ingresos = movimientos
-    .filter((m) => m.tipo === "ingreso")
-    .reduce((acc, m) => acc + m.monto_usd, 0)
-  const gastos = movimientos
-    .filter((m) => m.tipo === "gasto")
-    .reduce((acc, m) => acc + m.monto_usd, 0)
-  const resultado = ingresos - gastos
+  const ingresos = total(confirmados, "ingreso");
+  const gastos = total(confirmados, "gasto");
+  const resultado = ingresos - gastos;
 
-  // Caja del fondo común: ingresos menos gastos pagados con el fondo.
-  const gastosFondo = movimientos
-    .filter((m) => m.tipo === "gasto" && m.socio_id == null)
-    .reduce((acc, m) => acc + m.monto_usd, 0)
-  const caja = ingresos - gastosFondo
+  // Caja del fondo común: solo lo que entró y salió de la cuenta de la empresa.
+  // Lo que un socio cobró o pagó de su bolsillo no pasó por la caja: se salda
+  // en el balance entre socios.
+  const enFondo = (m: Movimiento) => m.socio_id == null;
+  const caja =
+    total(confirmados, "ingreso", enFondo) -
+    total(confirmados, "gasto", enFondo);
+
+  // Comprometido a futuro: neto de los movimientos previstos.
+  const previstos = movimientos.filter((m) => m.estado === "previsto");
+  const comprometido = total(previstos, "ingreso") - total(previstos, "gasto");
 
   return (
     <>
@@ -133,6 +148,17 @@ export default async function FinanzasPage() {
             <CardTitle className="text-2xl">{usd(resultado)}</CardTitle>
           </CardHeader>
         </Card>
+        {previstos.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardDescription>Comprometido (previsto)</CardDescription>
+              <CardTitle className="text-2xl text-muted-foreground">
+                {comprometido > 0 ? "+" : ""}
+                {usd(comprometido)}
+              </CardTitle>
+            </CardHeader>
+          </Card>
+        )}
       </div>
 
       <BalanceSociosTabla balance={balance} />
@@ -169,14 +195,21 @@ export default async function FinanzasPage() {
             </TableHeader>
             <TableBody>
               {movimientos.map((m) => {
-                const tipo = TIPOS_MOVIMIENTO[m.tipo]
+                const tipo = TIPOS_MOVIMIENTO[m.tipo];
                 return (
                   <TableRow key={m.id}>
                     <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">
                       {m.fecha}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={tipo.variant}>{tipo.label}</Badge>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Badge variant={tipo.variant}>{tipo.label}</Badge>
+                        {m.estado === "previsto" && (
+                          <Badge variant={ESTADOS_MOVIMIENTO.previsto.variant}>
+                            {ESTADOS_MOVIMIENTO.previsto.label}
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
@@ -190,7 +223,7 @@ export default async function FinanzasPage() {
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {m.socio_id
-                        ? nombreSocio.get(m.socio_id) ?? "—"
+                        ? (nombreSocio.get(m.socio_id) ?? "—")
                         : "Fondo común"}
                     </TableCell>
                     <TableCell className="text-right whitespace-nowrap tabular-nums">
@@ -217,12 +250,12 @@ export default async function FinanzasPage() {
                       />
                     </TableCell>
                   </TableRow>
-                )
+                );
               })}
             </TableBody>
           </Table>
         </div>
       )}
     </>
-  )
+  );
 }
