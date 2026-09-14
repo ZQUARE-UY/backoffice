@@ -709,8 +709,11 @@ const handler = createMcpHandler(
         const supabase = createAdminClient()
         let q = supabase
           .from("movimientos")
+          // Hint de FK explícito: movimientos llega a socios por socio_id, por
+          // created_by y por movimiento_participaciones, y sin hint PostgREST
+          // no sabe cuál embeber.
           .select(
-            "fecha, tipo, estado, moneda, monto, tc_a_usd, monto_usd, categoria, descripcion, socios(nombre), clientes(nombre), proyectos(nombre)"
+            "fecha, tipo, estado, moneda, monto, tc_a_usd, monto_usd, categoria, descripcion, socios!movimientos_socio_id_fkey(nombre), clientes(nombre), proyectos(nombre)"
           )
           .is("deleted_at", null)
           .order("fecha", { ascending: false })
