@@ -27,8 +27,10 @@ export function BalanceSociosTabla({ balance }: { balance: BalanceSocio[] }) {
       <CardHeader>
         <CardTitle>Balance de socios</CardTitle>
         <CardDescription>
-          Puso y cobró son de su bolsillo; le toca es la parte que le
-          corresponde según el reparto de cada movimiento. Un saldo a favor
+          Se lee de izquierda a derecha: lo que puso de su bolsillo, menos lo
+          que cobró en su cuenta, más lo que le toca según el reparto de cada
+          movimiento (su parte de los ingresos menos su parte de los gastos),
+          más lo que ya transfirió para saldar, da el saldo. Un saldo a favor
           (verde) significa que los demás le deben; en contra (rojo), que debe.
         </CardDescription>
       </CardHeader>
@@ -40,6 +42,7 @@ export function BalanceSociosTabla({ balance }: { balance: BalanceSocio[] }) {
               <TableHead className="text-right">Puso</TableHead>
               <TableHead className="text-right">Cobró</TableHead>
               <TableHead className="text-right">Le toca</TableHead>
+              <TableHead className="text-right">Transferido</TableHead>
               <TableHead className="text-right">Saldo</TableHead>
             </TableRow>
           </TableHeader>
@@ -55,7 +58,12 @@ export function BalanceSociosTabla({ balance }: { balance: BalanceSocio[] }) {
                 </TableCell>
                 <TableCell className="text-right tabular-nums text-muted-foreground">
                   {formatearUsd(
-                    b.gastos_asignados_usd - b.ingresos_asignados_usd,
+                    b.ingresos_asignados_usd - b.gastos_asignados_usd,
+                  )}
+                </TableCell>
+                <TableCell className="text-right tabular-nums text-muted-foreground">
+                  {formatearUsd(
+                    b.liquidado_enviado_usd - b.liquidado_recibido_usd,
                   )}
                 </TableCell>
                 <TableCell

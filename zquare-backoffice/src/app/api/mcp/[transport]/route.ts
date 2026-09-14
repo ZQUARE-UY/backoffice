@@ -13,6 +13,14 @@ import {
   FONDO_COMUN,
   type SolicitudReunion,
 } from "@/lib/dominio"
+import {
+  borrarPrevistosFuturos,
+  hoyUruguay,
+  mensualUsd,
+  proximaOcurrencia,
+  sincronizarRecurrentes,
+  transferenciasSugeridas,
+} from "@/lib/finanzas"
 import { generarEmbeddings } from "@/lib/embeddings"
 import { socioDelAccessToken } from "@/lib/mcp-oauth"
 import {
@@ -397,6 +405,91 @@ async function idPorNombre(
   return data?.id ?? null
 }
 
+// ── Finanzas ────────────────────────────────────────────────────────────────
+// Esquemas y resolución compartidos entre crear_movimiento y crear_recurrente:
+// los dos dicen de qué bolsillo sale o entra la plata y entre quiénes se
+// reparte.
+
+const ESQUEMA_DE_QUIEN = z
+  .string()
+  .describe(
+    'quién puso la plata (gasto) o quién la cobró (ingreso): email del socio, o "fondo_comun" para la cuenta de la empresa. Default: el dueño del token'
+  )
+  .optional()
+
+const ESQUEMA_REPARTO = z
+  .array(
+    z.object({
+      socio_email: z.string(),
+      partes: z
+        .number()
+        .positive()
+        .describe("peso relativo; 1 y 2 = un tercio y dos tercios")
+        .optional(),
+    })
+  )
+  .describe(
+    "entre quiénes se divide. Default: partes iguales entre todos los socios. Se ignora si lo puso o cobró el fondo común"
+  )
+  .optional()
+
+// De qué bolsillo salió/entró la plata (null = fondo común) y el reparto
+// resuelto a ids. Por default, el dueño del token.
+async function bolsilloYReparto(
+  entrada: {
+    de_quien?: string
+    reparto?: { socio_email: string; partes?: number }[]
+  },
+  actorId: string | null
+): Promise<
+  | { socioId: string | null; reparto: { socio_id: string; partes: number }[] }
+  | { error: string }
+> {
+  let socioId: string | null = actorId
+  if (entrada.de_quien === FONDO_COMUN) {
+    socioId = null
+  } else if (entrada.de_quien) {
+    socioId = await socioIdPorEmail(entrada.de_quien)
+    if (!socioId) {
+      return {
+        error: `No encontré un socio con email ${entrada.de_quien}. Para la cuenta de la empresa usá "${FONDO_COMUN}".`,
+      }
+    }
+  }
+
+  // El reparto solo aplica si la plata la movió un socio.
+  const reparto: { socio_id: string; partes: number }[] = []
+  if (socioId && entrada.reparto?.length) {
+    for (const r of entrada.reparto) {
+      const id = await socioIdPorEmail(r.socio_email)
+      if (!id) return { error: `No encontré un socio con email ${r.socio_email}.` }
+      reparto.push({ socio_id: id, partes: r.partes ?? 1 })
+    }
+  }
+  return { socioId, reparto }
+}
+
+// El proyecto manda sobre el cliente: son del mismo cliente por definición,
+// y así no hay que nombrar los dos.
+async function clienteYProyecto(entrada: {
+  cliente?: string
+  proyecto?: string
+}): Promise<
+  { clienteId: string | null; proyectoId: string | null } | { error: string }
+> {
+  const proyecto = entrada.proyecto
+    ? await proyectoPorNombre(entrada.proyecto)
+    : null
+  if (proyecto?.error) return { error: proyecto.error }
+  return {
+    proyectoId: (proyecto?.proyecto?.id as string | undefined) ?? null,
+    clienteId:
+      (proyecto?.proyecto?.cliente_id as string | null | undefined) ??
+      (await idPorNombre("clientes", entrada.cliente)) ??
+      null,
+  }
+}
+
 // Las reuniones se referencian por su código corto ("REU-7" o 7).
 function numeroDeReunion(referencia: string | number): number | null {
   const n = Number(String(referencia).replace(/^reu-?/i, "").trim())
@@ -646,13 +739,19 @@ const handler = createMcpHandler(
       },
       async () => {
         const supabase = createAdminClient()
-        const [{ data: movimientos }, { data: balance }] = await Promise.all([
-          supabase
-            .from("movimientos")
-            .select("tipo, estado, fecha, monto_usd, socio_id")
-            .is("deleted_at", null),
-          supabase.from("balance_socios").select("*"),
-        ])
+        const [{ data: movimientos }, { data: balance }, { data: recurrentes }] =
+          await Promise.all([
+            supabase
+              .from("movimientos")
+              .select("tipo, estado, fecha, monto_usd, socio_id")
+              .is("deleted_at", null),
+            supabase.from("balance_socios").select("*"),
+            supabase
+              .from("movimientos_recurrentes")
+              .select("tipo, monto, tc_a_usd, frecuencia, fecha_inicio, fecha_fin")
+              .is("deleted_at", null)
+              .eq("activo", true),
+          ])
 
         const inicioMes = new Date()
         inicioMes.setDate(1)
@@ -678,6 +777,9 @@ const handler = createMcpHandler(
         }
         const resultado =
           (totales.ingreso?.historico ?? 0) - (totales.gasto?.historico ?? 0)
+        const nombreDe = new Map(
+          (balance ?? []).map((b) => [b.socio_id as string, b.nombre as string])
+        )
 
         return texto({
           totales_usd: totales,
@@ -685,8 +787,21 @@ const handler = createMcpHandler(
           caja_fondo_comun_usd: Number(caja.toFixed(2)),
           comprometido_previsto_usd: Number(comprometido.toFixed(2)),
           balance_socios: balance ?? [],
+          transferencias_sugeridas: transferenciasSugeridas(balance ?? []).map(
+            (t) => ({
+              de: nombreDe.get(t.de_socio_id),
+              para: nombreDe.get(t.para_socio_id),
+              monto_usd: t.monto_usd,
+            })
+          ),
+          gastos_recurrentes_mensual_usd: Number(
+            (recurrentes ?? [])
+              .filter((r) => r.tipo === "gasto" && proximaOcurrencia(r) != null)
+              .reduce((acc, r) => acc + mensualUsd(r), 0)
+              .toFixed(2)
+          ),
           como_leer_el_balance:
-            "saldo_usd positivo = los demás socios le deben; negativo = debe. Los totales y la caja no cuentan los movimientos previstos.",
+            "saldo_usd positivo = los demás socios le deben; negativo = debe. transferencias_sugeridas es la forma de dejarlo en cero; cuando se hagan, se registran con registrar_liquidacion. Los totales y la caja no cuentan los movimientos previstos.",
         })
       }
     )
@@ -2978,75 +3093,25 @@ const handler = createMcpHandler(
               "previsto = comprometido a futuro, no toca caja ni balance hasta confirmarse. Default confirmado"
             )
             .optional(),
-          de_quien: z
-            .string()
-            .describe(
-              "quién puso la plata (gasto) o quién la cobró (ingreso): email del socio, o \"fondo_comun\" para la cuenta de la empresa. Default: el dueño del token"
-            )
-            .optional(),
-          reparto: z
-            .array(
-              z.object({
-                socio_email: z.string(),
-                partes: z
-                  .number()
-                  .positive()
-                  .describe("peso relativo; 1 y 2 = un tercio y dos tercios")
-                  .optional(),
-              })
-            )
-            .describe(
-              "entre quiénes se divide. Default: partes iguales entre todos los socios. Se ignora si lo puso o cobró el fondo común"
-            )
-            .optional(),
+          de_quien: ESQUEMA_DE_QUIEN,
+          reparto: ESQUEMA_REPARTO,
         },
       },
       async (entrada, extra) => {
         const email = extra.authInfo?.extra?.email as string | undefined
         const actorId = email ? await socioIdPorEmail(email) : null
 
-        // De qué bolsillo salió/entró: un socio o el fondo común. Por default
-        // el dueño del token, que es quien está registrando el movimiento.
-        let socioId: string | null = actorId
-        if (entrada.de_quien === FONDO_COMUN) {
-          socioId = null
-        } else if (entrada.de_quien) {
-          socioId = await socioIdPorEmail(entrada.de_quien)
-          if (!socioId) {
-            return texto(
-              `No encontré un socio con email ${entrada.de_quien}. Para la cuenta de la empresa usá "${FONDO_COMUN}".`
-            )
-          }
-        }
         if (entrada.moneda === "UYU" && !entrada.tc_a_usd) {
           return texto(
             "Para movimientos en UYU hace falta tc_a_usd (cuántos pesos vale 1 USD ese día)."
           )
         }
-
-        // El reparto solo aplica si la plata la movió un socio.
-        const reparto: { socio_id: string; partes: number }[] = []
-        if (socioId && entrada.reparto?.length) {
-          for (const r of entrada.reparto) {
-            const id = await socioIdPorEmail(r.socio_email)
-            if (!id) {
-              return texto(`No encontré un socio con email ${r.socio_email}.`)
-            }
-            reparto.push({ socio_id: id, partes: r.partes ?? 1 })
-          }
-        }
-
-        const proyecto = entrada.proyecto
-          ? await proyectoPorNombre(entrada.proyecto)
-          : null
-        if (proyecto?.error) return texto(proyecto.error)
-        const proyectoId = (proyecto?.proyecto?.id as string | undefined) ?? null
-        // El proyecto manda sobre el cliente: son del mismo cliente por
-        // definición, y así no hay que nombrar los dos.
-        const clienteId =
-          (proyecto?.proyecto?.cliente_id as string | null | undefined) ??
-          (await idPorNombre("clientes", entrada.cliente)) ??
-          null
+        const bolsillo = await bolsilloYReparto(entrada, actorId)
+        if ("error" in bolsillo) return texto(bolsillo.error)
+        const { socioId, reparto } = bolsillo
+        const vinculo = await clienteYProyecto(entrada)
+        if ("error" in vinculo) return texto(vinculo.error)
+        const { clienteId, proyectoId } = vinculo
 
         const supabase = createAdminClient()
         const { data, error } = await supabase
@@ -3088,6 +3153,239 @@ const handler = createMcpHandler(
               : socioId
                 ? "partes iguales entre todos los socios"
                 : "sin reparto (no genera deuda entre socios)",
+        })
+      }
+    )
+
+    server.registerTool(
+      "registrar_liquidacion",
+      {
+        title: "Registrar una transferencia entre socios",
+        description:
+          "Registra que un socio le transfirió plata a otro para saldar el balance (ver transferencias_sugeridas en resumen_finanzas). No es ingreso ni gasto de la empresa: solo baja lo que debe quien transfiere y lo que le deben a quien recibe. Confirmá con el usuario antes de registrarla.",
+        inputSchema: {
+          de: z.string().describe("email del socio que transfiere"),
+          para: z.string().describe("email del socio que recibe"),
+          monto: z.number().positive(),
+          moneda: z.enum(["USD", "UYU"]).optional(),
+          tc_a_usd: z.number().positive().optional(),
+          fecha: z.string().regex(FORMATO_FECHA).describe("YYYY-MM-DD, default hoy").optional(),
+          nota: z.string().optional(),
+        },
+      },
+      async (entrada, extra) => {
+        const email = extra.authInfo?.extra?.email as string | undefined
+        const actorId = email ? await socioIdPorEmail(email) : null
+        const [deId, paraId] = await Promise.all([
+          socioIdPorEmail(entrada.de),
+          socioIdPorEmail(entrada.para),
+        ])
+        if (!deId) return texto(`No encontré un socio con email ${entrada.de}.`)
+        if (!paraId) return texto(`No encontré un socio con email ${entrada.para}.`)
+        if (deId === paraId) {
+          return texto("Quién transfiere y quién recibe tienen que ser distintos.")
+        }
+        if (entrada.moneda === "UYU" && !entrada.tc_a_usd) {
+          return texto("Para UYU hace falta tc_a_usd (cuántos pesos vale 1 USD ese día).")
+        }
+
+        const supabase = createAdminClient()
+        const { data, error } = await supabase
+          .from("liquidaciones")
+          .insert({
+            de_socio_id: deId,
+            para_socio_id: paraId,
+            monto: entrada.monto,
+            moneda: entrada.moneda ?? "USD",
+            tc_a_usd: entrada.tc_a_usd ?? 1,
+            fecha: entrada.fecha ?? undefined,
+            nota: entrada.nota ?? null,
+            created_by: actorId,
+          })
+          .select("id, fecha, monto, moneda, monto_usd")
+          .single()
+        if (error) throw new Error(error.message)
+
+        const { data: balance } = await supabase
+          .from("balance_socios")
+          .select("nombre, saldo_usd")
+        return texto({ registrada: data, balance_actualizado: balance ?? [] })
+      }
+    )
+
+    server.registerTool(
+      "listar_recurrentes",
+      {
+        title: "Listar movimientos recurrentes",
+        description:
+          "Plantillas de gastos (o ingresos) que se repiten, como Google Workspace, con su próximo cobro y cuánto pesan por mes en USD. El cron diario las convierte en movimientos: la próxima ocurrencia figura como previsto y se confirma el día que vence.",
+        inputSchema: {},
+      },
+      async () => {
+        const supabase = createAdminClient()
+        const { data, error } = await supabase
+          .from("movimientos_recurrentes")
+          // Hint de FK: la plantilla llega a socios por socio_id y por
+          // created_by, y sin hint PostgREST no sabe cuál embeber.
+          .select(
+            "*, socios!movimientos_recurrentes_socio_id_fkey(nombre), clientes(nombre), proyectos(nombre)"
+          )
+          .is("deleted_at", null)
+          .order("descripcion")
+        if (error) throw new Error(error.message)
+        const hoy = hoyUruguay()
+        return texto(
+          (data ?? []).map((r) => ({
+            descripcion: r.descripcion,
+            tipo: r.tipo,
+            monto: r.monto,
+            moneda: r.moneda,
+            frecuencia: r.frecuencia,
+            mensual_usd: Number(mensualUsd(r).toFixed(2)),
+            de_quien: r.socios?.nombre ?? "fondo_comun",
+            cliente: r.clientes?.nombre ?? null,
+            proyecto: r.proyectos?.nombre ?? null,
+            activo: r.activo,
+            primer_cobro: r.fecha_inicio,
+            hasta: r.fecha_fin,
+            proximo_cobro: r.activo ? proximaOcurrencia(r, hoy) : null,
+          }))
+        )
+      }
+    )
+
+    server.registerTool(
+      "crear_recurrente",
+      {
+        title: "Crear un movimiento recurrente",
+        description:
+          "Crea la plantilla de un gasto (o ingreso) que se repite, ej. Google Workspace USD 7 mensual. El día de cobro sale de primer_cobro. Si primer_cobro ya pasó, se generan también los cobros vencidos desde esa fecha: si ya estaban cargados a mano, preguntá y usá como primer_cobro el próximo.",
+        inputSchema: {
+          descripcion: z.string().min(2),
+          monto: z.number().positive(),
+          frecuencia: z.enum(["mensual", "anual"]),
+          primer_cobro: z.string().regex(FORMATO_FECHA, "Usar formato YYYY-MM-DD"),
+          hasta: z
+            .string()
+            .regex(FORMATO_FECHA)
+            .describe("último cobro posible; vacío = sin fin")
+            .optional(),
+          tipo: z.enum(["ingreso", "gasto"]).optional(),
+          moneda: z.enum(["USD", "UYU"]).optional(),
+          tc_a_usd: z.number().positive().optional(),
+          categoria: z.string().optional(),
+          cliente: z.string().describe("nombre del cliente").optional(),
+          proyecto: z.string().describe("nombre del proyecto").optional(),
+          de_quien: ESQUEMA_DE_QUIEN,
+          reparto: ESQUEMA_REPARTO,
+        },
+      },
+      async (entrada, extra) => {
+        const email = extra.authInfo?.extra?.email as string | undefined
+        const actorId = email ? await socioIdPorEmail(email) : null
+        if (entrada.moneda === "UYU" && !entrada.tc_a_usd) {
+          return texto("Para UYU hace falta tc_a_usd (cuántos pesos vale 1 USD).")
+        }
+        if (entrada.hasta && entrada.hasta < entrada.primer_cobro) {
+          return texto("`hasta` no puede ser anterior a primer_cobro.")
+        }
+        const bolsillo = await bolsilloYReparto(entrada, actorId)
+        if ("error" in bolsillo) return texto(bolsillo.error)
+        const vinculo = await clienteYProyecto(entrada)
+        if ("error" in vinculo) return texto(vinculo.error)
+
+        const supabase = createAdminClient()
+        const { data, error } = await supabase
+          .from("movimientos_recurrentes")
+          .insert({
+            tipo: entrada.tipo ?? "gasto",
+            descripcion: entrada.descripcion,
+            categoria: entrada.categoria ?? null,
+            monto: entrada.monto,
+            moneda: entrada.moneda ?? "USD",
+            tc_a_usd: entrada.tc_a_usd ?? 1,
+            socio_id: bolsillo.socioId,
+            cliente_id: vinculo.clienteId,
+            proyecto_id: vinculo.proyectoId,
+            reparto: bolsillo.reparto,
+            frecuencia: entrada.frecuencia,
+            fecha_inicio: entrada.primer_cobro,
+            fecha_fin: entrada.hasta ?? null,
+            created_by: actorId,
+          })
+          .select("id, descripcion, frecuencia, fecha_inicio, fecha_fin")
+          .single()
+        if (error) throw new Error(error.message)
+
+        const sincronizacion = await sincronizarRecurrentes(supabase)
+        return texto({
+          creado: data,
+          proximo_cobro: proximaOcurrencia(data),
+          movimientos_generados: sincronizacion.generados,
+          errores: sincronizacion.errores,
+        })
+      }
+    )
+
+    server.registerTool(
+      "actualizar_recurrente",
+      {
+        title: "Actualizar o pausar un movimiento recurrente",
+        description:
+          "Cambia el monto, la fecha de fin o pausa/reanuda un recurrente, buscado por descripción. Los cobros ya registrados no se tocan; el próximo previsto se regenera con los datos nuevos.",
+        inputSchema: {
+          recurrente: z.string().describe("descripción o parte de ella"),
+          monto: z.number().positive().optional(),
+          tc_a_usd: z.number().positive().optional(),
+          hasta: z
+            .string()
+            .describe("YYYY-MM-DD; cadena vacía = sin fin")
+            .optional(),
+          activo: z.boolean().describe("false = pausar").optional(),
+        },
+      },
+      async (entrada) => {
+        const supabase = createAdminClient()
+        const { data: candidatos } = await supabase
+          .from("movimientos_recurrentes")
+          .select("id, descripcion")
+          .is("deleted_at", null)
+          .ilike("descripcion", `%${entrada.recurrente.trim()}%`)
+          .limit(5)
+        if (!candidatos?.length) {
+          return texto(`No encontré un recurrente que matchee "${entrada.recurrente}".`)
+        }
+        if (candidatos.length > 1) {
+          return texto(
+            `"${entrada.recurrente}" matchea varios: ${candidatos.map((c) => c.descripcion).join(", ")}. Precisá.`
+          )
+        }
+        if (entrada.hasta && !FORMATO_FECHA.test(entrada.hasta)) {
+          return texto("`hasta` va en formato YYYY-MM-DD.")
+        }
+
+        const cambios: Record<string, unknown> = {}
+        if (entrada.monto !== undefined) cambios.monto = entrada.monto
+        if (entrada.tc_a_usd !== undefined) cambios.tc_a_usd = entrada.tc_a_usd
+        if (entrada.hasta !== undefined) cambios.fecha_fin = entrada.hasta || null
+        if (entrada.activo !== undefined) cambios.activo = entrada.activo
+        if (Object.keys(cambios).length === 0) return texto("No pasaste nada para cambiar.")
+
+        const id = candidatos[0].id as string
+        const { data, error } = await supabase
+          .from("movimientos_recurrentes")
+          .update(cambios)
+          .eq("id", id)
+          .select("descripcion, monto, moneda, frecuencia, fecha_inicio, fecha_fin, activo")
+          .single()
+        if (error) throw new Error(error.message)
+
+        await borrarPrevistosFuturos(supabase, id)
+        const sincronizacion = await sincronizarRecurrentes(supabase)
+        return texto({
+          actualizado: data,
+          proximo_cobro: data.activo ? proximaOcurrencia(data) : null,
+          errores: sincronizacion.errores,
         })
       }
     )

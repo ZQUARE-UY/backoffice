@@ -473,6 +473,15 @@ export const ESTADOS_MOVIMIENTO = {
 
 export type EstadoMovimiento = keyof typeof ESTADOS_MOVIMIENTO
 
+// Cada cuánto se repite un movimiento recurrente. El día (y el mes, si es
+// anual) salen de la fecha del primer cobro.
+export const FRECUENCIAS_RECURRENTE = {
+  mensual: { label: "Mensual" },
+  anual: { label: "Anual" },
+}
+
+export type FrecuenciaRecurrente = keyof typeof FRECUENCIAS_RECURRENTE
+
 // Valor especial para "pagado por" cuando el pago sale del fondo común de la
 // empresa (en la base se guarda como socio_id NULL).
 export const FONDO_COMUN = "fondo_comun"
@@ -733,9 +742,53 @@ export type Movimiento = {
   socio_id: string | null
   cliente_id: string | null
   proyecto_id: string | null
+  // Plantilla que lo generó; null = cargado a mano.
+  recurrente_id: string | null
   comprobante_url: string | null
   created_at: string
   updated_at: string
+}
+
+// Plantilla de un movimiento que se repite (ej. Google Workspace mensual). El
+// cron diario la convierte en movimientos: la próxima ocurrencia como
+// previsto, y confirmada el día que vence.
+export type MovimientoRecurrente = {
+  id: string
+  tipo: TipoMovimiento
+  descripcion: string
+  categoria: string | null
+  moneda: Moneda
+  monto: number
+  tc_a_usd: number
+  socio_id: string | null
+  cliente_id: string | null
+  proyecto_id: string | null
+  // Vacío = partes iguales entre los socios activos.
+  reparto: { socio_id: string; partes: number }[]
+  frecuencia: FrecuenciaRecurrente
+  fecha_inicio: string
+  fecha_fin: string | null
+  activo: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+}
+
+// Transferencia entre socios para saldar el balance. No es ingreso ni gasto
+// de la empresa: solo mueve el saldo entre los dos.
+export type Liquidacion = {
+  id: string
+  fecha: string
+  de_socio_id: string
+  para_socio_id: string
+  moneda: Moneda
+  monto: number
+  tc_a_usd: number
+  monto_usd: number
+  nota: string | null
+  comprobante_url: string | null
+  created_at: string
 }
 
 // Cuánto puso y cobró cada socio de su bolsillo, cuánto de eso le correspondía
@@ -747,6 +800,10 @@ export type BalanceSocio = {
   cobrado_usd: number
   gastos_asignados_usd: number
   ingresos_asignados_usd: number
+  // Transferencias entre socios para saldar: lo enviado achica lo que debe,
+  // lo recibido achica lo que le deben.
+  liquidado_enviado_usd: number
+  liquidado_recibido_usd: number
   saldo_usd: number
 }
 
