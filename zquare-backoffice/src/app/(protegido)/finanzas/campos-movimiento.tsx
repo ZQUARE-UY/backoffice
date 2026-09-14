@@ -12,11 +12,13 @@ import {
   ESTADOS_MOVIMIENTO,
   FONDO_COMUN,
   formatearMonto,
+  FRECUENCIAS_RECURRENTE,
   MONEDAS,
   TIPOS_MOVIMIENTO,
   type Cliente,
   type Movimiento,
   type MovimientoParticipacion,
+  type MovimientoRecurrente,
   type Proyecto,
   type Socio,
 } from "@/lib/dominio"
@@ -28,7 +30,7 @@ type Reparto = Record<string, { activo: boolean; partes: string }>
 
 function repartoInicial(
   socios: Socio[],
-  participaciones: MovimientoParticipacion[],
+  participaciones: Pick<MovimientoParticipacion, "socio_id" | "partes">[],
 ): Reparto {
   // Sin participaciones guardadas el movimiento se reparte en partes iguales
   // entre todos (es también lo que asume la vista de balance).
@@ -45,32 +47,35 @@ function repartoInicial(
   )
 }
 
+// Sirve para un movimiento suelto y para la plantilla de uno recurrente: los
+// dos comparten qué es, cuánto, de quién y el reparto. Cambia solo el cuándo
+// (fecha y estado vs. frecuencia y período) y el comprobante, que es de cada
+// cobro y no de la plantilla.
 export function CamposMovimiento({
+  modo = "movimiento",
   movimiento,
+  recurrente,
   socios,
   clientes,
   proyectos,
   reparto: repartoGuardado = [],
 }: {
+  modo?: "movimiento" | "recurrente"
   movimiento?: Movimiento
+  recurrente?: MovimientoRecurrente
   socios: Socio[]
   clientes: Pick<Cliente, "id" | "nombre">[]
   proyectos: ProyectoOpcion[]
-  reparto?: MovimientoParticipacion[]
+  reparto?: Pick<MovimientoParticipacion, "socio_id" | "partes">[]
 }) {
-  const [moneda, setMoneda] = useState<string>(movimiento?.moneda ?? "USD")
-  const [tipo, setTipo] = useState<string>(movimiento?.tipo ?? "gasto")
-  const [clienteId, setClienteId] = useState<string>(
-    movimiento?.cliente_id ?? "",
-  )
-  const [proyectoId, setProyectoId] = useState<string>(
-    movimiento?.proyecto_id ?? "",
-  )
-  const [deQuien, setDeQuien] = useState<string>(
-    movimiento?.socio_id ?? FONDO_COMUN,
-  )
+  const base = movimiento ?? recurrente
+  const [moneda, setMoneda] = useState<string>(base?.moneda ?? "USD")
+  const [tipo, setTipo] = useState<string>(base?.tipo ?? "gasto")
+  const [clienteId, setClienteId] = useState<string>(base?.cliente_id ?? "")
+  const [proyectoId, setProyectoId] = useState<string>(base?.proyecto_id ?? "")
+  const [deQuien, setDeQuien] = useState<string>(base?.socio_id ?? FONDO_COMUN)
   const [monto, setMonto] = useState<string>(
-    movimiento?.monto != null ? String(movimiento.monto) : "",
+    base?.monto != null ? String(base.monto) : "",
   )
   const [reparto, setReparto] = useState<Reparto>(() =>
     repartoInicial(socios, repartoGuardado),
@@ -82,6 +87,9 @@ export function CamposMovimiento({
   }))
   const opcionesEstado = Object.entries(ESTADOS_MOVIMIENTO).map(
     ([valor, e]) => ({ valor, label: e.label }),
+  )
+  const opcionesFrecuencia = Object.entries(FRECUENCIAS_RECURRENTE).map(
+    ([valor, f]) => ({ valor, label: f.label }),
   )
   const opcionesMoneda = MONEDAS.map((m) => ({ valor: m, label: m }))
   const opcionesDeQuien = [
@@ -149,16 +157,57 @@ export function CamposMovimiento({
             onValueChange={setTipo}
           />
         </Field>
-        <Field>
-          <FieldLabel htmlFor="fecha">Fecha</FieldLabel>
-          <Input
-            id="fecha"
-            name="fecha"
-            type="date"
-            defaultValue={movimiento?.fecha ?? ""}
-          />
-        </Field>
+        {modo === "movimiento" ? (
+          <Field>
+            <FieldLabel htmlFor="fecha">Fecha</FieldLabel>
+            <Input
+              id="fecha"
+              name="fecha"
+              type="date"
+              defaultValue={movimiento?.fecha ?? ""}
+            />
+          </Field>
+        ) : (
+          <Field>
+            <FieldLabel htmlFor="frecuencia">Se repite *</FieldLabel>
+            <SelectCampo
+              id="frecuencia"
+              name="frecuencia"
+              defaultValue={recurrente?.frecuencia ?? "mensual"}
+              opciones={opcionesFrecuencia}
+            />
+          </Field>
+        )}
       </div>
+
+      {modo === "recurrente" && (
+        <div className="grid grid-cols-2 gap-4">
+          <Field>
+            <FieldLabel htmlFor="fecha_inicio">Primer cobro *</FieldLabel>
+            <Input
+              id="fecha_inicio"
+              name="fecha_inicio"
+              type="date"
+              required
+              defaultValue={recurrente?.fecha_inicio ?? ""}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="fecha_fin">Hasta (opcional)</FieldLabel>
+            <Input
+              id="fecha_fin"
+              name="fecha_fin"
+              type="date"
+              defaultValue={recurrente?.fecha_fin ?? ""}
+            />
+          </Field>
+          <p className="col-span-2 text-xs text-muted-foreground">
+            Se cobra ese día de cada mes (o de cada año). Si ya cargaste a mano
+            los cobros anteriores, poné acá el próximo: los que ya pasaron se
+            generan solos.
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-[1fr_auto] gap-4">
         <Field>
@@ -199,7 +248,7 @@ export function CamposMovimiento({
             step="0.0001"
             min="0"
             placeholder="Ej. 40"
-            defaultValue={movimiento?.tc_a_usd ?? ""}
+            defaultValue={base?.tc_a_usd ?? ""}
           />
         </Field>
       )}
@@ -211,7 +260,7 @@ export function CamposMovimiento({
           name="categoria"
           list="categorias-sugeridas"
           placeholder="Ej. Software y servicios"
-          defaultValue={movimiento?.categoria ?? ""}
+          defaultValue={base?.categoria ?? ""}
         />
         <datalist id="categorias-sugeridas">
           {CATEGORIAS_SUGERIDAS.map((c) => (
@@ -221,13 +270,20 @@ export function CamposMovimiento({
       </Field>
 
       <Field>
-        <FieldLabel htmlFor="descripcion">Descripción</FieldLabel>
+        <FieldLabel htmlFor="descripcion">
+          {modo === "recurrente" ? "Descripción *" : "Descripción"}
+        </FieldLabel>
         <Textarea
           id="descripcion"
           name="descripcion"
           rows={2}
-          placeholder="Detalle del movimiento"
-          defaultValue={movimiento?.descripcion ?? ""}
+          required={modo === "recurrente"}
+          placeholder={
+            modo === "recurrente"
+              ? "Ej. Google Workspace"
+              : "Detalle del movimiento"
+          }
+          defaultValue={base?.descripcion ?? ""}
         />
       </Field>
 
@@ -267,21 +323,25 @@ export function CamposMovimiento({
             onValueChange={setDeQuien}
           />
         </Field>
-        <Field>
-          <FieldLabel htmlFor="estado">Estado</FieldLabel>
-          <SelectCampo
-            id="estado"
-            name="estado"
-            defaultValue={movimiento?.estado ?? "confirmado"}
-            opciones={opcionesEstado}
-          />
-        </Field>
+        {modo === "movimiento" && (
+          <Field>
+            <FieldLabel htmlFor="estado">Estado</FieldLabel>
+            <SelectCampo
+              id="estado"
+              name="estado"
+              defaultValue={movimiento?.estado ?? "confirmado"}
+              opciones={opcionesEstado}
+            />
+          </Field>
+        )}
       </div>
 
       {repartir && (
         <Field>
           <FieldLabel>
-            {tipo === "gasto" ? "Gasto a repartir entre" : "Ingreso a repartir entre"}
+            {tipo === "gasto"
+              ? "Gasto a repartir entre"
+              : "Ingreso a repartir entre"}
           </FieldLabel>
           <p className="text-xs text-muted-foreground">
             {tipo === "gasto"
@@ -345,18 +405,20 @@ export function CamposMovimiento({
         </Field>
       )}
 
-      <Field>
-        <FieldLabel htmlFor="comprobante_url">
-          Comprobante (link a Drive)
-        </FieldLabel>
-        <Input
-          id="comprobante_url"
-          name="comprobante_url"
-          type="url"
-          placeholder="https://drive.google.com/…"
-          defaultValue={movimiento?.comprobante_url ?? ""}
-        />
-      </Field>
+      {modo === "movimiento" && (
+        <Field>
+          <FieldLabel htmlFor="comprobante_url">
+            Comprobante (link a Drive)
+          </FieldLabel>
+          <Input
+            id="comprobante_url"
+            name="comprobante_url"
+            type="url"
+            placeholder="https://drive.google.com/…"
+            defaultValue={movimiento?.comprobante_url ?? ""}
+          />
+        </Field>
+      )}
     </FieldGroup>
   )
 }

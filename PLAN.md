@@ -207,6 +207,8 @@ ZQUARE (Unidad compartida del Workspace)
   (`movimiento_participaciones`), ingresos cobrados por un socio en su cuenta
   personal, proyecto en el formulario y movimientos previstos. Ver la sección
   "Finanzas v2 — Reparto por movimiento"
+- [x] Finanzas v3 (2026-09-14): liquidaciones entre socios y movimientos
+  recurrentes. Ver "Finanzas v3 — Liquidaciones y recurrentes"
 - [x] Carga de movimientos históricos: seña diseñadora (gasto + aporte de Joaquín, 230 USD) vía `supabase/seeds/`; dominio + Workspace cargados por Martín desde la app (2026-07-27)
 
 ### Fase 3 — Dashboard *(1-2 sesiones)*
@@ -708,6 +710,41 @@ cuatro.
 - [ ] Release: PR → merge → migración `20260908000001_finanzas_reparto.sql` en
   el SQL Editor (Joaquín) → verificación en prod.
 
+## 9 ter. Finanzas v3 — Liquidaciones y recurrentes
+
+- **Liquidaciones.** Cuando un socio le transfiere a otro para saldar, eso no es
+  ingreso ni gasto de la empresa: tabla propia `liquidaciones` (de, para,
+  monto, moneda, TC, nota, comprobante). Cargarla como gasto "pagado por uno,
+  repartido al otro" cuadraba el saldo pero inflaba los gastos con algo que no
+  existió. `balance_socios` suma `liquidado_enviado_usd` y
+  `liquidado_recibido_usd`.
+- **Saldar cuentas.** La página calcula las transferencias que dejan el
+  balance en cero con la menor cantidad de pagos (el que más debe le paga al
+  que más le deben; con cuatro socios, como mucho tres) y cada una tiene
+  "Registrar", que abre el diálogo precargado para ajustar monto, fecha y
+  comprobante. `resumen_finanzas` devuelve las mismas sugerencias.
+- **Balance legible.** La tabla se lee de izquierda a derecha: Puso − Cobró +
+  Le toca + Transferido = Saldo.
+- **Recurrentes.** Plantilla `movimientos_recurrentes` (ej. Google Workspace,
+  USD 7 mensual) con frecuencia mensual o anual; el día sale de la fecha del
+  primer cobro (un 31 cae en el último día de los meses cortos). El cron
+  diario `/api/cron/recurrentes` (04:00 de Montevideo) confirma lo que venció
+  y deja previsto el próximo cobro, así se ve en lo comprometido.
+  `movimientos.recurrente_id` apunta a la plantilla, con unique
+  `(recurrente_id, fecha)` sin filtrar borrados: si alguien borra una
+  ocurrencia (ese mes no se cobró), no se regenera. Editar o pausar una
+  plantilla borra de verdad sus previstos futuros y los regenera; lo ya
+  cobrado no se toca. Si el primer cobro es viejo, se generan los vencidos
+  (tope 120): si ya estaban cargados a mano, se pone como primer cobro el
+  próximo.
+- **MCP:** `registrar_liquidacion`, `listar_recurrentes`, `crear_recurrente`,
+  `actualizar_recurrente` (monto, fin, pausar); `resumen_finanzas` agrega
+  `transferencias_sugeridas` y `gastos_recurrentes_mensual_usd`.
+- [ ] Release: PR → merge → migración
+  `20260914000001_liquidaciones_recurrentes.sql` en el SQL Editor → cargar
+  Google Workspace como recurrente (con primer cobro = el próximo, porque los
+  anteriores ya están cargados) → verificar el cron al día siguiente.
+
 ## 10. Historial de cambios
 
 - **2026-07-22** — v1 inicial: decisiones de stack, modelo de datos y fases
@@ -826,3 +863,8 @@ cuatro.
   `previsto`, el formulario gana proyecto / cobrado por / reparto editable, y
   la caja del fondo común deja de contar plata que nunca pasó por la cuenta de
   la empresa. Ver "Finanzas v2 — Reparto por movimiento".
+- **2026-09-14** — Finanzas v3: liquidaciones entre socios (tabla propia, no
+  cuentan como ingreso ni gasto) con transferencias sugeridas para saldar el
+  balance, y movimientos recurrentes (plantilla mensual/anual que un cron
+  diario convierte en movimientos: previsto el próximo, confirmado al vencer).
+  Cuatro tools MCP nuevas. Ver "Finanzas v3 — Liquidaciones y recurrentes".

@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { WalletIcon } from "lucide-react"
+import { RepeatIcon, WalletIcon } from "lucide-react"
 
 import { BalanceSociosTabla } from "@/components/balance-socios-tabla"
 import { Badge } from "@/components/ui/badge"
@@ -32,15 +32,20 @@ import {
   TIPOS_MOVIMIENTO,
   type BalanceSocio,
   type Cliente,
+  type Liquidacion,
   type Movimiento,
   type MovimientoParticipacion,
+  type MovimientoRecurrente,
   type Proyecto,
   type Socio,
 } from "@/lib/dominio"
+import { hoyUruguay } from "@/lib/finanzas"
 import { createClient } from "@/lib/supabase/server"
 
+import { Liquidaciones } from "./liquidaciones"
 import { MovimientoAcciones } from "./movimiento-acciones"
 import { NuevoMovimiento } from "./nuevo-movimiento"
+import { Recurrentes } from "./recurrentes"
 
 export const metadata = { title: "Finanzas" }
 
@@ -56,6 +61,8 @@ export default async function FinanzasPage() {
     { data: proyectosData },
     { data: participacionesData },
     { data: balanceData },
+    { data: recurrentesData },
+    { data: liquidacionesData },
   ] = await Promise.all([
     supabase
       .from("movimientos")
@@ -76,6 +83,18 @@ export default async function FinanzasPage() {
       .order("nombre"),
     supabase.from("movimiento_participaciones").select("*"),
     supabase.from("balance_socios").select("*").order("nombre"),
+    supabase
+      .from("movimientos_recurrentes")
+      .select("*")
+      .is("deleted_at", null)
+      .order("activo", { ascending: false })
+      .order("descripcion"),
+    supabase
+      .from("liquidaciones")
+      .select("*")
+      .is("deleted_at", null)
+      .order("fecha", { ascending: false })
+      .order("created_at", { ascending: false }),
   ])
 
   const movimientos = (movimientosData ?? []) as Movimiento[]
@@ -88,6 +107,9 @@ export default async function FinanzasPage() {
   const participaciones = (participacionesData ??
     []) as MovimientoParticipacion[]
   const balance = (balanceData ?? []) as BalanceSocio[]
+  const recurrentes = (recurrentesData ?? []) as MovimientoRecurrente[]
+  const liquidaciones = (liquidacionesData ?? []) as Liquidacion[]
+  const hoy = hoyUruguay()
   const nombreSocio = new Map(socios.map((s) => [s.id, s.nombre]))
   const nombreProyecto = new Map(proyectos.map((p) => [p.id, p.nombre]))
 
@@ -191,6 +213,21 @@ export default async function FinanzasPage() {
 
       <BalanceSociosTabla balance={balance} />
 
+      <Liquidaciones
+        balance={balance}
+        socios={socios}
+        liquidaciones={liquidaciones}
+        hoy={hoy}
+      />
+
+      <Recurrentes
+        recurrentes={recurrentes}
+        hoy={hoy}
+        socios={socios}
+        clientes={clientes}
+        proyectos={proyectos}
+      />
+
       {movimientos.length === 0 ? (
         <Empty>
           <EmptyHeader>
@@ -239,6 +276,12 @@ export default async function FinanzasPage() {
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-1">
                         <Badge variant={tipo.variant}>{tipo.label}</Badge>
+                        {m.recurrente_id && (
+                          <RepeatIcon
+                            aria-label="Generado por un recurrente"
+                            className="size-3.5 text-muted-foreground"
+                          />
+                        )}
                         {m.estado === "previsto" && (
                           <Badge variant={ESTADOS_MOVIMIENTO.previsto.variant}>
                             {ESTADOS_MOVIMIENTO.previsto.label}
