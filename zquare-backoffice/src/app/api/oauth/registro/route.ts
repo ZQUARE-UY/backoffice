@@ -39,7 +39,7 @@ export async function POST(req: Request) {
   }
   if (!redirectUris.every((u) => typeof u === "string" && esRedirectUriValida(u))) {
     return errorRegistro(
-      "las redirect_uris deben ser https (o http://localhost para desarrollo)"
+      "las redirect_uris deben ser https, http://localhost (desarrollo) o el callback de Cursor permitido"
     )
   }
 

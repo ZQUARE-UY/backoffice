@@ -34,7 +34,14 @@ export function originPublico(req: Request): string {
   return host ? `${proto}://${host}` : new URL(req.url).origin
 }
 
+// Cursor (Grok Bot / MCP de la cuenta) se registra con un callback de esquema
+// propio legacy. Se acepta solo esta URI exacta, no cursor:// arbitrario.
+const REDIRECT_URIS_PERMITIDAS = new Set([
+  "cursor://anysphere.cursor-mcp/oauth/callback",
+])
+
 export function esRedirectUriValida(uri: string): boolean {
+  if (REDIRECT_URIS_PERMITIDAS.has(uri)) return true
   try {
     const u = new URL(uri)
     if (u.protocol === "https:") return true
