@@ -67,6 +67,15 @@ export function Liquidaciones({
   const [registrar, setRegistrar] = useState<
     TransferenciaSugerida | null | undefined
   >(undefined)
+  // Cada apertura del diálogo es un formulario nuevo: con la key se remonta y
+  // los selects toman los valores de la transferencia elegida, no los de la
+  // anterior.
+  const [apertura, setApertura] = useState(0)
+
+  function abrir(sugerida: TransferenciaSugerida | null) {
+    setApertura((n) => n + 1)
+    setRegistrar(sugerida)
+  }
   const nombre = new Map(socios.map((s) => [s.id, s.nombre]))
   const sugeridas = transferenciasSugeridas(balance)
 
@@ -80,7 +89,7 @@ export function Liquidaciones({
             : "Con estas transferencias el balance queda en cero. Registralas cuando las hagas."}
         </CardDescription>
         <CardAction>
-          <Button variant="outline" size="sm" onClick={() => setRegistrar(null)}>
+          <Button variant="outline" size="sm" onClick={() => abrir(null)}>
             <PlusIcon data-icon="inline-start" />
             Otra transferencia
           </Button>
@@ -106,7 +115,7 @@ export function Liquidaciones({
                 <span className="text-sm tabular-nums">
                   {formatearUsd(t.monto_usd)}
                 </span>
-                <Button size="sm" onClick={() => setRegistrar(t)}>
+                <Button size="sm" onClick={() => abrir(t)}>
                   Registrar
                 </Button>
               </li>
@@ -160,6 +169,7 @@ export function Liquidaciones({
       </CardContent>
 
       <DialogoLiquidacion
+        key={apertura}
         abierto={registrar !== undefined}
         sugerida={registrar ?? undefined}
         socios={socios}
@@ -185,6 +195,8 @@ function DialogoLiquidacion({
 }) {
   const [pendiente, iniciarTransicion] = useTransition()
   const [moneda, setMoneda] = useState("USD")
+  const [de, setDe] = useState(sugerida?.de_socio_id ?? "")
+  const [para, setPara] = useState(sugerida?.para_socio_id ?? "")
   const opcionesSocio = [
     { valor: "", label: "Elegí un socio" },
     ...socios.map((s) => ({ valor: s.id, label: s.nombre })),
@@ -193,12 +205,18 @@ function DialogoLiquidacion({
   function onSubmit(formData: FormData) {
     iniciarTransicion(async () => {
       await crearLiquidacion(formData)
-      onCerrar()
+      // Después de un await hay que volver a marcar la transición: así el
+      // cierre se pinta junto con la lista ya revalidada. Si se cerrara antes,
+      // quedaría a la vista la sugerencia recién registrada y un click rápido
+      // la registraría dos veces.
+      iniciarTransicion(() => onCerrar())
     })
   }
 
+  // Mientras se guarda no se puede cerrar: si se cerrara y se abriera otra
+  // transferencia, el fin de este guardado cerraría la nueva a medio llenar.
   return (
-    <Dialog open={abierto} onOpenChange={(v) => !v && onCerrar()}>
+    <Dialog open={abierto} onOpenChange={(v) => !v && !pendiente && onCerrar()}>
       <DialogContent className="sm:max-w-md">
         {abierto && (
           <form action={onSubmit}>
@@ -216,8 +234,9 @@ function DialogoLiquidacion({
                   <SelectCampo
                     id="de_socio_id"
                     name="de_socio_id"
-                    defaultValue={sugerida?.de_socio_id ?? ""}
+                    value={de}
                     opciones={opcionesSocio}
+                    onValueChange={setDe}
                   />
                 </Field>
                 <Field>
@@ -225,8 +244,9 @@ function DialogoLiquidacion({
                   <SelectCampo
                     id="para_socio_id"
                     name="para_socio_id"
-                    defaultValue={sugerida?.para_socio_id ?? ""}
+                    value={para}
                     opciones={opcionesSocio}
+                    onValueChange={setPara}
                   />
                 </Field>
               </div>

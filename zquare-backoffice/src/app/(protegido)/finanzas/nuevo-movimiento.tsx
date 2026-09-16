@@ -38,7 +38,9 @@ export function NuevoMovimiento({
   }
 
   return (
-    <Dialog open={abierto} onOpenChange={setAbierto}>
+    // Mientras se guarda no se cierra: el fin del guardado cerraría un
+    // movimiento nuevo que se haya abierto en el medio.
+    <Dialog open={abierto} onOpenChange={(v) => !pendiente && setAbierto(v)}>
       <DialogTrigger
         render={
           <Button>
