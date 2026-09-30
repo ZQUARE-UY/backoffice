@@ -33,6 +33,7 @@ import { createClient } from "@/lib/supabase/server"
 
 import { eliminarPresupuesto } from "../actions"
 import { EditarPresupuesto } from "./editar-presupuesto"
+import { GenerarDocumento } from "./generar-documento"
 import { ItemsEditor } from "./items-editor"
 
 export default async function PresupuestoPage({
@@ -126,7 +127,15 @@ export default async function PresupuestoPage({
               {(presupuesto.etiquetas ?? []).length > 0 && ` · ${presupuesto.etiquetas.join(", ")}`}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
+            {/* Un enviado con documento queda congelado: los cambios van en
+                la versión siguiente (ver lib/documento-presupuesto). */}
+            {(presupuesto.estado === "borrador" || !presupuesto.metadata?.drive_file_id) && (
+              <GenerarDocumento
+                presupuestoId={presupuesto.id}
+                yaGenerado={Boolean(presupuesto.metadata?.drive_file_id)}
+              />
+            )}
             <EditarPresupuesto presupuesto={presupuesto} />
             <BotonEliminar
               accion={eliminarPresupuesto.bind(
@@ -177,7 +186,7 @@ export default async function PresupuestoPage({
           <CardHeader>
             <CardDescription>Documento</CardDescription>
           </CardHeader>
-          <CardContent className="text-sm">
+          <CardContent className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
             {presupuesto.drive_url ? (
               <a
                 href={presupuesto.drive_url}
@@ -189,6 +198,17 @@ export default async function PresupuestoPage({
               </a>
             ) : (
               "—"
+            )}
+            {presupuesto.metadata?.pdf_url && (
+              <a
+                href={presupuesto.metadata.pdf_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-primary hover:underline"
+                title="Lo que se le envió al cliente"
+              >
+                PDF enviado <ExternalLinkIcon className="size-3.5" />
+              </a>
             )}
           </CardContent>
         </Card>

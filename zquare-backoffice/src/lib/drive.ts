@@ -1,5 +1,7 @@
 import "server-only"
 
+import { Readable } from "node:stream"
+
 import { google } from "googleapis"
 
 import { clienteJwt, googleConfigurado } from "@/lib/google"
@@ -301,12 +303,35 @@ export async function guardarDocumentoTexto(
   texto: string,
   docIdExistente?: string | null
 ): Promise<{ id: string; url: string }> {
+  return guardarComoDoc(nombre, carpetaId, "text/plain", texto, docIdExistente)
+}
+
+// Igual que `guardarDocumentoTexto` pero desde HTML: la conversión de Drive
+// respeta títulos, listas, tablas y los estilos en línea (fuente, color,
+// fondo de celda). Es como se generan las propuestas de los presupuestos.
+export async function guardarDocumentoHtml(
+  nombre: string,
+  carpetaId: string,
+  html: string,
+  docIdExistente?: string | null
+): Promise<{ id: string; url: string }> {
+  return guardarComoDoc(nombre, carpetaId, "text/html", html, docIdExistente)
+}
+
+async function guardarComoDoc(
+  nombre: string,
+  carpetaId: string,
+  mimeOrigen: string,
+  cuerpo: string,
+  docIdExistente?: string | null
+): Promise<{ id: string; url: string }> {
   const drive = driveClient()
-  const media = { mimeType: "text/plain", body: texto }
+  const media = { mimeType: mimeOrigen, body: cuerpo }
 
   if (docIdExistente) {
     const { data } = await drive.files.update({
       fileId: docIdExistente,
+      requestBody: { name: nombre },
       media,
       supportsAllDrives: true,
       fields: "id, webViewLink",
@@ -332,6 +357,35 @@ export async function guardarDocumentoTexto(
   return {
     id: data.id,
     url: data.webViewLink ?? `https://docs.google.com/document/d/${data.id}`,
+  }
+}
+
+// Exporta un Google Doc a PDF y lo guarda como archivo aparte en la carpeta
+// indicada. Sirve para congelar lo que se le mandó a un cliente: el Doc se
+// puede seguir editando, el PDF no.
+export async function guardarPdfDeDoc(
+  docId: string,
+  nombre: string,
+  carpetaId: string
+): Promise<{ id: string; url: string }> {
+  const drive = driveClient()
+  const { data: pdf } = await drive.files.export(
+    { fileId: docId, mimeType: "application/pdf" },
+    { responseType: "arraybuffer" }
+  )
+  const { data } = await drive.files.create({
+    requestBody: { name: nombre, mimeType: "application/pdf", parents: [carpetaId] },
+    media: {
+      mimeType: "application/pdf",
+      body: Readable.from(Buffer.from(pdf as ArrayBuffer)),
+    },
+    supportsAllDrives: true,
+    fields: "id, webViewLink",
+  })
+  if (!data.id) throw new Error("No se pudo guardar el PDF en Drive")
+  return {
+    id: data.id,
+    url: data.webViewLink ?? `https://drive.google.com/file/d/${data.id}/view`,
   }
 }
 

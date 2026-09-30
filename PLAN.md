@@ -647,9 +647,15 @@ parsear la URL.
     las reuniones del cliente a su ficha. Después de aplicar: cargar los
     presupuestos de Contabilidad (USD 5.500), Sommelier (USD 4.000) y Store
     Vision (USD 6.650) como primeros datos.
-  - [ ] **2. Documento:** plantilla de Google Docs en Drive (provisoria con
-    los colores de la papelería de la diseñadora hasta tener logo y fuentes)
-    y generación del Doc en `Presupuestos/` del cliente.
+  - [x] **2. Documento (2026-09-30):** tool `generar_documento` y botón en
+    la ficha. El contenido en Markdown se convierte a HTML con estilos en
+    línea y Drive lo importa como Google Doc en `Presupuestos/` del cliente
+    (sin plantilla en Drive ni API de Docs). La tabla de inversión se arma
+    desde los ítems, no desde el texto. En borrador, regenerar pisa el mismo
+    Doc; al marcarlo enviado se guarda un PDF en la misma carpeta y ese Doc
+    ya no se regenera. Identidad provisoria en `lib/documento-presupuesto.ts`
+    (Outfit + Inter, #1E242B y #D5E27A). Pendiente: encabezado y pie de
+    página en cada hoja con la API de Docs cuando lleguen logo y fuente.
   - [ ] **3. Cierre del ciclo:** `comenzar_proyecto` aprueba el presupuesto;
     paso de cierre de proyecto con horas y fecha reales (suma de
     `tareas.horas`, corregible); desvíos visibles en la ficha del
@@ -899,3 +905,7 @@ cuatro.
   tarifa implícita) para compararlo con lo real; horas reales por tarjeta;
   tarifa por hora de referencia configurable; cinco tools MCP y el prompt
   `armar_propuesta`. Ver "Fase 4 — Creador de presupuestos".
+- **2026-09-30** — Creador de presupuestos, entrega 2: el Google Doc de la
+  propuesta se genera desde el backoffice (tool `generar_documento` y botón
+  en la ficha), con la tabla de inversión armada desde los ítems y PDF
+  congelado al marcarlo enviado.
