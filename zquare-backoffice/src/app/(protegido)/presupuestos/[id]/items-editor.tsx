@@ -8,12 +8,20 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { formatearMonto, type PresupuestoItem } from "@/lib/dominio"
+import {
+  calcularSubtotal,
+  horasEstimadasItem,
+  tarifaImplicita,
+} from "@/lib/presupuestos"
 
 type Fila = {
   descripcion: string
   horas: string
+  horasInternas: string
   tarifa: string
 }
+
+const FILA_VACIA: Fila = { descripcion: "", horas: "", horasInternas: "", tarifa: "" }
 
 function aNumero(v: string): number | null {
   const t = v.trim()
@@ -23,9 +31,15 @@ function aNumero(v: string): number | null {
 }
 
 function subtotalFila(fila: Fila): number {
-  const horas = aNumero(fila.horas)
-  const tarifa = aNumero(fila.tarifa) ?? 0
-  return horas != null ? horas * tarifa : tarifa
+  return calcularSubtotal({ horas: aNumero(fila.horas), tarifa: aNumero(fila.tarifa) })
+}
+
+function horasFila(fila: Fila): number {
+  return horasEstimadasItem({
+    horas: aNumero(fila.horas),
+    horas_internas: aNumero(fila.horasInternas),
+    tarifa: null,
+  })
 }
 
 export function ItemsEditor({
@@ -42,9 +56,10 @@ export function ItemsEditor({
       ? itemsIniciales.map((it) => ({
           descripcion: it.descripcion,
           horas: it.horas?.toString() ?? "",
+          horasInternas: it.horas_internas?.toString() ?? "",
           tarifa: it.tarifa?.toString() ?? "",
         }))
-      : [{ descripcion: "", horas: "", tarifa: "" }]
+      : [FILA_VACIA]
   )
   const [pendiente, iniciarTransicion] = useTransition()
   const [guardado, setGuardado] = useState(false)
@@ -57,7 +72,7 @@ export function ItemsEditor({
   }
 
   function agregar() {
-    setFilas((prev) => [...prev, { descripcion: "", horas: "", tarifa: "" }])
+    setFilas((prev) => [...prev, FILA_VACIA])
     setGuardado(false)
   }
 
@@ -72,6 +87,7 @@ export function ItemsEditor({
       .map((f) => ({
         descripcion: f.descripcion.trim(),
         horas: aNumero(f.horas),
+        horas_internas: aNumero(f.horasInternas),
         tarifa: aNumero(f.tarifa) ?? 0,
       }))
     iniciarTransicion(async () => {
@@ -81,12 +97,17 @@ export function ItemsEditor({
   }
 
   const total = filas.reduce((acc, f) => acc + subtotalFila(f), 0)
+  const horas = filas.reduce((acc, f) => acc + horasFila(f), 0)
+  const porHora = tarifaImplicita(total, horas)
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="hidden grid-cols-[1fr_5rem_7rem_7rem_2rem] gap-2 px-1 text-xs text-muted-foreground sm:grid">
+      <div className="hidden grid-cols-[1fr_5rem_5rem_7rem_7rem_2rem] gap-2 px-1 text-xs text-muted-foreground sm:grid">
         <span>Descripción</span>
         <span className="text-right">Horas</span>
+        <span className="text-right" title="Lo que estimamos que lleva, aunque se cobre a precio cerrado">
+          Horas int.
+        </span>
         <span className="text-right">Tarifa</span>
         <span className="text-right">Subtotal</span>
         <span />
@@ -95,7 +116,7 @@ export function ItemsEditor({
       {filas.map((fila, i) => (
         <div
           key={i}
-          className="grid grid-cols-[1fr_2rem] items-center gap-2 sm:grid-cols-[1fr_5rem_7rem_7rem_2rem]"
+          className="grid grid-cols-[1fr_2rem] items-center gap-2 sm:grid-cols-[1fr_5rem_5rem_7rem_7rem_2rem]"
         >
           <Input
             placeholder="Descripción del ítem"
@@ -110,6 +131,16 @@ export function ItemsEditor({
             placeholder="Horas"
             value={fila.horas}
             onChange={(e) => actualizar(i, "horas", e.target.value)}
+            className="text-right"
+          />
+          <Input
+            type="number"
+            min="0"
+            step="0.5"
+            placeholder="Internas"
+            aria-label="Horas internas"
+            value={fila.horasInternas}
+            onChange={(e) => actualizar(i, "horasInternas", e.target.value)}
             className="text-right"
           />
           <Input
@@ -141,11 +172,19 @@ export function ItemsEditor({
           <PlusIcon data-icon="inline-start" />
           Agregar ítem
         </Button>
-        <div className="text-right">
-          <span className="text-sm text-muted-foreground">Total </span>
-          <span className="text-lg font-semibold tabular-nums">
-            {formatearMonto(total, moneda)}
-          </span>
+        <div className="flex flex-col items-end gap-0.5">
+          <div>
+            <span className="text-sm text-muted-foreground">Total </span>
+            <span className="text-lg font-semibold tabular-nums">
+              {formatearMonto(total, moneda)}
+            </span>
+          </div>
+          {horas > 0 && (
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {horas.toLocaleString("es-UY")} h estimadas
+              {porHora != null && ` · ${formatearMonto(porHora, moneda)} por hora`}
+            </span>
+          )}
         </div>
       </div>
 

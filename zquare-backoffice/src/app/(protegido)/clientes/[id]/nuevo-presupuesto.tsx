@@ -17,6 +17,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { MONEDAS, type Proyecto } from "@/lib/dominio"
@@ -65,6 +66,14 @@ export function NuevoPresupuesto({
             </DialogDescription>
           </DialogHeader>
           <FieldGroup className="py-4">
+            <Field>
+              <FieldLabel htmlFor="titulo">Título</FieldLabel>
+              <Input
+                id="titulo"
+                name="titulo"
+                placeholder="Nombre de la propuesta, ej. Iber Store Vision"
+              />
+            </Field>
             <Field>
               <FieldLabel htmlFor="moneda">Moneda</FieldLabel>
               <SelectCampo

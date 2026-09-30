@@ -12,13 +12,23 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { MarkdownIdea } from "@/app/(protegido)/ideas/markdown-idea"
 import {
   ESTADOS_PRESUPUESTO,
+  formatearMonto,
+  nombrePresupuesto,
+  TIPOS_PROYECTO,
   type Cliente,
   type Presupuesto,
   type PresupuestoItem,
   type Proyecto,
 } from "@/lib/dominio"
+import {
+  codigoPresupuesto,
+  horasEstimadas,
+  tarifaImplicita,
+  tarifaReferencia,
+} from "@/lib/presupuestos"
 import { createClient } from "@/lib/supabase/server"
 
 import { eliminarPresupuesto } from "../actions"
@@ -42,8 +52,13 @@ export default async function PresupuestoPage({
 
   if (!presupuesto) notFound()
 
-  const [{ data: cliente }, { data: proyecto }, { data: itemsData }] =
-    await Promise.all([
+  const [
+    { data: cliente },
+    { data: proyecto },
+    { data: itemsData },
+    { data: anterior },
+    tarifaRef,
+  ] = await Promise.all([
       supabase
         .from("clientes")
         .select("*")
@@ -61,10 +76,21 @@ export default async function PresupuestoPage({
         .select("*")
         .eq("presupuesto_id", id)
         .order("orden", { ascending: true }),
+      presupuesto.version_de
+        ? supabase
+            .from("presupuestos")
+            .select("id, titulo, version")
+            .eq("id", presupuesto.version_de)
+            .maybeSingle<Pick<Presupuesto, "id" | "titulo" | "version">>()
+        : Promise.resolve({ data: null }),
+      tarifaReferencia(supabase),
     ])
 
   const items = (itemsData ?? []) as PresupuestoItem[]
   const estadoInfo = ESTADOS_PRESUPUESTO[presupuesto.estado]
+  const horas = horasEstimadas(items)
+  const porHora = tarifaImplicita(presupuesto.total, horas)
+  const nombre = nombrePresupuesto(presupuesto)
 
   return (
     <>
@@ -80,11 +106,25 @@ export default async function PresupuestoPage({
           {cliente?.nombre ?? "Cliente"}
         </Button>
         <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Presupuesto v{presupuesto.version}
-            </h1>
-            <Badge variant={estadoInfo.variant}>{estadoInfo.label}</Badge>
+          <div className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-2xl font-semibold tracking-tight text-balance">
+                {nombre}
+              </h1>
+              <Badge variant={estadoInfo.variant}>{estadoInfo.label}</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              <span className="font-mono">{codigoPresupuesto(presupuesto.numero)}</span>
+              {anterior && (
+                <>
+                  {" · nueva versión de "}
+                  <Link href={`/presupuestos/${anterior.id}`} className="hover:underline">
+                    {nombrePresupuesto(anterior)}
+                  </Link>
+                </>
+              )}
+              {(presupuesto.etiquetas ?? []).length > 0 && ` · ${presupuesto.etiquetas.join(", ")}`}
+            </p>
           </div>
           <div className="flex gap-2">
             <EditarPresupuesto presupuesto={presupuesto} />
@@ -94,7 +134,7 @@ export default async function PresupuestoPage({
                 presupuesto.id,
                 presupuesto.cliente_id
               )}
-              titulo={`¿Eliminar el presupuesto v${presupuesto.version}?`}
+              titulo={`¿Eliminar ${nombre}?`}
               descripcion="Se ocultará el presupuesto y sus ítems. Podés recuperarlo desde la base si hace falta."
             />
           </div>
@@ -154,10 +194,79 @@ export default async function PresupuestoPage({
         </Card>
       </div>
 
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardHeader>
+            <CardDescription>Tipo de trabajo</CardDescription>
+          </CardHeader>
+          <CardContent className="text-sm">
+            {presupuesto.tipo ? TIPOS_PROYECTO[presupuesto.tipo].label : "—"}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Plazo estimado</CardDescription>
+          </CardHeader>
+          <CardContent className="text-sm">
+            {presupuesto.plazo_estimado_semanas
+              ? `${presupuesto.plazo_estimado_semanas.toLocaleString("es-UY")} semanas`
+              : "—"}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Horas estimadas</CardDescription>
+          </CardHeader>
+          <CardContent className="text-sm tabular-nums">
+            {horas > 0 ? `${horas.toLocaleString("es-UY")} h` : "—"}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Tarifa implícita</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-0.5 text-sm tabular-nums">
+            <span>{porHora != null ? `${formatearMonto(porHora, presupuesto.moneda)} / h` : "—"}</span>
+            {tarifaRef != null && presupuesto.moneda === "USD" && (
+              <span className="text-xs text-muted-foreground">
+                referencia USD {tarifaRef.toLocaleString("es-UY")} / h
+              </span>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {(presupuesto.fecha_respuesta || presupuesto.motivo_resultado) && (
+        <Card>
+          <CardHeader>
+            <CardDescription>
+              Respuesta del cliente
+              {presupuesto.fecha_respuesta && ` · ${presupuesto.fecha_respuesta}`}
+            </CardDescription>
+          </CardHeader>
+          {presupuesto.motivo_resultado && (
+            <CardContent className="text-sm whitespace-pre-wrap">
+              {presupuesto.motivo_resultado}
+            </CardContent>
+          )}
+        </Card>
+      )}
+
+      {presupuesto.contenido && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Propuesta</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <MarkdownIdea>{presupuesto.contenido}</MarkdownIdea>
+          </CardContent>
+        </Card>
+      )}
+
       {presupuesto.notas && (
         <Card>
           <CardHeader>
-            <CardDescription>Notas</CardDescription>
+            <CardDescription>Notas internas</CardDescription>
           </CardHeader>
           <CardContent className="text-sm whitespace-pre-wrap">
             {presupuesto.notas}
@@ -171,6 +280,8 @@ export default async function PresupuestoPage({
           <CardDescription>
             Cargá cada línea con sus horas y tarifa. El subtotal es horas ×
             tarifa; si dejás horas en blanco, la tarifa es el precio del ítem.
+            Las horas internas son lo que estimamos que lleva, aunque se cobre
+            a precio cerrado: con ellas se calcula la tarifa implícita.
           </CardDescription>
         </CardHeader>
         <CardContent>

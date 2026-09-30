@@ -627,7 +627,33 @@ parsear la URL.
   (misma cuenta). Instrucciones repartidas a los 3 socios el 2026-07-28;
   pendiente que cada uno se conecte. Quien use cuenta free de claude.ai
   sigue con su token estático en Claude Code/Desktop.
-- [ ] Generador de presupuestos: a partir del histórico de `presupuesto_items`, la IA sugiere ítems, horas y tarifas para un nuevo presupuesto
+- [ ] Creador de presupuestos *(diseñado con Joaquín el 2026-09-30, a partir
+  de armar a mano la propuesta de Iber Store Vision)*. La propuesta se arma
+  por MCP, no con un botón: la conversación junta insumos, entrevista por
+  rondas y estima contra el histórico. Tres entregas:
+  - [x] **1. Base (2026-09-30):** migración `20260930000001` (presupuesto =
+    propuesta entera: código PRES-N, título, cuerpo en Markdown, tipo,
+    etiquetas, plazo estimado, `version_de`, fecha y motivo de la respuesta;
+    `horas_internas` por ítem para los de precio cerrado; `tareas.horas` con
+    las horas reales; tabla `configuracion` con la tarifa por hora de
+    referencia, USD 20 como marcador). Tools `listar_presupuestos`,
+    `ficha_presupuesto`, `crear_presupuesto` (puede crear el proyecto en
+    estado propuesta con objetivo/alcance/fuera de alcance sembrados),
+    `actualizar_presupuesto` (un presupuesto ya enviado no se pisa: se crea
+    la versión siguiente) y `definir_tarifa_hora`; `mover_tarea` y
+    `actualizar_tarea` aceptan `horas`; prompt `armar_propuesta`. Arregla
+    `ficha_cliente`/`ficha_proyecto`, que pedían la columna inexistente
+    `monto_total` y devolvían siempre la lista de presupuestos vacía, y suma
+    las reuniones del cliente a su ficha. Después de aplicar: cargar los
+    presupuestos de Contabilidad (USD 5.500), Sommelier (USD 4.000) y Store
+    Vision (USD 6.650) como primeros datos.
+  - [ ] **2. Documento:** plantilla de Google Docs en Drive (provisoria con
+    los colores de la papelería de la diseñadora hasta tener logo y fuentes)
+    y generación del Doc en `Presupuestos/` del cliente.
+  - [ ] **3. Cierre del ciclo:** `comenzar_proyecto` aprueba el presupuesto;
+    paso de cierre de proyecto con horas y fecha reales (suma de
+    `tareas.horas`, corregible); desvíos visibles en la ficha del
+    presupuesto.
 - [ ] Plantillas de contratos: base editable + generación de variantes
 - [ ] Estimador de alcance y tiempos: usa horas estimadas vs. reales de proyectos pasados
 - [x] Búsqueda semántica sobre documentos y decisiones ("repositorio de
@@ -868,3 +894,8 @@ cuatro.
   balance, y movimientos recurrentes (plantilla mensual/anual que un cron
   diario convierte en movimientos: previsto el próximo, confirmado al vencer).
   Cuatro tools MCP nuevas. Ver "Finanzas v3 — Liquidaciones y recurrentes".
+- **2026-09-30** — Creador de presupuestos, entrega 1: el presupuesto pasa a
+  ser la propuesta completa y guarda lo que se estimó (horas internas, plazo,
+  tarifa implícita) para compararlo con lo real; horas reales por tarjeta;
+  tarifa por hora de referencia configurable; cinco tools MCP y el prompt
+  `armar_propuesta`. Ver "Fase 4 — Creador de presupuestos".

@@ -52,6 +52,14 @@ function estimacionOpcional(valor: FormDataEntryValue | null): number | null {
   return t ? Number(t) : null
 }
 
+function horasOpcional(valor: FormDataEntryValue | null): number | null {
+  const t = textoOpcional(valor)
+  if (!t) return null
+  const n = Number(t)
+  if (!Number.isFinite(n) || n < 0) throw new Error(`"${t}" no es una cantidad de horas válida`)
+  return n
+}
+
 function datosDesde(formData: FormData) {
   const titulo = (formData.get("titulo") as string | null)?.trim()
   if (!titulo) throw new Error("El título es obligatorio")
@@ -71,6 +79,7 @@ function datosDesde(formData: FormData) {
       "US-014"
     ),
     estimacion: estimacionOpcional(formData.get("estimacion")),
+    horas: horasOpcional(formData.get("horas")),
     moscow: textoOpcional(formData.get("moscow")),
     epica: codigoOpcional(formData.get("epica"), RE_EPICA, "EP-3"),
     asignado_a: textoOpcional(formData.get("asignado_a")),

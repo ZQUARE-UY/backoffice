@@ -274,6 +274,19 @@ export function CamposTarea({
         </div>
       </details>
       <Field>
+        <FieldLabel htmlFor="horas">Horas dedicadas</FieldLabel>
+        <Input
+          id="horas"
+          name="horas"
+          type="number"
+          min="0"
+          step="0.5"
+          placeholder="Cargalas al terminarla"
+          defaultValue={tarea?.horas ?? ""}
+          className="sm:max-w-40"
+        />
+      </Field>
+      <Field>
         <FieldLabel htmlFor="etiquetas">Etiquetas</FieldLabel>
         <Input
           id="etiquetas"
