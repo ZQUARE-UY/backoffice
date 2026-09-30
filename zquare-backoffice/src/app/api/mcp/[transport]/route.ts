@@ -22,6 +22,16 @@ import {
   transferenciasSugeridas,
 } from "@/lib/finanzas"
 import { generarEmbeddings } from "@/lib/embeddings"
+import {
+  calcularSubtotal,
+  CLAVE_TARIFA,
+  codigoPresupuesto,
+  horasEstimadas,
+  numeroDePresupuesto,
+  tarifaImplicita,
+  tarifaReferencia,
+  type ItemCalculable,
+} from "@/lib/presupuestos"
 import { socioDelAccessToken } from "@/lib/mcp-oauth"
 import {
   agendarSiTodosRespondieron,
@@ -161,6 +171,7 @@ const CAMPOS_TAREA = [
   "fecha_limite",
   "codigo_proyecto",
   "estimacion",
+  "horas",
   "moscow",
   "epica",
 ] as const
@@ -294,6 +305,141 @@ async function proyectoPorNombre(
   return { proyecto: data[0], error: null }
 }
 
+const ESTADOS_PRESUPUESTO = ["borrador", "enviado", "aprobado", "rechazado"] as const
+
+// Un ítem se cobra de una de dos formas: a precio cerrado (`precio`, y las
+// horas internas son lo que estimamos que lleva) o por hora (`horas`, a la
+// `tarifa` dada o a la de referencia). En la tabla, el precio cerrado se
+// guarda como tarifa con horas en null: es la misma convención que el editor.
+const ESQUEMA_ITEM_PRESUPUESTO = z.object({
+  descripcion: z.string().min(2),
+  precio: z.coerce
+    .number()
+    .min(0)
+    .describe("precio cerrado del ítem; si va, no se cobra por hora")
+    .optional(),
+  horas: z.coerce
+    .number()
+    .min(0)
+    .describe("horas cobradas (horas × tarifa); solo si el ítem se cobra por hora")
+    .optional(),
+  tarifa: z.coerce
+    .number()
+    .min(0)
+    .describe("tarifa por hora del ítem; por defecto la de referencia")
+    .optional(),
+  horas_internas: z.coerce
+    .number()
+    .min(0)
+    .describe(
+      "horas que estimamos que lleva, aunque se cobre a precio cerrado. Siempre que se pueda: con ellas se calcula la tarifa implícita"
+    )
+    .optional(),
+})
+
+type ItemPresupuestoFila = {
+  descripcion: string
+  horas: number | null
+  horas_internas: number | null
+  tarifa: number
+  subtotal: number
+}
+
+function normalizarItemsPresupuesto(
+  items: z.infer<typeof ESQUEMA_ITEM_PRESUPUESTO>[],
+  tarifaPorDefecto: number | null
+): { filas: ItemPresupuestoFila[]; error: string | null } {
+  const filas: ItemPresupuestoFila[] = []
+  for (const item of items) {
+    const base = {
+      descripcion: item.descripcion.trim(),
+      horas_internas: item.horas_internas ?? null,
+    }
+    if (item.precio !== undefined) {
+      filas.push({ ...base, horas: null, tarifa: item.precio, subtotal: calcularSubtotal({ horas: null, tarifa: item.precio }) })
+      continue
+    }
+    if (item.horas === undefined) {
+      return { filas: [], error: `"${item.descripcion}" necesita \`precio\` (precio cerrado) o \`horas\` (por hora).` }
+    }
+    const tarifa = item.tarifa ?? tarifaPorDefecto
+    if (tarifa == null) {
+      return {
+        filas: [],
+        error: `"${item.descripcion}" se cobra por hora pero no tiene tarifa, y no hay tarifa de referencia para esta moneda. Pasá \`tarifa\`.`,
+      }
+    }
+    filas.push({ ...base, horas: item.horas, tarifa, subtotal: calcularSubtotal({ horas: item.horas, tarifa }) })
+  }
+  return { filas, error: null }
+}
+
+type PresupuestoConNombres = {
+  id: string
+  numero: number
+  cliente_id: string
+  proyecto_id: string | null
+  titulo: string | null
+  contenido: string | null
+  version: number
+  version_de: string | null
+  estado: (typeof ESTADOS_PRESUPUESTO)[number]
+  tipo: string | null
+  etiquetas: string[]
+  moneda: string
+  total: number
+  plazo_estimado_semanas: number | null
+  fecha_envio: string | null
+  fecha_respuesta: string | null
+  motivo_resultado: string | null
+  drive_url: string | null
+  notas: string | null
+  clientes: { nombre: string } | null
+  proyectos: { nombre: string } | null
+}
+
+// Resuelve un presupuesto por código (PRES-7 o 7) o por título aproximado.
+// Como `proyectoPorNombre`, avisa si el título matchea más de uno en vez de
+// elegir en silencio.
+async function presupuestoPorReferencia(
+  referencia: string | number
+): Promise<{ presupuesto: PresupuestoConNombres | null; error: string | null }> {
+  const supabase = createAdminClient()
+  const columnas = "*, clientes(nombre), proyectos(nombre)"
+  const numero = numeroDePresupuesto(referencia)
+  if (numero) {
+    const { data } = await supabase
+      .from("presupuestos")
+      .select(columnas)
+      .eq("numero", numero)
+      .is("deleted_at", null)
+      .maybeSingle<PresupuestoConNombres>()
+    return data
+      ? { presupuesto: data, error: null }
+      : { presupuesto: null, error: `No existe el presupuesto ${codigoPresupuesto(numero)}.` }
+  }
+  const { data } = await supabase
+    .from("presupuestos")
+    .select(columnas)
+    .is("deleted_at", null)
+    .ilike("titulo", `%${String(referencia).trim()}%`)
+    .order("version", { ascending: false })
+    .limit(5)
+    .returns<PresupuestoConNombres[]>()
+  if (!data || data.length === 0)
+    return { presupuesto: null, error: `No encontré un presupuesto que matchee "${referencia}".` }
+  if (data.length > 1) {
+    const opciones = data
+      .map((p) => `${codigoPresupuesto(p.numero)} ${p.titulo} v${p.version} (${p.clientes?.nombre})`)
+      .join(", ")
+    return {
+      presupuesto: null,
+      error: `"${referencia}" matchea varios presupuestos: ${opciones}. Usá el código.`,
+    }
+  }
+  return { presupuesto: data[0], error: null }
+}
+
 // Planificación: los campos que exige el estándar de ingeniería para poder
 // armar un sprint. Sólo aplican a proyectos que lo siguen; una tarea de
 // empresa los deja en null. Compartidos entre crear_tarea y actualizar_tarea.
@@ -333,6 +479,14 @@ const ESQUEMA_PLANIFICACION = {
     .describe("épica a la que pertenece; una tarjeta no puede pertenecer a dos")
     .optional(),
 }
+
+// Horas reales de una tarjeta: se cargan al terminarla y la suma por proyecto
+// es lo que se compara contra lo presupuestado.
+const ESQUEMA_HORAS_TAREA = z.coerce
+  .number()
+  .min(0)
+  .describe("horas reales dedicadas a la tarjeta; se cargan al terminarla")
+  .optional()
 
 // Los códigos se guardan en mayúsculas: "us-14" y "US-14" son el mismo código
 // y no pueden convivir como dos.
@@ -657,7 +811,7 @@ const handler = createMcpHandler(
       {
         title: "Ficha de un cliente",
         description:
-          "Devuelve la ficha completa de un cliente (por nombre, no hace falta exacto): proyectos, presupuestos, documentos, decisiones, movimientos y tarjetas del tablero asociadas.",
+          "Devuelve la ficha completa de un cliente (por nombre, no hace falta exacto): proyectos, presupuestos, reuniones, documentos, decisiones, movimientos y tarjetas del tablero asociadas. Las reuniones con grabación se leen con `transcripcion_reunion`.",
         inputSchema: { nombre: z.string().min(2) },
       },
       async ({ nombre }) => {
@@ -671,26 +825,36 @@ const handler = createMcpHandler(
           .maybeSingle()
         if (!cliente) return texto(`No encontré un cliente que matchee "${nombre}".`)
 
-        const [proyectos, presupuestos, documentos, decisiones, movimientos, tareas] =
-          await Promise.all([
+        const [
+          proyectos,
+          presupuestos,
+          reuniones,
+          documentos,
+          decisiones,
+          movimientos,
+          tareas,
+        ] = await Promise.all([
             supabase
               .from("proyectos")
               .select("id, nombre, descripcion, estado, fecha_inicio")
               .eq("cliente_id", cliente.id)
               .is("deleted_at", null),
+            // Por cliente y no por proyecto: un presupuesto puede no tener
+            // proyecto todavía (la propuesta se arma antes de venderlo).
             supabase
               .from("presupuestos")
-              .select("id, version, moneda, monto_total, estado, fecha_envio, proyectos(nombre)")
+              .select(
+                "numero, titulo, version, estado, moneda, total, plazo_estimado_semanas, fecha_envio, fecha_respuesta, proyectos(nombre)"
+              )
+              .eq("cliente_id", cliente.id)
               .is("deleted_at", null)
-              .in(
-                "proyecto_id",
-                (
-                  await supabase
-                    .from("proyectos")
-                    .select("id")
-                    .eq("cliente_id", cliente.id)
-                ).data?.map((p) => p.id) ?? []
-              ),
+              .order("created_at", { ascending: false }),
+            supabase
+              .from("solicitudes_reunion")
+              .select("numero, titulo, estado, inicio, drive_transcripcion_url, proyectos(nombre)")
+              .eq("cliente_id", cliente.id)
+              .is("deleted_at", null)
+              .order("created_at", { ascending: false }),
             supabase
               .from("documentos")
               .select("titulo, tipo, drive_url, fecha")
@@ -717,7 +881,17 @@ const handler = createMcpHandler(
         return texto({
           cliente,
           proyectos: proyectos.data ?? [],
-          presupuestos: presupuestos.data ?? [],
+          presupuestos: (presupuestos.data ?? []).map(({ numero, ...p }) => ({
+            codigo: codigoPresupuesto(numero),
+            ...p,
+          })),
+          reuniones: (reuniones.data ?? []).map(
+            ({ numero, drive_transcripcion_url, ...r }) => ({
+              codigo: codigoReunion(numero),
+              ...r,
+              tiene_transcripcion: Boolean(drive_transcripcion_url),
+            })
+          ),
           documentos: documentos.data ?? [],
           decisiones: decisiones.data ?? [],
           movimientos: movimientos.data ?? [],
@@ -957,7 +1131,7 @@ const handler = createMcpHandler(
           await Promise.all([
             supabase
               .from("presupuestos")
-              .select("version, moneda, monto_total, estado, fecha_envio")
+              .select("numero, titulo, version, moneda, total, estado, fecha_envio")
               .eq("proyecto_id", id)
               .is("deleted_at", null),
             supabase
@@ -1034,7 +1208,10 @@ const handler = createMcpHandler(
             tiene_fecha_inicio: Boolean(proyecto.fecha_inicio),
             tiene_monto_acordado: proyecto.monto_acordado != null,
           },
-          presupuestos: presupuestos.data ?? [],
+          presupuestos: (presupuestos.data ?? []).map(({ numero, ...p }) => ({
+            codigo: codigoPresupuesto(numero),
+            ...p,
+          })),
           documentos: documentos.data ?? [],
           decisiones: decisiones.data ?? [],
           tareas: (tareas.data ?? []).map(({ numero, ...t }) => ({
@@ -1406,7 +1583,7 @@ const handler = createMcpHandler(
         const { data } = await supabase
           .from("tareas")
           .select(
-            "id, numero, titulo, descripcion, contexto, resultado, recursos, plan, estado, prioridad, codigo_proyecto, estimacion, moscow, epica, etiquetas, fecha_limite, created_at, updated_at, asignado:socios!tareas_asignado_a_fkey(nombre, email), clientes(nombre), proyectos(nombre), sprint:sprints(numero, nombre, estado)"
+            "id, numero, titulo, descripcion, contexto, resultado, recursos, plan, estado, prioridad, codigo_proyecto, estimacion, horas, moscow, epica, etiquetas, fecha_limite, created_at, updated_at, asignado:socios!tareas_asignado_a_fkey(nombre, email), clientes(nombre), proyectos(nombre), sprint:sprints(numero, nombre, estado)"
           )
           .eq("numero", numero)
           .is("deleted_at", null)
@@ -1598,6 +1775,7 @@ const handler = createMcpHandler(
           proyecto_nombre: z.string().optional(),
           etiquetas: z.array(z.string()).optional(),
           fecha_limite: z.string().describe("YYYY-MM-DD").optional(),
+          horas: ESQUEMA_HORAS_TAREA,
           ...ESQUEMA_PLANIFICACION,
         },
       },
@@ -1625,6 +1803,7 @@ const handler = createMcpHandler(
         if (entrada.etiquetas !== undefined) cambios.etiquetas = entrada.etiquetas
         if (entrada.fecha_limite !== undefined)
           cambios.fecha_limite = entrada.fecha_limite || null
+        if (entrada.horas !== undefined) cambios.horas = entrada.horas
         for (const campo of CAMPOS_PLANIFICACION) {
           if (entrada[campo] !== undefined) cambios[campo] = entrada[campo] || null
         }
@@ -1706,13 +1885,14 @@ const handler = createMcpHandler(
       {
         title: "Mover una tarjeta de columna",
         description:
-          "Atajo para cambiar la columna de una tarjeta (backlog, por_hacer, en_curso, en_revision, hecho). 'por_hacer' es la columna de entrada al tablero; 'backlog' queda fuera del tablero. Queda arriba de la columna destino; para reordenar dentro de una columna usá priorizar_tarea.",
+          "Atajo para cambiar la columna de una tarjeta (backlog, por_hacer, en_curso, en_revision, hecho). 'por_hacer' es la columna de entrada al tablero; 'backlog' queda fuera del tablero. Queda arriba de la columna destino; para reordenar dentro de una columna usá priorizar_tarea. Al pasarla a 'hecho', mandá `horas` con las horas reales que llevó: es lo que después se compara contra lo presupuestado.",
         inputSchema: {
           tarea: z.union([z.string(), z.number()]),
           estado: z.enum(ESTADOS_TAREA),
+          horas: ESQUEMA_HORAS_TAREA,
         },
       },
-      async ({ tarea, estado }) => {
+      async ({ tarea, estado, horas }) => {
         const numero = numeroDeTarea(tarea)
         if (!numero) return texto(`"${tarea}" no parece un número de tarjeta.`)
 
@@ -1732,17 +1912,27 @@ const handler = createMcpHandler(
         )
         const { data, error } = await supabase
           .from("tareas")
-          .update({ ...ubicacion, orden: await ordenAlTopeDeColumna(ubicacion.estado) })
+          .update({
+            ...ubicacion,
+            orden: await ordenAlTopeDeColumna(ubicacion.estado),
+            ...(horas !== undefined && { horas }),
+          })
           .eq("numero", numero)
           .is("deleted_at", null)
-          .select("id, numero, titulo, estado, sprint:sprints(numero, nombre)")
+          .select("id, numero, titulo, estado, horas, sprint:sprints(numero, nombre)")
           .maybeSingle()
         if (error) throw new Error(error.message)
         if (!data) return texto(`No existe la tarjeta ZQ-${numero}.`)
         await sincronizarTareaSilencioso(data.id)
         const { id: _id, ...movida } = data
         void _id
-        return texto({ movida: { codigo: `ZQ-${data.numero}`, ...movida } })
+        return texto({
+          movida: { codigo: `ZQ-${data.numero}`, ...movida },
+          ...(data.estado === "hecho" &&
+            data.horas == null && {
+              falta: "Preguntale al socio cuántas horas llevó y cargalas con `actualizar_tarea` (campo `horas`): sin ellas no se puede comparar el proyecto contra su presupuesto.",
+            }),
+        })
       }
     )
 
@@ -2845,6 +3035,565 @@ const handler = createMcpHandler(
       }
     )
 
+    // ── Presupuestos ──────────────────────────────────────────────────────
+    // El histórico es el insumo del prompt `armar_propuesta`: cada
+    // presupuesto guarda lo que se estimó (horas, plazo, precio) y, cuando el
+    // proyecto avanza, se compara contra lo que pasó de verdad.
+    server.registerTool(
+      "listar_presupuestos",
+      {
+        title: "Listar presupuestos",
+        description:
+          "Histórico de presupuestos con lo que hace falta para estimar el próximo: precio, horas estimadas, tarifa implícita (precio ÷ horas), plazo prometido, cómo respondió el cliente y, si el proyecto avanzó, horas y semanas reales. Incluye la tarifa por hora de referencia de la empresa. Por defecto trae solo la última versión de cada propuesta.",
+        inputSchema: {
+          cliente: z.string().describe("filtra por cliente, nombre aproximado").optional(),
+          estado: z.enum(ESTADOS_PRESUPUESTO).optional(),
+          tipo: z.enum(TIPOS_PROYECTO).optional(),
+          etiqueta: z.string().describe("filtra por una etiqueta, ej. computer-vision").optional(),
+          incluir_versiones_anteriores: z.boolean().optional(),
+        },
+      },
+      async ({ cliente, estado, tipo, etiqueta, incluir_versiones_anteriores }) => {
+        const supabase = createAdminClient()
+        let consulta = supabase
+          .from("presupuestos")
+          .select(
+            "id, numero, titulo, version, version_de, estado, tipo, etiquetas, moneda, total, plazo_estimado_semanas, fecha_envio, fecha_respuesta, motivo_resultado, proyecto_id, clientes(nombre), proyectos(nombre, estado, fecha_inicio, fecha_fin_estimada, fecha_fin_real, horas_reales), presupuesto_items(horas, horas_internas, tarifa)"
+          )
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false })
+        if (cliente) {
+          const clienteId = await idPorNombre("clientes", cliente)
+          if (!clienteId) return texto(`No encontré el cliente "${cliente}".`)
+          consulta = consulta.eq("cliente_id", clienteId)
+        }
+        if (estado) consulta = consulta.eq("estado", estado)
+        if (tipo) consulta = consulta.eq("tipo", tipo)
+        if (etiqueta) consulta = consulta.contains("etiquetas", [etiqueta.toLowerCase()])
+
+        const [{ data, error }, tarifa] = await Promise.all([
+          consulta,
+          tarifaReferencia(supabase),
+        ])
+        if (error) throw new Error(error.message)
+
+        // Una versión reemplazada ya no dice cuánto cobramos: la dijo la
+        // siguiente. Se descarta salvo que se pida el historial completo.
+        const reemplazados = new Set((data ?? []).map((p) => p.version_de).filter(Boolean))
+        const filas = (data ?? []).filter(
+          (p) => incluir_versiones_anteriores || !reemplazados.has(p.id)
+        )
+
+        // Horas reales: las del proyecto si alguien las cerró; si no, la
+        // suma de lo cargado en sus tarjetas hasta ahora.
+        const proyectoIds = [
+          ...new Set(filas.map((p) => p.proyecto_id).filter((id): id is string => Boolean(id))),
+        ]
+        const horasPorProyecto = new Map<string, number>()
+        if (proyectoIds.length > 0) {
+          const { data: tareas } = await supabase
+            .from("tareas")
+            .select("proyecto_id, horas")
+            .in("proyecto_id", proyectoIds)
+            .not("horas", "is", null)
+            .is("deleted_at", null)
+          for (const t of tareas ?? []) {
+            horasPorProyecto.set(
+              t.proyecto_id as string,
+              (horasPorProyecto.get(t.proyecto_id as string) ?? 0) + Number(t.horas)
+            )
+          }
+        }
+
+        return texto({
+          tarifa_hora_referencia_usd: tarifa,
+          presupuestos: filas.map((p) => {
+            const items = (p.presupuesto_items ?? []) as ItemCalculable[]
+            const horas = horasEstimadas(items)
+            const proyecto = p.proyectos as unknown as {
+              nombre: string
+              estado: string
+              fecha_inicio: string | null
+              fecha_fin_real: string | null
+              horas_reales: number | null
+            } | null
+            const horasReales =
+              proyecto?.horas_reales ??
+              (p.proyecto_id ? horasPorProyecto.get(p.proyecto_id) ?? null : null)
+            const semanasReales =
+              proyecto?.fecha_inicio && proyecto.fecha_fin_real
+                ? Math.round(
+                    ((Date.parse(proyecto.fecha_fin_real) - Date.parse(proyecto.fecha_inicio)) /
+                      (7 * 86_400_000)) *
+                      10
+                  ) / 10
+                : null
+            return {
+              codigo: codigoPresupuesto(p.numero),
+              titulo: p.titulo,
+              version: p.version,
+              cliente: (p.clientes as unknown as { nombre: string } | null)?.nombre ?? null,
+              proyecto: proyecto?.nombre ?? null,
+              estado: p.estado,
+              tipo: p.tipo,
+              etiquetas: p.etiquetas,
+              moneda: p.moneda,
+              total: p.total,
+              horas_estimadas: horas || null,
+              tarifa_implicita: tarifaImplicita(Number(p.total), horas),
+              plazo_estimado_semanas: p.plazo_estimado_semanas,
+              fecha_envio: p.fecha_envio,
+              fecha_respuesta: p.fecha_respuesta,
+              motivo_resultado: p.motivo_resultado,
+              real: proyecto
+                ? {
+                    estado_proyecto: proyecto.estado,
+                    horas: horasReales,
+                    semanas: semanasReales,
+                    tarifa_real:
+                      p.estado === "aprobado" && horasReales
+                        ? tarifaImplicita(Number(p.total), horasReales)
+                        : null,
+                  }
+                : null,
+            }
+          }),
+        })
+      }
+    )
+
+    server.registerTool(
+      "ficha_presupuesto",
+      {
+        title: "Ficha de un presupuesto",
+        description:
+          "Un presupuesto completo: la propuesta en Markdown, los ítems con horas y precio, horas estimadas, tarifa implícita, cómo respondió el cliente y sus otras versiones. Se identifica por código (PRES-7) o por título.",
+        inputSchema: { presupuesto: z.union([z.string(), z.number()]) },
+      },
+      async ({ presupuesto }) => {
+        const { presupuesto: p, error: noEncontrado } =
+          await presupuestoPorReferencia(presupuesto)
+        if (!p) return texto(noEncontrado)
+
+        const supabase = createAdminClient()
+        const [{ data: items }, { data: linaje }] = await Promise.all([
+          supabase
+            .from("presupuesto_items")
+            .select("descripcion, horas, horas_internas, tarifa, subtotal")
+            .eq("presupuesto_id", p.id)
+            .order("orden"),
+          supabase
+            .from("presupuestos")
+            .select("id, numero, version, estado, version_de")
+            .or(`id.eq.${p.version_de ?? p.id},version_de.eq.${p.id}`)
+            .is("deleted_at", null),
+        ])
+        const horas = horasEstimadas((items ?? []) as ItemCalculable[])
+        const anterior = (linaje ?? []).find((v) => v.id === p.version_de)
+        const siguiente = (linaje ?? []).find((v) => v.version_de === p.id)
+
+        return texto({
+          codigo: codigoPresupuesto(p.numero),
+          titulo: p.titulo,
+          version: p.version,
+          version_anterior: anterior ? codigoPresupuesto(anterior.numero) : null,
+          version_siguiente: siguiente ? codigoPresupuesto(siguiente.numero) : null,
+          cliente: p.clientes?.nombre ?? null,
+          proyecto: p.proyectos?.nombre ?? null,
+          estado: p.estado,
+          tipo: p.tipo,
+          etiquetas: p.etiquetas,
+          moneda: p.moneda,
+          total: p.total,
+          horas_estimadas: horas || null,
+          tarifa_implicita: tarifaImplicita(Number(p.total), horas),
+          plazo_estimado_semanas: p.plazo_estimado_semanas,
+          fecha_envio: p.fecha_envio,
+          fecha_respuesta: p.fecha_respuesta,
+          motivo_resultado: p.motivo_resultado,
+          drive_url: p.drive_url,
+          notas: p.notas,
+          contenido: p.contenido,
+          items: items ?? [],
+          url: `/presupuestos/${p.id}`,
+        })
+      }
+    )
+
+    server.registerTool(
+      "crear_presupuesto",
+      {
+        title: "Crear un presupuesto",
+        description:
+          "Guarda una propuesta como presupuesto en borrador: título, cuerpo en Markdown (contenido), ítems con precio y horas internas, tipo, etiquetas y plazo. Con `proyecto_nuevo` crea además el proyecto del cliente en estado propuesta y le siembra objetivo, alcance y fuera de alcance del brief (lo retoma `comenzar_proyecto` cuando se apruebe). Con `version_de` crea la versión siguiente de un presupuesto existente. Es el cierre del prompt `armar_propuesta`.",
+        inputSchema: {
+          cliente: z.string().min(2).describe("nombre del cliente, no hace falta exacto"),
+          titulo: z.string().min(3).describe("nombre de la propuesta, ej. Iber Store Vision"),
+          items: z.array(ESQUEMA_ITEM_PRESUPUESTO).min(1),
+          contenido: z
+            .string()
+            .describe(
+              "la propuesta en Markdown con secciones ##: Contexto, Qué resuelve, Alcance funcional, Qué no incluye, Entrega por fases, Inversión, Costos operativos mensuales, Precondiciones, Próximas oportunidades, Próximos pasos"
+            )
+            .optional(),
+          moneda: z.enum(["USD", "UYU"]).optional(),
+          tipo: z.enum(TIPOS_PROYECTO).optional(),
+          etiquetas: z
+            .array(z.string())
+            .describe("tecnologías y temas en minúscula, ej. computer-vision, odoo")
+            .optional(),
+          plazo_estimado_semanas: z.coerce.number().positive().optional(),
+          notas: z.string().describe("notas internas, no van al cliente").optional(),
+          proyecto: z
+            .string()
+            .describe("proyecto existente del cliente al que corresponde")
+            .optional(),
+          proyecto_nuevo: z
+            .string()
+            .min(3)
+            .describe("nombre de un proyecto nuevo a crear en estado propuesta")
+            .optional(),
+          descripcion_proyecto: z.string().optional(),
+          objetivo: ESQUEMA_BRIEF_PROYECTO.objetivo,
+          alcance: ESQUEMA_BRIEF_PROYECTO.alcance,
+          fuera_de_alcance: ESQUEMA_BRIEF_PROYECTO.fuera_de_alcance,
+          version_de: z
+            .string()
+            .describe("PRES-N del que esta es la versión siguiente")
+            .optional(),
+        },
+      },
+      async (entrada, extra) => {
+        if (entrada.proyecto && entrada.proyecto_nuevo) {
+          return texto("Pasá `proyecto` (existente) o `proyecto_nuevo`, no los dos.")
+        }
+        const supabase = createAdminClient()
+        const { data: clientes } = await supabase
+          .from("clientes")
+          .select("id, nombre")
+          .is("deleted_at", null)
+          .ilike("nombre", `%${entrada.cliente.trim()}%`)
+          .limit(5)
+        if (!clientes || clientes.length === 0)
+          return texto(`No encontré el cliente "${entrada.cliente}".`)
+        if (clientes.length > 1)
+          return texto(
+            `"${entrada.cliente}" matchea varios clientes: ${clientes.map((c) => c.nombre).join(", ")}. Precisá el nombre.`
+          )
+        const cliente = clientes[0]
+        const moneda = entrada.moneda ?? "USD"
+
+        const tarifa = await tarifaReferencia(supabase)
+        const { filas, error: errorItems } = normalizarItemsPresupuesto(
+          entrada.items,
+          moneda === "USD" ? tarifa : null
+        )
+        if (errorItems) return texto(errorItems)
+
+        let version = 1
+        let versionDe: string | null = null
+        if (entrada.version_de) {
+          const { presupuesto: previo, error } = await presupuestoPorReferencia(
+            entrada.version_de
+          )
+          if (!previo) return texto(error)
+          if (previo.cliente_id !== cliente.id)
+            return texto(
+              `${codigoPresupuesto(previo.numero)} es de otro cliente (${previo.clientes?.nombre}).`
+            )
+          version = previo.version + 1
+          versionDe = previo.id
+        }
+
+        const { autor, socioId } = await actorMcp(extra)
+
+        let proyectoId: string | null = null
+        let proyectoCreado: string | null = null
+        if (entrada.proyecto) {
+          const { proyecto, error } = await proyectoPorNombre(entrada.proyecto)
+          if (!proyecto) return texto(error)
+          if (proyecto.cliente_id !== cliente.id)
+            return texto(`El proyecto "${proyecto.nombre}" no es de ${cliente.nombre}.`)
+          proyectoId = proyecto.id as string
+        } else if (entrada.proyecto_nuevo) {
+          const { data: proyecto, error } = await supabase
+            .from("proyectos")
+            .insert({
+              nombre: entrada.proyecto_nuevo.trim(),
+              cliente_id: cliente.id,
+              descripcion: entrada.descripcion_proyecto || null,
+              estado: "propuesta",
+              tipo: entrada.tipo ?? null,
+              objetivo: entrada.objetivo || null,
+              alcance: entrada.alcance || null,
+              fuera_de_alcance: entrada.fuera_de_alcance || null,
+              moneda,
+              metadata: { origen: "mcp", presupuesto: entrada.titulo },
+              created_by: socioId,
+            })
+            .select("*")
+            .single()
+          if (error) throw new Error(error.message)
+          proyectoId = proyecto.id
+          proyectoCreado = proyecto.nombre
+          const snapshot: Record<string, unknown> = {}
+          for (const campo of CAMPOS_PROYECTO) snapshot[campo] = proyecto[campo]
+          await supabase.from("proyectos_versiones").insert({
+            proyecto_id: proyecto.id,
+            snapshot,
+            autor,
+            autor_socio_id: socioId,
+          })
+        }
+
+        const total = filas.reduce((acc, f) => acc + f.subtotal, 0)
+        const { data: creado, error } = await supabase
+          .from("presupuestos")
+          .insert({
+            cliente_id: cliente.id,
+            proyecto_id: proyectoId,
+            titulo: entrada.titulo.trim(),
+            contenido: entrada.contenido || null,
+            version,
+            version_de: versionDe,
+            moneda,
+            tipo: entrada.tipo ?? null,
+            etiquetas: (entrada.etiquetas ?? []).map((e) => e.trim().toLowerCase()).filter(Boolean),
+            plazo_estimado_semanas: entrada.plazo_estimado_semanas ?? null,
+            notas: entrada.notas || null,
+            total: Math.round(total * 100) / 100,
+            metadata: { origen: "mcp" },
+            created_by: socioId,
+          })
+          .select("id, numero")
+          .single()
+        if (error) throw new Error(error.message)
+
+        const { error: errorInsert } = await supabase
+          .from("presupuesto_items")
+          .insert(filas.map((f, orden) => ({ ...f, presupuesto_id: creado.id, orden })))
+        if (errorInsert) {
+          // Sin ítems el presupuesto no dice nada: se descarta entero en vez
+          // de dejar un borrador vacío que alguien tome por bueno.
+          await supabase.from("presupuestos").delete().eq("id", creado.id)
+          throw new Error(errorInsert.message)
+        }
+
+        const horas = horasEstimadas(filas)
+        return texto({
+          creado: codigoPresupuesto(creado.numero),
+          titulo: entrada.titulo,
+          version,
+          estado: "borrador",
+          total,
+          moneda,
+          horas_estimadas: horas || null,
+          tarifa_implicita: tarifaImplicita(total, horas),
+          tarifa_hora_referencia_usd: tarifa,
+          proyecto_creado: proyectoCreado,
+          url: `/presupuestos/${creado.id}`,
+          siguiente:
+            "Queda en borrador. Cuando el socio confirme que lo mandó, marcalo con `actualizar_presupuesto` (estado enviado).",
+        })
+      }
+    )
+
+    server.registerTool(
+      "actualizar_presupuesto",
+      {
+        title: "Actualizar un presupuesto",
+        description:
+          "Cambia un presupuesto. El estado y la respuesta del cliente (estado, fecha_envio, fecha_respuesta, motivo_resultado, drive_url, notas) se editan siempre en el lugar. El contenido (título, propuesta, ítems, tipo, etiquetas, plazo, moneda) solo se edita en el lugar mientras está en borrador: si ya se envió, se crea la versión siguiente en borrador con los cambios, para que quede registro de lo que se mandó. Pasar a enviado sin fecha usa hoy; aprobado o rechazado sin fecha_respuesta, también.",
+        inputSchema: {
+          presupuesto: z.union([z.string(), z.number()]).describe("PRES-N o título"),
+          estado: z.enum(ESTADOS_PRESUPUESTO).optional(),
+          fecha_envio: z.string().describe("YYYY-MM-DD").optional(),
+          fecha_respuesta: z.string().describe("YYYY-MM-DD").optional(),
+          motivo_resultado: z
+            .string()
+            .describe("por qué se aprobó o rechazó, o qué pidió cambiar el cliente")
+            .optional(),
+          drive_url: z.string().optional(),
+          notas: z.string().optional(),
+          titulo: z.string().min(3).optional(),
+          contenido: z.string().optional(),
+          items: z
+            .array(ESQUEMA_ITEM_PRESUPUESTO)
+            .min(1)
+            .describe("reemplaza todos los ítems")
+            .optional(),
+          tipo: z.enum(TIPOS_PROYECTO).optional(),
+          etiquetas: z.array(z.string()).optional(),
+          plazo_estimado_semanas: z.coerce.number().positive().optional(),
+          moneda: z.enum(["USD", "UYU"]).optional(),
+        },
+      },
+      async (entrada, extra) => {
+        const { presupuesto: actual, error: noEncontrado } =
+          await presupuestoPorReferencia(entrada.presupuesto)
+        if (!actual) return texto(noEncontrado)
+        const codigo = codigoPresupuesto(actual.numero)
+        const supabase = createAdminClient()
+
+        const contenido: Record<string, unknown> = {}
+        if (entrada.titulo !== undefined) contenido.titulo = entrada.titulo.trim()
+        if (entrada.contenido !== undefined) contenido.contenido = entrada.contenido || null
+        if (entrada.tipo !== undefined) contenido.tipo = entrada.tipo
+        if (entrada.etiquetas !== undefined)
+          contenido.etiquetas = entrada.etiquetas.map((e) => e.trim().toLowerCase()).filter(Boolean)
+        if (entrada.plazo_estimado_semanas !== undefined)
+          contenido.plazo_estimado_semanas = entrada.plazo_estimado_semanas
+        if (entrada.moneda !== undefined) contenido.moneda = entrada.moneda
+
+        const seguimiento: Record<string, unknown> = {}
+        if (entrada.estado !== undefined) seguimiento.estado = entrada.estado
+        if (entrada.fecha_envio !== undefined) seguimiento.fecha_envio = entrada.fecha_envio || null
+        if (entrada.fecha_respuesta !== undefined)
+          seguimiento.fecha_respuesta = entrada.fecha_respuesta || null
+        if (entrada.motivo_resultado !== undefined)
+          seguimiento.motivo_resultado = entrada.motivo_resultado || null
+        if (entrada.drive_url !== undefined) seguimiento.drive_url = entrada.drive_url || null
+        if (entrada.notas !== undefined) seguimiento.notas = entrada.notas || null
+        if (entrada.estado === "enviado" && !actual.fecha_envio && !entrada.fecha_envio)
+          seguimiento.fecha_envio = hoyUruguay()
+        if (
+          (entrada.estado === "aprobado" || entrada.estado === "rechazado") &&
+          !actual.fecha_respuesta &&
+          !entrada.fecha_respuesta
+        )
+          seguimiento.fecha_respuesta = hoyUruguay()
+
+        const cambiaContenido = Object.keys(contenido).length > 0 || entrada.items !== undefined
+        if (!cambiaContenido && Object.keys(seguimiento).length === 0)
+          return texto(`No pasaste ningún cambio para ${codigo}.`)
+
+        let filas: ItemPresupuestoFila[] | null = null
+        if (entrada.items) {
+          const moneda = (contenido.moneda as string | undefined) ?? actual.moneda
+          const tarifa = moneda === "USD" ? await tarifaReferencia(supabase) : null
+          const normalizados = normalizarItemsPresupuesto(entrada.items, tarifa)
+          if (normalizados.error) return texto(normalizados.error)
+          filas = normalizados.filas
+        }
+
+        // Ya enviado: el contenido no se pisa, se versiona.
+        if (cambiaContenido && actual.estado !== "borrador") {
+          const { data: posterior } = await supabase
+            .from("presupuestos")
+            .select("numero")
+            .eq("version_de", actual.id)
+            .is("deleted_at", null)
+            .maybeSingle()
+          if (posterior)
+            return texto(
+              `${codigo} ya tiene una versión siguiente (${codigoPresupuesto(posterior.numero)}). Editá esa.`
+            )
+
+          if (!filas) {
+            const { data: previos } = await supabase
+              .from("presupuesto_items")
+              .select("descripcion, horas, horas_internas, tarifa, subtotal")
+              .eq("presupuesto_id", actual.id)
+              .order("orden")
+            filas = (previos ?? []) as ItemPresupuestoFila[]
+          }
+          const total = filas.reduce((acc, f) => acc + Number(f.subtotal), 0)
+          const { socioId } = await actorMcp(extra)
+          const { data: nueva, error } = await supabase
+            .from("presupuestos")
+            .insert({
+              cliente_id: actual.cliente_id,
+              proyecto_id: actual.proyecto_id,
+              titulo: actual.titulo,
+              contenido: actual.contenido,
+              tipo: actual.tipo,
+              etiquetas: actual.etiquetas,
+              plazo_estimado_semanas: actual.plazo_estimado_semanas,
+              moneda: actual.moneda,
+              notas: actual.notas,
+              ...contenido,
+              version: actual.version + 1,
+              version_de: actual.id,
+              estado: "borrador",
+              total: Math.round(total * 100) / 100,
+              metadata: { origen: "mcp" },
+              created_by: socioId,
+            })
+            .select("id, numero")
+            .single()
+          if (error) throw new Error(error.message)
+          const { error: errorInsert } = await supabase
+            .from("presupuesto_items")
+            .insert(filas.map((f, orden) => ({ ...f, presupuesto_id: nueva.id, orden })))
+          if (errorInsert) {
+            await supabase.from("presupuestos").delete().eq("id", nueva.id)
+            throw new Error(errorInsert.message)
+          }
+          // El seguimiento (p. ej. marcar rechazada la anterior) sí se aplica
+          // a la versión que se nombró.
+          if (Object.keys(seguimiento).length > 0) {
+            const { error: errorSeg } = await supabase
+              .from("presupuestos")
+              .update(seguimiento)
+              .eq("id", actual.id)
+            if (errorSeg) throw new Error(errorSeg.message)
+          }
+          return texto({
+            version_nueva: codigoPresupuesto(nueva.numero),
+            version: actual.version + 1,
+            estado: "borrador",
+            total,
+            motivo: `${codigo} ya estaba ${actual.estado}: el contenido no se edita, se creó la versión siguiente con los cambios.`,
+            url: `/presupuestos/${nueva.id}`,
+          })
+        }
+
+        const cambios: Record<string, unknown> = { ...contenido, ...seguimiento }
+        if (filas) {
+          const { error: errorDel } = await supabase
+            .from("presupuesto_items")
+            .delete()
+            .eq("presupuesto_id", actual.id)
+          if (errorDel) throw new Error(errorDel.message)
+          const { error: errorIns } = await supabase
+            .from("presupuesto_items")
+            .insert(filas.map((f, orden) => ({ ...f, presupuesto_id: actual.id, orden })))
+          if (errorIns) throw new Error(errorIns.message)
+          cambios.total =
+            Math.round(filas.reduce((acc, f) => acc + f.subtotal, 0) * 100) / 100
+        }
+        const { data, error } = await supabase
+          .from("presupuestos")
+          .update(cambios)
+          .eq("id", actual.id)
+          .select("numero, titulo, version, estado, total, moneda, fecha_envio, fecha_respuesta")
+          .single()
+        if (error) throw new Error(error.message)
+        const { numero, ...resto } = data
+        return texto({ actualizado: { codigo: codigoPresupuesto(numero), ...resto } })
+      }
+    )
+
+    server.registerTool(
+      "definir_tarifa_hora",
+      {
+        title: "Definir la tarifa por hora de referencia",
+        description:
+          "Fija la tarifa por hora de referencia de ZQUARE en USD. Es el precio por defecto de los ítems que se cobran por hora y la vara contra la que se compara la tarifa implícita de cada presupuesto. Cambiala solo cuando los socios acuerden el número.",
+        inputSchema: { usd: z.coerce.number().positive() },
+      },
+      async ({ usd }, extra) => {
+        const { socioId } = await actorMcp(extra)
+        const supabase = createAdminClient()
+        const anterior = await tarifaReferencia(supabase)
+        const { error } = await supabase
+          .from("configuracion")
+          .upsert({ clave: CLAVE_TARIFA, valor: usd, updated_by: socioId })
+        if (error) throw new Error(error.message)
+        return texto({ tarifa_hora_usd: usd, anterior })
+      }
+    )
+
     // Prompt guía: la entrevista estándar para que los 4 socios bajen ideas a
     // tierra con el mismo proceso, sin depender de que cada uno sepa preguntar.
     server.registerPrompt(
@@ -2997,6 +3746,78 @@ const handler = createMcpHandler(
                 "Sé crítico, no un escriba. Si el alcance no cierra con el monto o el plazo acordado, decilo. Si hay algo del brief que nadie puede contestar todavía, dejalo explícito como riesgo en vez de inventarlo. Si el proyecto está vendido pero le falta información básica para arrancar, la conclusión honesta puede ser \"esto no se puede arrancar hasta que el cliente defina X\" — decilo.",
                 "",
                 `Cuando el brief esté completo, las tareas creadas y yo esté conforme, cerrá con \`comenzar_proyecto\` (la tool): marca el arranque, pasa el proyecto a en_curso y fija la fecha de inicio. Terminá mostrándome el resumen: brief final, tareas creadas con sus códigos, decisiones registradas y qué queda pendiente de definir.`,
+              ].join("\n"),
+            },
+          },
+        ],
+      })
+    )
+
+    // Prompt guía: armar la propuesta de un proyecto nuevo para un cliente.
+    // Es el paso anterior a `comenzar_proyecto`: aquel arranca lo que ya se
+    // vendió; éste arma lo que se va a vender. Termina en un presupuesto con
+    // su propuesta y deja sembrado el brief del proyecto. Mismo patrón que los
+    // otros prompts (leer primero, entrevistar solo por lo que falta), con la
+    // entrevista por rondas que funcionó al armar Iber Store Vision.
+    server.registerPrompt(
+      "armar_propuesta",
+      {
+        title: "Armar una propuesta",
+        description:
+          "Arma la propuesta de un proyecto nuevo para un cliente: junta lo que el backoffice ya sabe (reuniones, presupuestos anteriores, documentos), entrevista por rondas, estima contra el histórico y deja guardado el presupuesto con su propuesta, más el proyecto en estado propuesta.",
+        argsSchema: {
+          cliente: z.string().describe("nombre del cliente"),
+          proyecto: z
+            .string()
+            .describe("nombre del proyecto si ya existe, o uno tentativo")
+            .optional(),
+        },
+      },
+      ({ cliente, proyecto }) => ({
+        messages: [
+          {
+            role: "user" as const,
+            content: {
+              type: "text" as const,
+              text: [
+                `Ayudame a armar la propuesta de un proyecto nuevo para "${cliente}"${proyecto ? ` (proyecto: "${proyecto}")` : ""}: el documento que le mandamos al cliente con alcance, fases y precio, y el presupuesto que queda guardado en el backoffice para estimar mejor el siguiente.`,
+                "",
+                "**Primero leé, después preguntá.** Los hechos los buscás vos; a mí solo me preguntás decisiones. No me hagas ninguna pregunta hasta terminar este bloque:",
+                `1. \`ficha_cliente\` de "${cliente}": proyectos, presupuestos anteriores, reuniones, documentos y decisiones.${proyecto ? ` Si "${proyecto}" ya existe, también \`ficha_proyecto\`.` : ""}`,
+                "2. Las reuniones con transcripción (`tiene_transcripcion`), empezando por la más reciente: `transcripcion_reunion`. Ahí suele estar qué pidió el cliente, qué se le mostró y qué quedó comprometido.",
+                "3. `listar_presupuestos` sin filtros: el histórico de toda la empresa con horas estimadas, tarifa implícita, plazo y cómo terminó cada uno, más la tarifa por hora de referencia. Abrí con `ficha_presupuesto` los dos o tres más parecidos (mismo cliente, mismo tipo o etiquetas en común) para ver cómo se estructuraron y cobraron.",
+                "4. `buscar` con el nombre del cliente y con los temas del proyecto: propuestas, minutas y análisis en Drive.",
+                "5. Si te paso links (maqueta, planillas, notas de reunión de otra herramienta), leelos enteros antes de preguntar. De una maqueta sale el alcance funcional casi palabra por palabra.",
+                "",
+                "Después contame en pocas líneas qué encontraste: qué es el proyecto según lo que leíste, qué se le prometió al cliente, qué presupuestos anteriores usás de referencia y qué no encontraste.",
+                "",
+                "**Entrevista por rondas.** Armá mentalmente el árbol de decisiones de la propuesta. En cada ronda preguntame todas las decisiones que ya se pueden tomar (las que no dependen de otra todavía abierta), numeradas, cada una con tu respuesta recomendada y por qué. Formato:",
+                "",
+                "❓ **Q1** - **<título>**: <la pregunta, con las opciones si las hay>",
+                "",
+                "➡️ <tu recomendación>",
+                "",
+                "Esperá mis respuestas antes de la ronda siguiente; cada respuesta abre las decisiones que dependían de ella. Si una pregunta necesita un dato (precios de nube, benchmarks, cómo funciona una API), buscalo vos y citá la fuente. Las ramas del árbol, en este orden aproximado:",
+                "1. **Qué es y para quién**: el problema que resuelve, quién lo usa y qué se mostró o acordó con el cliente.",
+                "2. **Alcance**: qué entra, en qué fase, y qué NO entra. Insistí con lo que no entra: hardware, costos de terceros, integraciones que no vimos, lo que tenga riesgo legal.",
+                "3. **Riesgos y precondiciones**: lo que necesitamos del cliente para arrancar (accesos, datos, contrapartes) y qué pasa si no se puede. Un riesgo técnico sin resolver se convierte en precondición, no en promesa.",
+                "4. **Fases**: si conviene un piloto que baje la barrera para decir que sí, y qué se entrega en cada una.",
+                "5. **Precio**: estimá horas por ítem o fase y mostrá la cuenta. Compará contra los presupuestos parecidos y contra la tarifa de referencia, y decí la tarifa implícita del número que propongas. Si el alcance escala por unidades (locales, usuarios, integraciones), proponé cómo desglosarlo.",
+                "6. **Costos operativos**: lo que el cliente paga a terceros por mes (nube, IA, almacenamiento), con la cuenta y las fuentes.",
+                "7. **Condiciones**: moneda, IVA, forma de pago, validez.",
+                "8. **Formato**: qué secciones lleva el documento. Por defecto las de las propuestas anteriores.",
+                "",
+                "Terminá la entrevista cuando no quede ninguna decisión abierta. Mostrame el resumen completo del árbol y **no guardes nada hasta que lo confirme**.",
+                "",
+                "**Guardar.** Con mi confirmación, `crear_presupuesto`:",
+                "- `contenido`: la propuesta en Markdown con secciones `##` (Contexto, Qué resuelve, Alcance funcional, Qué no incluye, Entrega por fases, Inversión, Costos operativos mensuales, Precondiciones, Próximas oportunidades, Próximos pasos), escrita para el cliente, sin jerga interna.",
+                "- `items`: una línea por fase o componente con precio. Poné siempre `horas_internas`, aunque se cobre a precio cerrado: sin ellas el presupuesto no enseña nada para el próximo.",
+                "- `tipo`, `etiquetas` (tecnologías y temas) y `plazo_estimado_semanas`.",
+                "- Si el proyecto no existe, `proyecto_nuevo` con `objetivo`, `alcance` y `fuera_de_alcance`: son los mismos que después pide `comenzar_proyecto`, así no se escriben dos veces.",
+                "",
+                "Cerrá con el código del presupuesto y un mensaje corto para el cliente con lo que necesitamos de su lado (las precondiciones), listo para pegar. No lo mandes vos. Cuando te diga que lo envié, marcalo con `actualizar_presupuesto` (estado enviado); si el cliente pide cambios sobre algo ya enviado, `actualizar_presupuesto` crea la versión siguiente sola.",
+                "",
+                "Sé crítico, no un escriba. Si el precio no cierra con las horas, si prometemos algo que depende de un sistema que no vimos, o si la tarifa implícita queda muy lejos de la de referencia, decilo antes de guardar.",
               ].join("\n"),
             },
           },

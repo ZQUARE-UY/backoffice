@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 
+import { TIPOS_PROYECTO } from "@/lib/dominio"
+import { calcularSubtotal } from "@/lib/presupuestos"
 import { idSocioActual } from "@/lib/socio-actual"
 import { createClient } from "@/lib/supabase/server"
 
@@ -11,20 +13,23 @@ function textoOpcional(valor: FormDataEntryValue | null): string | null {
   return t ? t : null
 }
 
+function numeroOpcional(valor: FormDataEntryValue | null): number | null {
+  const t = textoOpcional(valor)
+  if (!t) return null
+  const n = Number(t)
+  return Number.isFinite(n) ? n : null
+}
+
+function tipoOpcional(valor: FormDataEntryValue | null): string | null {
+  const t = textoOpcional(valor)
+  return t && t in TIPOS_PROYECTO ? t : null
+}
+
 export type ItemEntrada = {
   descripcion: string
   horas: number | null
+  horas_internas: number | null
   tarifa: number
-}
-
-// Subtotal por ítem: si tiene horas, es horas × tarifa; si no, la tarifa es el
-// precio directo del ítem (precio fijo).
-function calcularSubtotal(item: ItemEntrada): number {
-  const tarifa = Number.isFinite(item.tarifa) ? item.tarifa : 0
-  if (item.horas != null && Number.isFinite(item.horas)) {
-    return Math.round(item.horas * tarifa * 100) / 100
-  }
-  return Math.round(tarifa * 100) / 100
 }
 
 export async function crearPresupuesto(formData: FormData) {
@@ -33,22 +38,16 @@ export async function crearPresupuesto(formData: FormData) {
 
   const supabase = await createClient()
 
-  // Siguiente versión: max existente para el cliente + 1.
-  const { data: previos } = await supabase
-    .from("presupuestos")
-    .select("version")
-    .eq("cliente_id", clienteId)
-    .is("deleted_at", null)
-    .order("version", { ascending: false })
-    .limit(1)
-  const version = (previos?.[0]?.version ?? 0) + 1
-
+  // Un presupuesto nuevo es la versión 1 de su propuesta. Las siguientes
+  // versiones apuntan a la anterior con `version_de` (ver la migración
+  // 20260930000001); no se numeran por cliente.
   const { data, error } = await supabase
     .from("presupuestos")
     .insert({
       cliente_id: clienteId,
       proyecto_id: textoOpcional(formData.get("proyecto_id")),
-      version,
+      titulo: textoOpcional(formData.get("titulo")),
+      version: 1,
       moneda: (formData.get("moneda") as string) || "USD",
       notas: textoOpcional(formData.get("notas")),
       created_by: await idSocioActual(),
@@ -67,11 +66,21 @@ export async function actualizarPresupuesto(id: string, formData: FormData) {
   const { error } = await supabase
     .from("presupuestos")
     .update({
+      titulo: textoOpcional(formData.get("titulo")),
+      tipo: tipoOpcional(formData.get("tipo")),
       estado: (formData.get("estado") as string) || "borrador",
       moneda: (formData.get("moneda") as string) || "USD",
+      plazo_estimado_semanas: numeroOpcional(formData.get("plazo_estimado_semanas")),
       fecha_envio: textoOpcional(formData.get("fecha_envio")),
+      fecha_respuesta: textoOpcional(formData.get("fecha_respuesta")),
+      motivo_resultado: textoOpcional(formData.get("motivo_resultado")),
       drive_url: textoOpcional(formData.get("drive_url")),
+      contenido: textoOpcional(formData.get("contenido")),
       notas: textoOpcional(formData.get("notas")),
+      etiquetas: (textoOpcional(formData.get("etiquetas")) ?? "")
+        .split(",")
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean),
     })
     .eq("id", id)
 
@@ -86,6 +95,7 @@ export async function guardarItems(presupuestoId: string, items: ItemEntrada[]) 
     .map((it) => ({
       descripcion: it.descripcion?.trim() ?? "",
       horas: it.horas,
+      horas_internas: it.horas_internas,
       tarifa: it.tarifa,
     }))
     .filter((it) => it.descripcion.length > 0)
@@ -94,6 +104,7 @@ export async function guardarItems(presupuestoId: string, items: ItemEntrada[]) 
     presupuesto_id: presupuestoId,
     descripcion: it.descripcion,
     horas: it.horas,
+    horas_internas: it.horas_internas,
     tarifa: it.tarifa,
     subtotal: calcularSubtotal(it),
     orden: i,

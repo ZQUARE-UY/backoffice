@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/table"
 import {
   formatearMonto,
+  nombrePresupuesto,
   TIPOS_DOCUMENTO,
   type Cliente,
   type Documento,
@@ -317,7 +318,7 @@ export default async function ClientePage({
                       href={`/presupuestos/${presupuesto.id}`}
                       className="hover:underline"
                     >
-                      Presupuesto v{presupuesto.version}
+                      {nombrePresupuesto(presupuesto)}
                     </Link>
                   </TableCell>
                   <TableCell>

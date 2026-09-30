@@ -569,12 +569,21 @@ export type Proyecto = {
 
 export type Presupuesto = {
   id: string
+  numero: number
   cliente_id: string
   proyecto_id: string | null
   version: number
+  version_de: string | null
+  titulo: string | null
+  contenido: string | null
+  tipo: TipoProyecto | null
+  etiquetas: string[]
+  plazo_estimado_semanas: number | null
   estado: EstadoPresupuesto
   moneda: Moneda
   fecha_envio: string | null
+  fecha_respuesta: string | null
+  motivo_resultado: string | null
   total: number
   notas: string | null
   drive_url: string | null
@@ -587,9 +596,21 @@ export type PresupuestoItem = {
   presupuesto_id: string
   descripcion: string
   horas: number | null
+  horas_internas: number | null
   tarifa: number
   subtotal: number
   orden: number
+}
+
+// Nombre para mostrar: el título si lo tiene, y la versión solo cuando hay
+// más de una (una v1 sola no aporta nada).
+export function nombrePresupuesto(
+  presupuesto: Pick<Presupuesto, "titulo" | "version">
+): string {
+  const base = presupuesto.titulo ?? "Presupuesto"
+  return presupuesto.titulo && presupuesto.version === 1
+    ? base
+    : `${base} v${presupuesto.version}`
 }
 
 // Una anotación sobre un archivo de Drive: el tipo, de quién es y sus tags.
@@ -636,6 +657,7 @@ export type Tarea = {
   prioridad: PrioridadTarea
   codigo_proyecto: string | null
   estimacion: number | null
+  horas: number | null
   moscow: MoscowTarea | null
   epica: string | null
   asignado_a: string | null

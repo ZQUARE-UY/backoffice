@@ -194,6 +194,11 @@ export function DetalleTarea({
                   {tarea.estimacion} {tarea.estimacion === 1 ? "punto" : "puntos"}
                 </Dato>
               )}
+              {tarea.horas != null && (
+                <Dato label="Horas dedicadas">
+                  {tarea.horas.toLocaleString("es-UY")} h
+                </Dato>
+              )}
               {tarea.moscow && (
                 <Dato label="MoSCoW">
                   <Badge variant={MOSCOW_TAREA[tarea.moscow].variant}>
