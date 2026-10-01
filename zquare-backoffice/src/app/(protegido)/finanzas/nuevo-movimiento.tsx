@@ -18,14 +18,19 @@ import { type Cliente, type Proyecto, type Socio } from "@/lib/dominio"
 import { crearMovimiento } from "./actions"
 import { CamposMovimiento } from "./campos-movimiento"
 
+// Alta única de movimientos: el checkbox "Se repite" lo convierte en un
+// recurrente. La tarjeta Recurrentes abre este mismo diálogo con el checkbox
+// tildado (`recurrente`).
 export function NuevoMovimiento({
   socios,
   clientes,
   proyectos,
+  recurrente = false,
 }: {
   socios: Socio[]
   clientes: Pick<Cliente, "id" | "nombre">[]
   proyectos: Pick<Proyecto, "id" | "nombre" | "cliente_id">[]
+  recurrente?: boolean
 }) {
   const [abierto, setAbierto] = useState(false)
   const [pendiente, iniciarTransicion] = useTransition()
@@ -43,19 +48,28 @@ export function NuevoMovimiento({
     <Dialog open={abierto} onOpenChange={(v) => !pendiente && setAbierto(v)}>
       <DialogTrigger
         render={
-          <Button>
-            <PlusIcon data-icon="inline-start" />
-            Nuevo movimiento
-          </Button>
+          recurrente ? (
+            <Button variant="outline" size="sm">
+              <PlusIcon data-icon="inline-start" />
+              Nuevo recurrente
+            </Button>
+          ) : (
+            <Button>
+              <PlusIcon data-icon="inline-start" />
+              Nuevo movimiento
+            </Button>
+          )
         }
       />
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         {abierto && (
           <form action={onSubmit}>
             <DialogHeader>
-              <DialogTitle>Nuevo movimiento</DialogTitle>
+              <DialogTitle>{recurrente ? "Nuevo recurrente" : "Nuevo movimiento"}</DialogTitle>
             </DialogHeader>
             <CamposMovimiento
+              permitirRecurrente
+              seRepiteInicial={recurrente}
               socios={socios}
               clientes={clientes}
               proyectos={proyectos}
@@ -63,7 +77,7 @@ export function NuevoMovimiento({
             <DialogFooter>
               <Button type="submit" disabled={pendiente}>
                 {pendiente && <Spinner data-icon="inline-start" />}
-                Guardar movimiento
+                Guardar
               </Button>
             </DialogFooter>
           </form>

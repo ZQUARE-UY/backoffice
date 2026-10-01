@@ -1,7 +1,12 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { MoreHorizontalIcon, PencilIcon, Trash2Icon } from "lucide-react"
+import {
+  MoreHorizontalIcon,
+  PencilIcon,
+  RepeatIcon,
+  Trash2Icon,
+} from "lucide-react"
 
 import {
   AlertDialog,
@@ -33,27 +38,33 @@ import {
   type Cliente,
   type Movimiento,
   type MovimientoParticipacion,
+  type MovimientoRecurrente,
   type Proyecto,
   type Socio,
 } from "@/lib/dominio"
 
 import { actualizarMovimiento, eliminarMovimiento } from "./actions"
 import { CamposMovimiento } from "./campos-movimiento"
+import { DialogoRecurrente } from "./recurrentes"
 
 export function MovimientoAcciones({
   movimiento,
+  recurrente,
   socios,
   clientes,
   proyectos,
   reparto,
 }: {
   movimiento: Movimiento
+  // La plantilla de la que salió este cobro, si sigue existiendo.
+  recurrente?: MovimientoRecurrente
   socios: Socio[]
   clientes: Pick<Cliente, "id" | "nombre">[]
   proyectos: Pick<Proyecto, "id" | "nombre" | "cliente_id">[]
   reparto: MovimientoParticipacion[]
 }) {
   const [editar, setEditar] = useState(false)
+  const [editarRecurrente, setEditarRecurrente] = useState(false)
   const [eliminar, setEliminar] = useState(false)
   const [pendiente, iniciarTransicion] = useTransition()
 
@@ -99,13 +110,38 @@ export function MovimientoAcciones({
       </DropdownMenu>
 
       <Dialog open={editar} onOpenChange={setEditar}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           {editar && (
             <form action={onGuardar}>
               <DialogHeader>
                 <DialogTitle>Editar movimiento</DialogTitle>
               </DialogHeader>
+              {/* Un cobro generado por un recurrente se edita solo: para
+                  cambiar todos, está la plantilla. */}
+              {movimiento.recurrente_id && (
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+                  <span className="text-muted-foreground">
+                    Es un cobro de un recurrente. Lo que cambies acá afecta solo a
+                    este cobro.
+                  </span>
+                  {recurrente && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setEditar(false)
+                        setEditarRecurrente(true)
+                      }}
+                    >
+                      <RepeatIcon data-icon="inline-start" />
+                      Editar el recurrente
+                    </Button>
+                  )}
+                </div>
+              )}
               <CamposMovimiento
+                permitirRecurrente={!movimiento.recurrente_id}
                 movimiento={movimiento}
                 socios={socios}
                 clientes={clientes}
@@ -122,6 +158,17 @@ export function MovimientoAcciones({
           )}
         </DialogContent>
       </Dialog>
+
+      {recurrente && (
+        <DialogoRecurrente
+          abierto={editarRecurrente}
+          onCerrar={() => setEditarRecurrente(false)}
+          recurrente={recurrente}
+          socios={socios}
+          clientes={clientes}
+          proyectos={proyectos}
+        />
+      )}
 
       <AlertDialog open={eliminar} onOpenChange={setEliminar}>
         <AlertDialogContent>

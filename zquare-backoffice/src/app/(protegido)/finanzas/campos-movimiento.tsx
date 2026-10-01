@@ -49,10 +49,13 @@ function repartoInicial(
 
 // Sirve para un movimiento suelto y para la plantilla de uno recurrente: los
 // dos comparten qué es, cuánto, de quién y el reparto. Cambia solo el cuándo
-// (fecha y estado vs. frecuencia y período) y el comprobante, que es de cada
-// cobro y no de la plantilla.
+// (fecha y estado vs. frecuencia y período). El comprobante es de cada cobro:
+// en un movimiento que se marca "Se repite" queda en ese primer cobro, y la
+// plantilla sola (modo "recurrente") no lo lleva.
 export function CamposMovimiento({
   modo = "movimiento",
+  permitirRecurrente = false,
+  seRepiteInicial = false,
   movimiento,
   recurrente,
   socios,
@@ -61,6 +64,10 @@ export function CamposMovimiento({
   reparto: repartoGuardado = [],
 }: {
   modo?: "movimiento" | "recurrente"
+  // Muestra el checkbox "Se repite": al tildarlo, guardar crea la plantilla
+  // recurrente con este cobro como el primero.
+  permitirRecurrente?: boolean
+  seRepiteInicial?: boolean
   movimiento?: Movimiento
   recurrente?: MovimientoRecurrente
   socios: Socio[]
@@ -69,6 +76,12 @@ export function CamposMovimiento({
   reparto?: Pick<MovimientoParticipacion, "socio_id" | "partes">[]
 }) {
   const base = movimiento ?? recurrente
+  const [seRepite, setSeRepite] = useState(modo === "recurrente" || seRepiteInicial)
+  // La fecha se comparte entre "Fecha" y "Fecha de este cobro": tildar o
+  // destildar "Se repite" no borra lo que ya se cargó.
+  const [fecha, setFecha] = useState<string>(
+    movimiento?.fecha ?? recurrente?.fecha_inicio ?? "",
+  )
   const [moneda, setMoneda] = useState<string>(base?.moneda ?? "USD")
   const [tipo, setTipo] = useState<string>(base?.tipo ?? "gasto")
   const [clienteId, setClienteId] = useState<string>(base?.cliente_id ?? "")
@@ -157,14 +170,15 @@ export function CamposMovimiento({
             onValueChange={setTipo}
           />
         </Field>
-        {modo === "movimiento" ? (
+        {!seRepite ? (
           <Field>
             <FieldLabel htmlFor="fecha">Fecha</FieldLabel>
             <Input
               id="fecha"
               name="fecha"
               type="date"
-              defaultValue={movimiento?.fecha ?? ""}
+              value={fecha}
+              onChange={(e) => setFecha(e.target.value)}
             />
           </Field>
         ) : (
@@ -180,16 +194,33 @@ export function CamposMovimiento({
         )}
       </div>
 
-      {modo === "recurrente" && (
+      {permitirRecurrente && (
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="se_repite"
+            checked={seRepite}
+            onCheckedChange={(v) => setSeRepite(v === true)}
+          />
+          <label htmlFor="se_repite" className="text-sm">
+            Se repite todos los meses o todos los años
+          </label>
+          {seRepite && <input type="hidden" name="se_repite" value="1" />}
+        </div>
+      )}
+
+      {seRepite && (
         <div className="grid grid-cols-2 gap-4">
           <Field>
-            <FieldLabel htmlFor="fecha_inicio">Primer cobro *</FieldLabel>
+            <FieldLabel htmlFor="fecha_inicio">
+              {modo === "movimiento" ? "Fecha de este cobro *" : "Primer cobro *"}
+            </FieldLabel>
             <Input
               id="fecha_inicio"
               name="fecha_inicio"
               type="date"
               required
-              defaultValue={recurrente?.fecha_inicio ?? ""}
+              value={fecha}
+              onChange={(e) => setFecha(e.target.value)}
             />
           </Field>
           <Field>
@@ -202,9 +233,9 @@ export function CamposMovimiento({
             />
           </Field>
           <p className="col-span-2 text-xs text-muted-foreground">
-            Se cobra ese día de cada mes (o de cada año). Si ya cargaste a mano
-            los cobros anteriores, poné acá el próximo: los que ya pasaron se
-            generan solos.
+            {modo === "movimiento"
+              ? "Este cobro queda registrado y los siguientes se cargan solos ese mismo día de cada mes (o de cada año); el próximo ya aparece como previsto."
+              : "Se cobra ese día de cada mes (o de cada año). Si ya cargaste a mano los cobros anteriores, poné acá el próximo: los que ya pasaron se generan solos."}
           </p>
         </div>
       )}
@@ -271,15 +302,15 @@ export function CamposMovimiento({
 
       <Field>
         <FieldLabel htmlFor="descripcion">
-          {modo === "recurrente" ? "Descripción *" : "Descripción"}
+          {seRepite ? "Descripción *" : "Descripción"}
         </FieldLabel>
         <Textarea
           id="descripcion"
           name="descripcion"
           rows={2}
-          required={modo === "recurrente"}
+          required={seRepite}
           placeholder={
-            modo === "recurrente"
+            seRepite
               ? "Ej. Google Workspace"
               : "Detalle del movimiento"
           }
@@ -323,7 +354,7 @@ export function CamposMovimiento({
             onValueChange={setDeQuien}
           />
         </Field>
-        {modo === "movimiento" && (
+        {!seRepite && (
           <Field>
             <FieldLabel htmlFor="estado">Estado</FieldLabel>
             <SelectCampo

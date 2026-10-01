@@ -769,6 +769,12 @@ cuatro.
   cobrado no se toca. Si el primer cobro es viejo, se generan los vencidos
   (tope 120): si ya estaban cargados a mano, se pone como primer cobro el
   próximo.
+- **Alta unificada (2026-10-01):** un solo diálogo de carga con el checkbox
+  "Se repite": tildado, guardar crea la plantilla con ese cobro como el
+  primero (y el comprobante queda en él). La tarjeta Recurrentes abre el
+  mismo diálogo ya tildado. Al editar un movimiento cargado a mano se lo
+  puede convertir en el primer cobro de un recurrente sin duplicarlo; un
+  cobro generado avisa que es de un recurrente y lleva a editar la plantilla.
 - **MCP:** `registrar_liquidacion`, `listar_recurrentes`, `crear_recurrente`,
   `actualizar_recurrente` (monto, fin, pausar); `resumen_finanzas` agrega
   `transferencias_sugeridas` y `gastos_recurrentes_mensual_usd`.
@@ -909,3 +915,6 @@ cuatro.
   propuesta se genera desde el backoffice (tool `generar_documento` y botón
   en la ficha), con la tabla de inversión armada desde los ítems y PDF
   congelado al marcarlo enviado.
+- **2026-10-01** — Finanzas: alta unificada de movimientos con checkbox "Se
+  repite" (crea el recurrente con ese cobro como el primero) y conversión de
+  un movimiento existente en recurrente.
