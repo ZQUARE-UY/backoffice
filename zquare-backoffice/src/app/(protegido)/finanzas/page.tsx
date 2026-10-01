@@ -111,6 +111,7 @@ export default async function FinanzasPage() {
   const liquidaciones = (liquidacionesData ?? []) as Liquidacion[]
   const hoy = hoyUruguay()
   const nombreSocio = new Map(socios.map((s) => [s.id, s.nombre]))
+  const recurrentePorId = new Map(recurrentes.map((r) => [r.id, r]))
   const nombreProyecto = new Map(proyectos.map((p) => [p.id, p.nombre]))
 
   // Participaciones agrupadas por movimiento, para el formulario de edición.
@@ -330,6 +331,11 @@ export default async function FinanzasPage() {
                     <TableCell>
                       <MovimientoAcciones
                         movimiento={m}
+                        recurrente={
+                          m.recurrente_id
+                            ? recurrentePorId.get(m.recurrente_id)
+                            : undefined
+                        }
                         socios={socios}
                         clientes={clientes}
                         proyectos={proyectos}

@@ -6,7 +6,6 @@ import {
   PauseIcon,
   PencilIcon,
   PlayIcon,
-  PlusIcon,
   RepeatIcon,
   Trash2Icon,
 } from "lucide-react"
@@ -68,11 +67,11 @@ import { mensualUsd, proximaOcurrencia } from "@/lib/finanzas"
 
 import {
   actualizarRecurrente,
-  crearRecurrente,
   eliminarRecurrente,
   pausarRecurrente,
 } from "./actions"
 import { CamposMovimiento } from "./campos-movimiento"
+import { NuevoMovimiento } from "./nuevo-movimiento"
 
 type Props = {
   socios: Socio[]
@@ -87,7 +86,6 @@ export function Recurrentes({
   hoy,
   ...props
 }: Props & { recurrentes: MovimientoRecurrente[]; hoy: string }) {
-  const [nuevo, setNuevo] = useState(false)
   const nombreSocio = new Map(props.socios.map((s) => [s.id, s.nombre]))
 
   // Cuánto pesan por mes los gastos recurrentes activos, en USD.
@@ -106,10 +104,7 @@ export function Recurrentes({
             : `Gastos fijos activos: ${formatearUsd(gastoMensual)} por mes. El próximo cobro de cada uno ya figura como previsto.`}
         </CardDescription>
         <CardAction>
-          <Button variant="outline" size="sm" onClick={() => setNuevo(true)}>
-            <PlusIcon data-icon="inline-start" />
-            Nuevo recurrente
-          </Button>
+          <NuevoMovimiento recurrente {...props} />
         </CardAction>
       </CardHeader>
 
@@ -171,12 +166,13 @@ export function Recurrentes({
         </CardContent>
       )}
 
-      <DialogoRecurrente abierto={nuevo} onCerrar={() => setNuevo(false)} {...props} />
     </Card>
   )
 }
 
-function DialogoRecurrente({
+// Edición de la plantilla (el alta es el diálogo de movimientos con "Se
+// repite" tildado). También la abre un cobro generado, desde su menú.
+export function DialogoRecurrente({
   abierto,
   onCerrar,
   recurrente,
@@ -184,14 +180,13 @@ function DialogoRecurrente({
 }: Props & {
   abierto: boolean
   onCerrar: () => void
-  recurrente?: MovimientoRecurrente
+  recurrente: MovimientoRecurrente
 }) {
   const [pendiente, iniciarTransicion] = useTransition()
 
   function onSubmit(formData: FormData) {
     iniciarTransicion(async () => {
-      if (recurrente) await actualizarRecurrente(recurrente.id, formData)
-      else await crearRecurrente(formData)
+      await actualizarRecurrente(recurrente.id, formData)
       onCerrar()
     })
   }
@@ -202,14 +197,12 @@ function DialogoRecurrente({
         {abierto && (
           <form action={onSubmit}>
             <DialogHeader>
-              <DialogTitle>
-                {recurrente ? "Editar recurrente" : "Nuevo recurrente"}
-              </DialogTitle>
+              <DialogTitle>Editar recurrente</DialogTitle>
             </DialogHeader>
             <CamposMovimiento
               modo="recurrente"
               recurrente={recurrente}
-              reparto={recurrente?.reparto}
+              reparto={recurrente.reparto}
               {...props}
             />
             <DialogFooter>

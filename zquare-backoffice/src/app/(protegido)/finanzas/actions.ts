@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache"
 
 import { FONDO_COMUN } from "@/lib/dominio"
-import { borrarPrevistosFuturos, sincronizarRecurrentes } from "@/lib/finanzas"
+import {
+  borrarPrevistosFuturos,
+  hoyUruguay,
+  sincronizarRecurrentes,
+} from "@/lib/finanzas"
 import { idSocioActual } from "@/lib/socio-actual"
 import { createClient } from "@/lib/supabase/server"
 
@@ -102,7 +106,31 @@ async function guardarReparto(
   if (error) throw new Error(error.message)
 }
 
+// El checkbox "Se repite" del formulario de movimientos.
+function seRepite(formData: FormData): boolean {
+  return formData.get("se_repite") === "1"
+}
+
 export async function crearMovimiento(formData: FormData) {
+  // Un movimiento que se repite es una plantilla recurrente cuyo primer cobro
+  // es éste: la sincronización lo registra (confirmado si ya pasó) y deja el
+  // próximo previsto. El comprobante queda en ese primer cobro.
+  if (seRepite(formData)) {
+    const { id, fecha_inicio } = await insertarRecurrente(formData)
+    await resincronizar(id)
+    const comprobante_url = textoOpcional(formData.get("comprobante_url"))
+    if (comprobante_url) {
+      const supabase = await createClient()
+      const { error } = await supabase
+        .from("movimientos")
+        .update({ comprobante_url })
+        .eq("recurrente_id", id)
+        .eq("fecha", fecha_inicio)
+      if (error) throw new Error(error.message)
+    }
+    return
+  }
+
   const supabase = await createClient()
   const datos = datosDesde(formData)
   const reparto = repartoDesde(formData, datos.socio_id)
@@ -117,6 +145,8 @@ export async function crearMovimiento(formData: FormData) {
 }
 
 export async function actualizarMovimiento(id: string, formData: FormData) {
+  if (seRepite(formData)) return convertirEnRecurrente(id, formData)
+
   const supabase = await createClient()
   const datos = datosDesde(formData)
   const reparto = repartoDesde(formData, datos.socio_id)
@@ -177,15 +207,49 @@ async function resincronizar(recurrenteId: string) {
   revalidatePath("/finanzas")
 }
 
-export async function crearRecurrente(formData: FormData) {
+async function insertarRecurrente(
+  formData: FormData,
+): Promise<{ id: string; fecha_inicio: string }> {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("movimientos_recurrentes")
     .insert({ ...recurrenteDesde(formData), created_by: await idSocioActual() })
-    .select("id")
+    .select("id, fecha_inicio")
     .single()
   if (error) throw new Error(error.message)
-  await resincronizar(data.id)
+  return data
+}
+
+// Un movimiento ya cargado (ej. el Workspace de este mes) pasa a ser el
+// primer cobro de una plantilla nueva. Se vincula ANTES de sincronizar: así
+// el unique (recurrente_id, fecha) hace que la sincronización no lo duplique
+// y solo agregue el próximo previsto.
+async function convertirEnRecurrente(movimientoId: string, formData: FormData) {
+  const supabase = await createClient()
+  const { data: actual } = await supabase
+    .from("movimientos")
+    .select("recurrente_id")
+    .eq("id", movimientoId)
+    .maybeSingle()
+  if (actual?.recurrente_id) {
+    throw new Error("Este cobro ya es parte de un recurrente: editá el recurrente")
+  }
+
+  const { id, fecha_inicio } = await insertarRecurrente(formData)
+  const comunes = camposComunes(formData)
+  const { error } = await supabase
+    .from("movimientos")
+    .update({
+      ...comunes,
+      fecha: fecha_inicio,
+      estado: fecha_inicio <= hoyUruguay() ? "confirmado" : "previsto",
+      comprobante_url: textoOpcional(formData.get("comprobante_url")),
+      recurrente_id: id,
+    })
+    .eq("id", movimientoId)
+  if (error) throw new Error(error.message)
+  await guardarReparto(movimientoId, repartoDesde(formData, comunes.socio_id))
+  await resincronizar(id)
 }
 
 export async function actualizarRecurrente(id: string, formData: FormData) {
