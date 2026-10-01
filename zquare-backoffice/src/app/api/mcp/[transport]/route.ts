@@ -21,6 +21,10 @@ import {
   sincronizarRecurrentes,
   transferenciasSugeridas,
 } from "@/lib/finanzas"
+import {
+  congelarDocumentoEnviado,
+  generarDocumentoPresupuesto,
+} from "@/lib/documento-presupuesto"
 import { generarEmbeddings } from "@/lib/embeddings"
 import {
   calcularSubtotal,
@@ -394,6 +398,7 @@ type PresupuestoConNombres = {
   motivo_resultado: string | null
   drive_url: string | null
   notas: string | null
+  metadata: { drive_file_id?: string; pdf_url?: string } | null
   clientes: { nombre: string } | null
   proyectos: { nombre: string } | null
 }
@@ -438,6 +443,25 @@ async function presupuestoPorReferencia(
     }
   }
   return { presupuesto: data[0], error: null }
+}
+
+// Al pasar un presupuesto a enviado se guarda el PDF de su documento. No
+// bloquea el cambio de estado: si falla, se avisa en la respuesta.
+async function congelarSiSeEnvio(
+  actual: Pick<PresupuestoConNombres, "id" | "estado">,
+  estadoNuevo: string | undefined
+): Promise<{ pdf_enviado?: string; aviso?: string }> {
+  if (estadoNuevo !== "enviado" || actual.estado === "enviado") return {}
+  try {
+    const pdf = await congelarDocumentoEnviado(createAdminClient(), actual.id)
+    return pdf
+      ? { pdf_enviado: pdf }
+      : { aviso: "No tenía documento generado, así que no quedó PDF de lo enviado." }
+  } catch (e) {
+    return {
+      aviso: `El estado cambió pero no se pudo guardar el PDF: ${e instanceof Error ? e.message : e}`,
+    }
+  }
 }
 
 // Planificación: los campos que exige el estándar de ingeniería para poder
@@ -3211,7 +3235,8 @@ const handler = createMcpHandler(
           fecha_envio: p.fecha_envio,
           fecha_respuesta: p.fecha_respuesta,
           motivo_resultado: p.motivo_resultado,
-          drive_url: p.drive_url,
+          documento: p.drive_url,
+          pdf_enviado: p.metadata?.pdf_url ?? null,
           notas: p.notas,
           contenido: p.contenido,
           items: items ?? [],
@@ -3393,7 +3418,7 @@ const handler = createMcpHandler(
           proyecto_creado: proyectoCreado,
           url: `/presupuestos/${creado.id}`,
           siguiente:
-            "Queda en borrador. Cuando el socio confirme que lo mandó, marcalo con `actualizar_presupuesto` (estado enviado).",
+            "Queda en borrador. Generá el documento con `generar_documento`; cuando el socio confirme que lo mandó, marcalo con `actualizar_presupuesto` (estado enviado).",
         })
       }
     )
@@ -3403,7 +3428,7 @@ const handler = createMcpHandler(
       {
         title: "Actualizar un presupuesto",
         description:
-          "Cambia un presupuesto. El estado y la respuesta del cliente (estado, fecha_envio, fecha_respuesta, motivo_resultado, drive_url, notas) se editan siempre en el lugar. El contenido (título, propuesta, ítems, tipo, etiquetas, plazo, moneda) solo se edita en el lugar mientras está en borrador: si ya se envió, se crea la versión siguiente en borrador con los cambios, para que quede registro de lo que se mandó. Pasar a enviado sin fecha usa hoy; aprobado o rechazado sin fecha_respuesta, también.",
+          "Cambia un presupuesto. El estado y la respuesta del cliente (estado, fecha_envio, fecha_respuesta, motivo_resultado, drive_url, notas) se editan siempre en el lugar. El contenido (título, propuesta, ítems, tipo, etiquetas, plazo, moneda) solo se edita en el lugar mientras está en borrador: si ya se envió, se crea la versión siguiente en borrador con los cambios, para que quede registro de lo que se mandó. Pasar a enviado sin fecha usa hoy y guarda el PDF del documento generado; aprobado o rechazado sin fecha_respuesta, también usa hoy.",
         inputSchema: {
           presupuesto: z.union([z.string(), z.number()]).describe("PRES-N o título"),
           estado: z.enum(ESTADOS_PRESUPUESTO).optional(),
@@ -3531,12 +3556,14 @@ const handler = createMcpHandler(
           }
           // El seguimiento (p. ej. marcar rechazada la anterior) sí se aplica
           // a la versión que se nombró.
+          let congelado = {}
           if (Object.keys(seguimiento).length > 0) {
             const { error: errorSeg } = await supabase
               .from("presupuestos")
               .update(seguimiento)
               .eq("id", actual.id)
             if (errorSeg) throw new Error(errorSeg.message)
+            congelado = await congelarSiSeEnvio(actual, entrada.estado)
           }
           return texto({
             version_nueva: codigoPresupuesto(nueva.numero),
@@ -3545,6 +3572,8 @@ const handler = createMcpHandler(
             total,
             motivo: `${codigo} ya estaba ${actual.estado}: el contenido no se edita, se creó la versión siguiente con los cambios.`,
             url: `/presupuestos/${nueva.id}`,
+            siguiente: "Generá su documento con `generar_documento` cuando esté lista.",
+            ...congelado,
           })
         }
 
@@ -3570,7 +3599,37 @@ const handler = createMcpHandler(
           .single()
         if (error) throw new Error(error.message)
         const { numero, ...resto } = data
-        return texto({ actualizado: { codigo: codigoPresupuesto(numero), ...resto } })
+        return texto({
+          actualizado: { codigo: codigoPresupuesto(numero), ...resto },
+          ...(await congelarSiSeEnvio(actual, entrada.estado)),
+        })
+      }
+    )
+
+    server.registerTool(
+      "generar_documento",
+      {
+        title: "Generar el documento de un presupuesto",
+        description:
+          "Genera el Google Doc de la propuesta en la carpeta Presupuestos/ del cliente en Drive (la crea si falta) y devuelve el link. Lleva membrete, el contenido del presupuesto y la tabla de inversión armada desde los ítems. Mientras el presupuesto está en borrador, volver a generarlo pisa el mismo Doc y conserva el link; uno ya enviado queda como se mandó (su PDF se guarda al marcarlo enviado) y los cambios van en la versión siguiente.",
+        inputSchema: { presupuesto: z.union([z.string(), z.number()]).describe("PRES-N o título") },
+      },
+      async ({ presupuesto }) => {
+        const { presupuesto: p, error: noEncontrado } = await presupuestoPorReferencia(presupuesto)
+        if (!p) return texto(noEncontrado)
+        try {
+          const doc = await generarDocumentoPresupuesto(createAdminClient(), p.id)
+          return texto({
+            presupuesto: codigoPresupuesto(p.numero),
+            documento: doc.url,
+            nombre: doc.nombre,
+            regenerado: doc.regenerado,
+            siguiente:
+              "Pasale el link al socio para que lo revise en Docs antes de mandarlo. Cuando confirme que lo envió, `actualizar_presupuesto` con estado enviado guarda el PDF.",
+          })
+        } catch (e) {
+          return texto(e instanceof Error ? e.message : "No se pudo generar el documento.")
+        }
       }
     )
 
@@ -3810,12 +3869,14 @@ const handler = createMcpHandler(
                 "Terminá la entrevista cuando no quede ninguna decisión abierta. Mostrame el resumen completo del árbol y **no guardes nada hasta que lo confirme**.",
                 "",
                 "**Guardar.** Con mi confirmación, `crear_presupuesto`:",
-                "- `contenido`: la propuesta en Markdown con secciones `##` (Contexto, Qué resuelve, Alcance funcional, Qué no incluye, Entrega por fases, Inversión, Costos operativos mensuales, Precondiciones, Próximas oportunidades, Próximos pasos), escrita para el cliente, sin jerga interna.",
+                "- `contenido`: la propuesta en Markdown con secciones `##` (Contexto, Qué resuelve, Alcance funcional, Qué no incluye, Entrega por fases, Inversión, Costos operativos mensuales, Precondiciones, Próximas oportunidades, Próximos pasos), escrita para el cliente, sin jerga interna. **En Inversión no escribas montos ni tabla de precios**: el documento arma esa tabla desde los ítems. Ahí van solo las notas (moneda, IVA, forma de pago, validez, precio por unidad para futuras ampliaciones).",
                 "- `items`: una línea por fase o componente con precio. Poné siempre `horas_internas`, aunque se cobre a precio cerrado: sin ellas el presupuesto no enseña nada para el próximo.",
                 "- `tipo`, `etiquetas` (tecnologías y temas) y `plazo_estimado_semanas`.",
                 "- Si el proyecto no existe, `proyecto_nuevo` con `objetivo`, `alcance` y `fuera_de_alcance`: son los mismos que después pide `comenzar_proyecto`, así no se escriben dos veces.",
                 "",
-                "Cerrá con el código del presupuesto y un mensaje corto para el cliente con lo que necesitamos de su lado (las precondiciones), listo para pegar. No lo mandes vos. Cuando te diga que lo envié, marcalo con `actualizar_presupuesto` (estado enviado); si el cliente pide cambios sobre algo ya enviado, `actualizar_presupuesto` crea la versión siguiente sola.",
+                "Después generá el Google Doc con `generar_documento` y pasame el link para revisarlo; si pido cambios, actualizá el presupuesto y volvé a generarlo (mientras está en borrador pisa el mismo Doc).",
+                "",
+                "Cerrá con el código del presupuesto, el link al documento y un mensaje corto para el cliente con lo que necesitamos de su lado (las precondiciones), listo para pegar. No lo mandes vos. Cuando te diga que lo envié, marcalo con `actualizar_presupuesto` (estado enviado), que guarda el PDF de lo enviado; si el cliente pide cambios sobre algo ya enviado, `actualizar_presupuesto` crea la versión siguiente sola.",
                 "",
                 "Sé crítico, no un escriba. Si el precio no cierra con las horas, si prometemos algo que depende de un sistema que no vimos, o si la tarifa implícita queda muy lejos de la de referencia, decilo antes de guardar.",
               ].join("\n"),

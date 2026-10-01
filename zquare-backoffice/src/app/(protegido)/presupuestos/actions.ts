@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 
+import {
+  congelarDocumentoEnviado,
+  generarDocumentoPresupuesto,
+} from "@/lib/documento-presupuesto"
 import { TIPOS_PROYECTO } from "@/lib/dominio"
 import { calcularSubtotal } from "@/lib/presupuestos"
 import { idSocioActual } from "@/lib/socio-actual"
@@ -63,6 +67,11 @@ export async function crearPresupuesto(formData: FormData) {
 
 export async function actualizarPresupuesto(id: string, formData: FormData) {
   const supabase = await createClient()
+  const { data: previo } = await supabase
+    .from("presupuestos")
+    .select("estado")
+    .eq("id", id)
+    .maybeSingle()
   const { error } = await supabase
     .from("presupuestos")
     .update({
@@ -85,7 +94,30 @@ export async function actualizarPresupuesto(id: string, formData: FormData) {
     .eq("id", id)
 
   if (error) throw new Error(error.message)
+
+  // Recién enviado: se guarda el PDF de lo que se mandó. Si falla, el cambio
+  // de estado igual queda; el PDF se puede reintentar volviendo a guardar.
+  if (formData.get("estado") === "enviado" && previo?.estado !== "enviado") {
+    try {
+      await congelarDocumentoEnviado(supabase, id)
+    } catch (e) {
+      console.error("No se pudo guardar el PDF del presupuesto enviado:", e)
+    }
+  }
   revalidatePath(`/presupuestos/${id}`)
+}
+
+export async function generarDocumento(
+  id: string
+): Promise<{ url: string; regenerado: boolean } | { error: string }> {
+  if (!(await idSocioActual())) return { error: "No autorizado" }
+  try {
+    const { url, regenerado } = await generarDocumentoPresupuesto(await createClient(), id)
+    revalidatePath(`/presupuestos/${id}`)
+    return { url, regenerado }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "No se pudo generar el documento" }
+  }
 }
 
 export async function guardarItems(presupuestoId: string, items: ItemEntrada[]) {

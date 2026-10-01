@@ -587,6 +587,8 @@ export type Presupuesto = {
   total: number
   notas: string | null
   drive_url: string | null
+  // drive_file_id / pdf_url del documento generado (lib/documento-presupuesto).
+  metadata: { drive_file_id?: string; pdf_url?: string; [clave: string]: unknown } | null
   created_at: string
   updated_at: string
 }
