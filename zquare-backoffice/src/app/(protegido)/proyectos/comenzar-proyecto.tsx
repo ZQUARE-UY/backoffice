@@ -29,12 +29,22 @@ export function ComenzarProyecto({
   id,
   nombre,
   briefListo,
+  abierto: abiertoControlado,
+  onAbiertoChange,
+  sinBoton = false,
 }: {
   id: string
   nombre: string
   briefListo: boolean
+  // Controlado desde afuera (el aviso del listado elige el proyecto y abre
+  // este diálogo); sin estos props maneja su propio estado.
+  abierto?: boolean
+  onAbiertoChange?: (v: boolean) => void
+  sinBoton?: boolean
 }) {
-  const [abierto, setAbierto] = useState(false)
+  const [abiertoPropio, setAbiertoPropio] = useState(false)
+  const abierto = abiertoControlado ?? abiertoPropio
+  const setAbierto = onAbiertoChange ?? setAbiertoPropio
   const [pendiente, iniciarTransicion] = useTransition()
   const prompt = promptComenzarProyecto(nombre)
 
@@ -54,10 +64,12 @@ export function ComenzarProyecto({
 
   return (
     <>
-      <Button size="sm" onClick={() => setAbierto(true)}>
-        <PlayIcon data-icon="inline-start" />
-        Comenzar
-      </Button>
+      {!sinBoton && (
+        <Button size="sm" onClick={() => setAbierto(true)}>
+          <PlayIcon data-icon="inline-start" />
+          Comenzar
+        </Button>
+      )}
 
       <Dialog open={abierto} onOpenChange={setAbierto}>
         <DialogContent className="sm:max-w-lg">

@@ -30,9 +30,14 @@ import {
 export function EditarProyecto({
   proyecto,
   socios,
+  etiqueta = "Editar",
+  variante = "outline",
 }: {
   proyecto: Proyecto
   socios: Socio[]
+  // El estado vacío de Plata reusa este formulario como "Cargar monto".
+  etiqueta?: string
+  variante?: "outline" | "default"
 }) {
   const [abierto, setAbierto] = useState(false)
   const [pendiente, iniciarTransicion] = useTransition()
@@ -48,9 +53,9 @@ export function EditarProyecto({
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger
         render={
-          <Button variant="outline" size="sm">
-            <PencilIcon data-icon="inline-start" />
-            Editar
+          <Button variant={variante}>
+            {variante === "outline" && <PencilIcon data-icon="inline-start" />}
+            {etiqueta}
           </Button>
         }
       />
