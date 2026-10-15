@@ -1,9 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useFormStatus } from "react-dom"
 import { PlusIcon } from "lucide-react"
 
+import { EVENTO_CREAR } from "@/components/captura-rapida"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -38,8 +39,19 @@ function BotonGuardar() {
   )
 }
 
-export function NuevoCliente() {
+export function NuevoCliente({ escucharCrear = false }: { escucharCrear?: boolean }) {
   const [abierto, setAbierto] = useState(false)
+
+  // El botón flotante "+" de celular abre esta alta.
+  useEffect(() => {
+    if (!escucharCrear) return
+    function abrir(e: Event) {
+      e.preventDefault()
+      setAbierto(true)
+    }
+    window.addEventListener(EVENTO_CREAR, abrir)
+    return () => window.removeEventListener(EVENTO_CREAR, abrir)
+  }, [escucharCrear])
 
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>

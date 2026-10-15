@@ -1015,3 +1015,13 @@ cuatro.
   el detalle lo trae) que abre la transcripción, presentes (socios en lima,
   el resto en arena) y "Transcripción completa". Deep link
   `/decisiones?decision=<id>`.
+- **2026-10-15** — Rediseño, Clientes (último bloque): lista a la izquierda
+  (iniciales en lima si está activo, estado y cantidad de proyectos;
+  inactivos atenuados) y la ficha del elegido a la derecha
+  (`/clientes?cliente=<id>`, por defecto el primer activo): contacto,
+  Editar y "Ficha completa →", cuatro cifras (proyectos, cobrado en USD
+  por cliente o por sus proyectos, archivos de su carpeta de Drive y
+  decisiones), proyectos con su estado y la última actividad (lo más nuevo
+  entre decisión, movimiento, reunión, proyecto y archivo de Drive). En
+  celular, lista o ficha con "← Todos los clientes". El FAB crea cliente.
+  La ficha completa `/clientes/[id]` no cambió.
