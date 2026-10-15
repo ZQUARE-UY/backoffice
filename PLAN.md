@@ -984,3 +984,14 @@ cuatro.
   no; los votos viejos quedan como sí) + `updated_at`. MCP: `votar_idea`
   acepta `voto`, y `listar_ideas` / `ficha_idea` devuelven los votos por
   opción.
+- **2026-10-15** — Rediseño, Reuniones: agenda semanal (lunes a viernes, de
+  9 a 18 en medias horas, con navegación por semana): reunión con cliente en
+  lima, interna en carbón y las encuestas abiertas como franja punteada
+  sobre sus días; semana vacía con la mascota y "Coordinar una reunión"; en
+  celular, lista por día que salta los vacíos. Columna "Encuestas abiertas"
+  (quién falta) con "Marcar mi disponibilidad" y "Más adelante". Nueva
+  reunión en Popover (socios con avatares, cliente o proyecto, invitar al
+  cliente, mails en chips, duración y calendario de rango). Encuesta en
+  Popover: grilla días hábiles × horas de 9 a 17, día entero al tocar el
+  nombre, puntitos de quién puede, Respuestas y Mejores huecos; conserva lo
+  que el socio cargó fuera de 9–18 desde la ficha completa.
