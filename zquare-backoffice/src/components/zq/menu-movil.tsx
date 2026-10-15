@@ -78,15 +78,15 @@ export function BarraMovil({
 }
 
 // Botón flotante para crear (celular): carbón con "+" lima, abajo a la
-// derecha. Por ahora abre la captura rápida de tarea o idea; las pantallas
-// que tengan su propio "crear" lo van a reemplazar (Paso 3).
+// derecha. Abre el "crear" de la pantalla (si escucha EVENTO_CREAR, como
+// Nueva tarea) o, si no hay, la captura rápida de tarea o idea.
 export function BotonCrear() {
   return (
     <button
       type="button"
       className="zq-fab escritorio:hidden"
-      aria-label="Crear tarea o idea"
-      onClick={() => window.dispatchEvent(new Event(EVENTO_CREAR))}
+      aria-label="Crear"
+      onClick={() => window.dispatchEvent(new Event(EVENTO_CREAR, { cancelable: true }))}
     >
       <PlusIcon aria-hidden="true" />
     </button>

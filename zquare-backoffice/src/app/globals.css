@@ -484,12 +484,19 @@
     background: var(--input);
   }
   /* En la hoja, los datos van como chips y los botones a todo el ancho. */
+  /* En la hoja, los datos van en dos columnas de chips, no apilados. */
   .zq-hoja .zq-popover-datos {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 16px;
     flex-basis: auto;
     padding: 0;
     background: none;
     border: 0;
     overflow: visible;
+  }
+  .zq-hoja .zq-popover-datos > p {
+    grid-column: 1 / -1;
   }
   .zq-hoja .zq-popover-pie {
     flex-wrap: nowrap;

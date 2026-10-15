@@ -9,6 +9,8 @@ import {
   type PlanCeremonias,
 } from "@/lib/ceremonias"
 import {
+  ESTADOS_TAREA,
+  PRIORIDADES_TAREA,
   RE_CODIGO_PROYECTO,
   RE_EPICA,
   TIPOS_CEREMONIA,
@@ -150,7 +152,7 @@ export async function crearTarea(formData: FormData) {
   if (error) throw new Error(error.message)
   await guardarVersion(data.id, datos)
   await sincronizarTareaSilencioso(data.id)
-  revalidatePath("/tareas")
+  revalidatePath("/tareas", "layout")
   // La captura rápida (tecla N) crea tarjetas desde cualquier pantalla:
   // devuelve el número para que el toast pueda linkear a la ficha.
   return { id: data.id as string, numero: data.numero as number }
@@ -218,7 +220,7 @@ export async function actualizarTarea(id: string, formData: FormData) {
   if (error) throw new Error(error.message)
   await guardarVersion(id, datos)
   await sincronizarTareaSilencioso(id)
-  revalidatePath("/tareas")
+  revalidatePath("/tareas", "layout")
 }
 
 // "Pasar al tablero" desde la vista Backlog: la tarjeta se compromete y entra
@@ -237,7 +239,7 @@ export async function pasarAlTablero(id: string) {
     .eq("id", id)
   if (error) throw new Error(error.message)
   await sincronizarTareaSilencioso(id)
-  revalidatePath("/tareas")
+  revalidatePath("/tareas", "layout")
 }
 
 // Mover una tarjeta: nueva columna y posición dentro de ella. `orden` lo calcula
@@ -263,7 +265,53 @@ export async function moverTarea(id: string, estado: string, orden: number) {
     .eq("id", id)
   if (error) throw new Error(error.message)
   await sincronizarTareaSilencioso(id)
-  revalidatePath("/tareas")
+  revalidatePath("/tareas", "layout")
+}
+
+// Cambios rápidos desde la ficha (chips de Columna, Prioridad y
+// Responsable): tocan un solo campo, sin pasar por el formulario completo
+// (que reescribe todo y deja una versión). La columna sigue las mismas reglas
+// de coherencia con el sprint que el arrastre, y entra arriba de la nueva.
+export async function cambiarColumnaTarea(id: string, estado: string) {
+  if (!(estado in ESTADOS_TAREA)) throw new Error("Columna desconocida")
+  const supabase = await createClient()
+  const { data: actual } = await supabase
+    .from("tareas")
+    .select("estado, sprint_id")
+    .eq("id", id)
+    .maybeSingle()
+  if (!actual) throw new Error("La tarjeta no existe")
+  if (actual.estado === estado) return
+  const ubicacion = await ubicacionCoherente(
+    supabase,
+    { estado, sprint_id: actual.sprint_id ?? null },
+    "estado"
+  )
+  const { error } = await supabase
+    .from("tareas")
+    .update({ ...ubicacion, orden: await ordenAlTope(ubicacion.estado) })
+    .eq("id", id)
+  if (error) throw new Error(error.message)
+  await sincronizarTareaSilencioso(id)
+  revalidatePath("/tareas", "layout")
+}
+
+export async function cambiarDatoTarea(
+  id: string,
+  cambios: { prioridad?: string; asignado_a?: string | null }
+) {
+  const limpios: Record<string, string | null> = {}
+  if (cambios.prioridad !== undefined) {
+    if (!(cambios.prioridad in PRIORIDADES_TAREA)) throw new Error("Prioridad desconocida")
+    limpios.prioridad = cambios.prioridad
+  }
+  if (cambios.asignado_a !== undefined) limpios.asignado_a = cambios.asignado_a || null
+  if (Object.keys(limpios).length === 0) return
+  const supabase = await createClient()
+  const { error } = await supabase.from("tareas").update(limpios).eq("id", id)
+  if (error) throw new Error(error.message)
+  await sincronizarTareaSilencioso(id)
+  revalidatePath("/tareas", "layout")
 }
 
 // ── Sprints ───────────────────────────────────────────────────────────────
@@ -287,7 +335,7 @@ export async function crearSprint(formData: FormData) {
     created_by: await idSocioActual(),
   })
   if (error) throw new Error(error.message)
-  revalidatePath("/tareas")
+  revalidatePath("/tareas", "layout")
 }
 
 export async function actualizarSprint(id: string, formData: FormData) {
@@ -297,7 +345,7 @@ export async function actualizarSprint(id: string, formData: FormData) {
     .update(datosSprintDesde(formData))
     .eq("id", id)
   if (error) throw new Error(error.message)
-  revalidatePath("/tareas")
+  revalidatePath("/tareas", "layout")
 }
 
 // Solo se borran sprints planificados (los cerrados son historial y el activo
@@ -322,7 +370,7 @@ export async function eliminarSprint(id: string) {
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id)
   if (error) throw new Error(error.message)
-  revalidatePath("/tareas")
+  revalidatePath("/tareas", "layout")
 }
 
 export async function iniciarSprint(id: string, formData: FormData) {
@@ -330,7 +378,7 @@ export async function iniciarSprint(id: string, formData: FormData) {
     fecha_inicio: textoOpcional(formData.get("fecha_inicio")),
     fecha_fin: textoOpcional(formData.get("fecha_fin")),
   })
-  revalidatePath("/tareas")
+  revalidatePath("/tareas", "layout")
 }
 
 // Completar: lo hecho queda archivado en el sprint (sale del tablero) y lo
@@ -342,14 +390,14 @@ export async function completarSprint(id: string, formData: FormData) {
       ? { tipo: "sprint", sprint_id: destinoId }
       : { tipo: "backlog" }
   await completarSprintDb(await createClient(), id, destino)
-  revalidatePath("/tareas")
+  revalidatePath("/tareas", "layout")
 }
 
 // Agregar una tarjeta a un sprint (o sacarla, con null) desde el backlog o el
 // tablero. La columna se acomoda al sprint (ver lib/sprints.ts).
 export async function moverASprint(tareaId: string, sprintId: string | null) {
   await moverTarjetaASprint(await createClient(), tareaId, sprintId)
-  revalidatePath("/tareas")
+  revalidatePath("/tareas", "layout")
 }
 
 export async function eliminarTarea(id: string) {
@@ -360,7 +408,7 @@ export async function eliminarTarea(id: string) {
     .eq("id", id)
   if (error) throw new Error(error.message)
   await sincronizarTareaSilencioso(id)
-  revalidatePath("/tareas")
+  revalidatePath("/tareas", "layout")
 }
 
 export async function comentarTarea(tareaId: string, formData: FormData) {
@@ -381,7 +429,7 @@ export async function comentarTarea(tareaId: string, formData: FormData) {
   })
   if (error) throw new Error(error.message)
   await sincronizarTareaSilencioso(tareaId)
-  revalidatePath("/tareas")
+  revalidatePath("/tareas", "layout")
 }
 
 // ── Ceremonias ──────────────────────────────────────────────────────────────
@@ -438,6 +486,6 @@ export async function definirCeremonias(sprintId: string, formData: FormData) {
     planDesde(formData),
     await idSocioActual()
   )
-  revalidatePath("/tareas")
+  revalidatePath("/tareas", "layout")
   return resultado
 }

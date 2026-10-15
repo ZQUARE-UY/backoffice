@@ -21,10 +21,13 @@ export function BotonEliminar({
   accion,
   titulo,
   descripcion,
+  soloIcono = false,
 }: {
   accion: () => Promise<void>
   titulo: string
   descripcion: string
+  // Ícono de tacho en negativo, sin texto (fichas del rediseño).
+  soloIcono?: boolean
 }) {
   const [pendiente, iniciarTransicion] = useTransition()
 
@@ -32,10 +35,16 @@ export function BotonEliminar({
     <AlertDialog>
       <AlertDialogTrigger
         render={
-          <Button variant="destructive" size="sm">
-            <Trash2Icon data-icon="inline-start" />
-            Eliminar
-          </Button>
+          soloIcono ? (
+            <Button variant="ghost" size="icon" aria-label="Eliminar" className="text-negativo hover:text-negativo">
+              <Trash2Icon />
+            </Button>
+          ) : (
+            <Button variant="destructive" size="sm">
+              <Trash2Icon data-icon="inline-start" />
+              Eliminar
+            </Button>
+          )
         }
       />
       <AlertDialogContent>

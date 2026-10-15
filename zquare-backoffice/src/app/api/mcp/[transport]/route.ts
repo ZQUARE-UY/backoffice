@@ -2212,7 +2212,7 @@ const handler = createMcpHandler(
         if (error) throw new Error(error.message)
         return texto({
           creado: { codigo: `Sprint ${data.numero}`, ...data },
-          ver: "/tareas?vista=backlog",
+          ver: "/tareas/backlog",
         })
       }
     )
@@ -2361,7 +2361,7 @@ const handler = createMcpHandler(
 
     // ── Calendario y ceremonias ───────────────────────────────────────────
     // Las ceremonias (planning, daily, review, retro) son datos del sprint,
-    // una fila por ocurrencia; se ven en /tareas?vista=calendario.
+    // una fila por ocurrencia; se ven en /tareas/calendario.
     server.registerTool(
       "calendario_sprints",
       {
@@ -2441,7 +2441,7 @@ const handler = createMcpHandler(
               }
             })
             .filter((c) => c.fecha >= d && c.fecha <= h),
-          ver: "/tareas?vista=calendario",
+          ver: "/tareas/calendario",
         })
       }
     )
@@ -2508,7 +2508,7 @@ const handler = createMcpHandler(
             sprint: `Sprint ${s.numero}`,
             ceremonias_creadas: r.creadas,
             reemplazadas: r.reemplazadas,
-            ver: "/tareas?vista=calendario",
+            ver: "/tareas/calendario",
           })
         } catch (e) {
           return texto(`${e instanceof Error ? e.message : e}; no cambié nada.`)
