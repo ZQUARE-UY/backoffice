@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import { PlusIcon } from "lucide-react"
 
+import { EVENTO_CREAR } from "@/components/captura-rapida"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -21,12 +22,29 @@ import { CamposDecision } from "./campos-decision"
 export function NuevaDecision({
   socios,
   clientes,
+  acuerdo = false,
+  escucharCrear = false,
 }: {
   socios: Socio[]
   clientes: Pick<Cliente, "id" | "nombre">[]
+  // "+ Nuevo acuerdo" en la tarjeta de acuerdos de socios: la misma alta,
+  // sin cliente (un acuerdo de socios es una decisión de la empresa).
+  acuerdo?: boolean
+  // El botón flotante "+" de celular abre esta alta.
+  escucharCrear?: boolean
 }) {
   const [abierto, setAbierto] = useState(false)
   const [pendiente, iniciarTransicion] = useTransition()
+
+  useEffect(() => {
+    if (!escucharCrear) return
+    function abrir(e: Event) {
+      e.preventDefault()
+      setAbierto(true)
+    }
+    window.addEventListener(EVENTO_CREAR, abrir)
+    return () => window.removeEventListener(EVENTO_CREAR, abrir)
+  }, [escucharCrear])
 
   function onSubmit(formData: FormData) {
     iniciarTransicion(async () => {
@@ -39,17 +57,24 @@ export function NuevaDecision({
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger
         render={
-          <Button>
-            <PlusIcon data-icon="inline-start" />
-            Nueva decisión
-          </Button>
+          acuerdo ? (
+            <Button size="sm" className="bg-lima text-carbon hover:bg-lima/90">
+              <PlusIcon data-icon="inline-start" />
+              Nuevo acuerdo
+            </Button>
+          ) : (
+            <Button>
+              <PlusIcon data-icon="inline-start" />
+              Nueva decisión
+            </Button>
+          )
         }
       />
       <DialogContent className="sm:max-w-lg">
         {abierto && (
           <form action={onSubmit}>
             <DialogHeader>
-              <DialogTitle>Nueva decisión</DialogTitle>
+              <DialogTitle>{acuerdo ? "Nuevo acuerdo de socios" : "Nueva decisión"}</DialogTitle>
             </DialogHeader>
             <CamposDecision socios={socios} clientes={clientes} />
             <DialogFooter>
