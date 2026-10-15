@@ -232,7 +232,7 @@ export async function graduarIdea(id: string, formData: FormData) {
 
   revalidatePath("/ideas")
   revalidatePath(`/ideas/${id}`)
-  revalidatePath("/tareas")
+  revalidatePath("/tareas", "layout")
 }
 
 // Deshacer la graduación: la contracara de graduarIdea. Archiva (soft delete,
@@ -302,7 +302,7 @@ export async function deshacerGraduacion(id: string) {
 
   revalidatePath("/ideas")
   revalidatePath(`/ideas/${id}`)
-  revalidatePath("/tareas")
+  revalidatePath("/tareas", "layout")
 }
 
 // Toggle del +1 del socio logueado.

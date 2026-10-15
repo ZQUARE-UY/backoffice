@@ -672,6 +672,7 @@ export type Tarea = {
   github_repo: string | null
   github_issue_number: number | null
   github_synced_at: string | null
+  created_by: string | null
   created_at: string
   updated_at: string
 }

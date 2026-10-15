@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils"
 
 type Tipo = "tarea" | "idea"
 
-// Evento que abre la caja desde afuera (el botón flotante de celular).
+// Evento del botón flotante de celular ("crear" en la pantalla actual).
 export const EVENTO_CREAR = "zq:crear"
 
 const TIPOS: { valor: Tipo; label: string; icono: typeof KanbanIcon; placeholder: string }[] = [
@@ -79,8 +79,13 @@ export function CapturaRapida() {
       e.preventDefault()
       setAbierto(true)
     }
-    function abrir() {
-      setAbierto(true)
+    // El botón flotante abre la captura salvo que la pantalla tenga su
+    // propio "crear" (lo marca con preventDefault). dispatchEvent es
+    // sincrónico: en el microtask ya respondieron todos los listeners.
+    function abrir(e: Event) {
+      queueMicrotask(() => {
+        if (!e.defaultPrevented) setAbierto(true)
+      })
     }
     document.addEventListener("keydown", onKey)
     window.addEventListener(EVENTO_CREAR, abrir)
@@ -133,7 +138,7 @@ export function CapturaRapida() {
             tipo,
             titulo,
             codigo: codigoTarea(r.numero),
-            href: `/tareas?vista=backlog&tarea=${r.numero}`,
+            href: `/tareas/backlog?tarea=${r.numero}`,
           }
         } else {
           fd.set("estado", "semilla")

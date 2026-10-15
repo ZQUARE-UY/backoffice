@@ -1,57 +1,80 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useOptimistic, useRef, useState, useTransition } from "react"
 import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
-import { PencilIcon, SendIcon } from "lucide-react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { ArrowUpIcon, ChevronDownIcon, SparklesIcon } from "lucide-react"
+import { toast } from "sonner"
 
 import { BotonEliminar } from "@/components/boton-eliminar"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import { Separator } from "@/components/ui/separator"
-import { cn } from "@/lib/utils"
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Spinner } from "@/components/ui/spinner"
-import { Textarea } from "@/components/ui/textarea"
+import {
+  Popover,
+  PopoverPrimario,
+  PopoverRotulo,
+  PopoverTitulo,
+} from "@/components/zq/popover"
 import {
   BRIEF_TAREA,
   briefVacio,
   CAMPOS_BRIEF,
+  codigoSprint,
   codigoTarea,
   ESTADOS_TAREA,
-  MOSCOW_TAREA,
+  ESTADOS_TAREA_ORDEN,
   PRIORIDADES_TAREA,
   tareaDesarrollada,
   type ComentarioTarea,
+  type EstadoTarea,
+  type PrioridadTarea,
   type Socio,
   type Sprint,
   type Tarea,
   type VersionTarea,
 } from "@/lib/dominio"
+import { fechaCorta, fechaRelativa } from "@/lib/formato"
+import { cn } from "@/lib/utils"
 
-import { actualizarTarea, comentarTarea, eliminarTarea } from "./actions"
 import {
-  CamposTarea,
-  type ClienteOpcion,
-  type ProyectoOpcion,
-} from "./campos-tarea"
+  actualizarTarea,
+  cambiarColumnaTarea,
+  cambiarDatoTarea,
+  comentarTarea,
+  eliminarTarea,
+} from "./actions"
+import { CamposTarea, type ClienteOpcion, type ProyectoOpcion } from "./campos-tarea"
+import { urlDesarrollarTarea } from "./claude"
+import { AvatarSocio, FechaLimite, PuntoColumna } from "./tarjeta"
+
+// "Hoy" → "hoy" para usarla en medio de una frase.
+function minuscula(texto: string): string {
+  return texto.charAt(0).toLowerCase() + texto.slice(1)
+}
+
+type Datos = { estado: EstadoTarea; prioridad: PrioridadTarea; asignado_a: string | null }
+
+const CHIP =
+  "inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-full bg-muted px-3 text-[13px] text-foreground hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
 
 function Dato({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs text-muted-foreground">{label}</span>
+    <div className="flex flex-col items-start gap-1">
+      <PopoverRotulo>{label}</PopoverRotulo>
       <div className="text-sm">{children}</div>
     </div>
   )
 }
 
+// Ficha de tarea (Popover; en celular, Hoja inferior). La tarjeta que la
+// abre llega como `children`.
 export function DetalleTarea({
   tarea,
   comentarios,
@@ -69,315 +92,497 @@ export function DetalleTarea({
   socios: Socio[]
   clientes: ClienteOpcion[]
   proyectos: ProyectoOpcion[]
-  // Sprints abiertos, para el select del formulario y el dato en la ficha.
+  // Sprints abiertos, para el formulario y el dato en la ficha.
   sprints?: Sprint[]
   children: React.ReactNode
   // Deep link `?tarea=ZQ-N`: la tarjeta llega ya abierta desde el server.
   abiertoInicial?: boolean
 }) {
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const [abierto, setAbierto] = useState(abiertoInicial ?? false)
   const [editando, setEditando] = useState(false)
   const [pendiente, iniciarTransicion] = useTransition()
-  const [comentando, iniciarComentario] = useTransition()
 
-  const responsable = socios.find((s) => s.id === tarea.asignado_a)
-  const cliente = clientes.find((c) => c.id === tarea.cliente_id)
-  const proyecto = proyectos.find((p) => p.id === tarea.proyecto_id)
-  const sprint = sprints.find((s) => s.id === tarea.sprint_id)
-
-  function onGuardar(formData: FormData) {
-    iniciarTransicion(async () => {
-      await actualizarTarea(tarea.id, formData)
-      setEditando(false)
-    })
+  function cambiarAbierto(v: boolean) {
+    setAbierto(v)
+    if (v) return
+    setEditando(false)
+    // Al cerrar se limpia el deep link, para que un refresh no reabra.
+    if (searchParams.get("tarea")) {
+      const params = new URLSearchParams(searchParams)
+      params.delete("tarea")
+      const qs = params.toString()
+      router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false })
+    }
   }
 
-  function onComentar(formData: FormData) {
-    iniciarComentario(async () => {
-      await comentarTarea(tarea.id, formData)
+  function onGuardar(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const formData = new FormData(e.currentTarget)
+    iniciarTransicion(async () => {
+      try {
+        await actualizarTarea(tarea.id, formData)
+        setEditando(false)
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "No se pudo guardar")
+      }
     })
   }
 
   return (
-    <Dialog
-      open={abierto}
-      onOpenChange={(v) => {
-        setAbierto(v)
-        if (!v) {
-          setEditando(false)
-          // Al cerrar se limpia el deep link, para que un refresh no reabra.
-          if (searchParams.get("tarea")) {
-            const params = new URLSearchParams(searchParams)
-            params.delete("tarea")
-            const qs = params.toString()
-            router.replace(`/tareas${qs ? `?${qs}` : ""}`, { scroll: false })
-          }
-        }
-      }}
-    >
-      <DialogTrigger
-        render={<button type="button" className="w-full cursor-pointer text-left" />}
+    <>
+      <button
+        type="button"
+        className="block w-full cursor-pointer rounded-[10px] text-left"
+        onClick={() => setAbierto(true)}
       >
         {children}
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <span className="font-mono text-sm text-muted-foreground">
-              {codigoTarea(tarea.numero)}
-            </span>
-            {tarea.titulo}
-          </DialogTitle>
-        </DialogHeader>
-
-        {editando ? (
-          <form action={onGuardar}>
-            <CamposTarea
-              tarea={tarea}
-              socios={socios}
-              clientes={clientes}
-              proyectos={proyectos}
-              sprints={sprints}
-            />
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setEditando(false)}
-                disabled={pendiente}
-              >
+      </button>
+      {editando ? (
+        <Popover
+          open={abierto}
+          onOpenChange={cambiarAbierto}
+          aria-label={`Editar ${codigoTarea(tarea.numero)}`}
+          onSubmit={onGuardar}
+          acciones={
+            <>
+              <Button type="button" variant="ghost" onClick={() => setEditando(false)} disabled={pendiente}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={pendiente}>
+              <PopoverPrimario pendiente={pendiente}>
                 {pendiente && <Spinner data-icon="inline-start" />}
                 Guardar cambios
-              </Button>
-            </DialogFooter>
-          </form>
-        ) : (
-          <div className="flex flex-col gap-4 py-2">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <Dato label="Columna">
-                <Badge variant={ESTADOS_TAREA[tarea.estado].variant}>
-                  {ESTADOS_TAREA[tarea.estado].label}
-                </Badge>
-              </Dato>
-              <Dato label="Prioridad">
-                <Badge variant={PRIORIDADES_TAREA[tarea.prioridad].variant}>
-                  {PRIORIDADES_TAREA[tarea.prioridad].label}
-                </Badge>
-              </Dato>
-              <Dato label="Responsable">{responsable?.nombre ?? "Sin asignar"}</Dato>
-              <Dato label="Fecha límite">{tarea.fecha_limite ?? "—"}</Dato>
-              {tarea.sprint_id && (
-                <Dato label="Sprint">
-                  {sprint ? sprint.nombre : "Sprint cerrado (archivada)"}
-                </Dato>
-              )}
-              {/* Planificación: sólo se muestra lo que está cargado. Una tarea
-                  de empresa no lleva nada de esto y no tiene por qué mostrar
-                  cuatro guiones. */}
-              {tarea.codigo_proyecto && (
-                <Dato label="Código">
-                  <span className="font-mono">{tarea.codigo_proyecto}</span>
-                </Dato>
-              )}
-              {tarea.epica && (
-                <Dato label="Épica">
-                  <span className="font-mono">{tarea.epica}</span>
-                </Dato>
-              )}
-              {tarea.estimacion && (
-                <Dato label="Estimación">
-                  {tarea.estimacion} {tarea.estimacion === 1 ? "punto" : "puntos"}
-                </Dato>
-              )}
-              {tarea.horas != null && (
-                <Dato label="Horas dedicadas">
-                  {tarea.horas.toLocaleString("es-UY")} h
-                </Dato>
-              )}
-              {tarea.moscow && (
-                <Dato label="MoSCoW">
-                  <Badge variant={MOSCOW_TAREA[tarea.moscow].variant}>
-                    {MOSCOW_TAREA[tarea.moscow].label}
-                  </Badge>
-                </Dato>
-              )}
-              <Dato label="Cliente">
-                {cliente ? (
-                  <Link
-                    href={`/clientes/${cliente.id}`}
-                    className="text-primary hover:underline"
-                  >
-                    {cliente.nombre}
-                  </Link>
-                ) : (
-                  "Empresa"
-                )}
-              </Dato>
-              <Dato label="Proyecto">
-                {proyecto ? (
-                  <Link
-                    href={`/proyectos/${proyecto.id}`}
-                    className="text-primary hover:underline"
-                  >
-                    {proyecto.nombre}
-                  </Link>
-                ) : (
-                  "—"
-                )}
-              </Dato>
-              {tarea.github_repo && tarea.github_issue_number && (
-                <Dato label="GitHub">
-                  <a
-                    href={`https://github.com/${tarea.github_repo}/issues/${tarea.github_issue_number}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-primary hover:underline"
-                  >
-                    {tarea.github_repo}#{tarea.github_issue_number}
-                  </a>
-                </Dato>
-              )}
-            </div>
+              </PopoverPrimario>
+            </>
+          }
+        >
+          <p className="zq-rotulo">{codigoTarea(tarea.numero)}</p>
+          <PopoverTitulo>Editar tarea</PopoverTitulo>
+          <CamposTarea
+            tarea={tarea}
+            socios={socios}
+            clientes={clientes}
+            proyectos={proyectos}
+            sprints={sprints}
+          />
+        </Popover>
+      ) : (
+        <Ficha
+          abierto={abierto}
+          onAbiertoChange={cambiarAbierto}
+          onEditar={() => setEditando(true)}
+          tarea={tarea}
+          comentarios={comentarios}
+          versiones={versiones}
+          socios={socios}
+          clientes={clientes}
+          proyectos={proyectos}
+          sprints={sprints}
+        />
+      )}
+    </>
+  )
+}
 
-            {tarea.descripcion && (
-              <p className="text-sm whitespace-pre-wrap">{tarea.descripcion}</p>
-            )}
+function Ficha({
+  abierto,
+  onAbiertoChange,
+  onEditar,
+  tarea,
+  comentarios,
+  versiones,
+  socios,
+  clientes,
+  proyectos,
+  sprints,
+}: {
+  abierto: boolean
+  onAbiertoChange: (v: boolean) => void
+  onEditar: () => void
+  tarea: Tarea
+  comentarios: ComentarioTarea[]
+  versiones: VersionTarea[]
+  socios: Socio[]
+  clientes: ClienteOpcion[]
+  proyectos: ProyectoOpcion[]
+  sprints: Sprint[]
+}) {
+  const [, iniciarTransicion] = useTransition()
+  // Los chips cambian al toque; el server confirma al revalidar.
+  const [datos, cambiarOptimista] = useOptimistic(
+    { estado: tarea.estado, prioridad: tarea.prioridad, asignado_a: tarea.asignado_a } as Datos,
+    (actual: Datos, cambio: Partial<Datos>) => ({ ...actual, ...cambio })
+  )
 
-            {briefVacio(tarea) ? (
-              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                El brief está vacío. Pedile a Claude &quot;desarrollá{" "}
-                {codigoTarea(tarea.numero)}&quot; desde claude.ai (con el
-                conector del backoffice) para completarlo entrevistándote, o
-                editá la tarjeta a mano.
-              </div>
+  function cambiar(cambio: Partial<Datos>, accion: () => Promise<void>) {
+    iniciarTransicion(async () => {
+      cambiarOptimista(cambio)
+      try {
+        await accion()
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "No se pudo guardar el cambio")
+      }
+    })
+  }
+
+  const nombreSocio = (id: string | null) => socios.find((s) => s.id === id)?.nombre ?? null
+  const responsable = nombreSocio(datos.asignado_a)
+  const cliente = clientes.find((c) => c.id === tarea.cliente_id)
+  const proyecto = proyectos.find((p) => p.id === tarea.proyecto_id)
+  const sprint = sprints.find((s) => s.id === tarea.sprint_id)
+  const creador = nombreSocio(tarea.created_by)?.split(" ")[0]
+
+  return (
+    <Popover
+      open={abierto}
+      onOpenChange={onAbiertoChange}
+      aria-label={`${codigoTarea(tarea.numero)} · ${tarea.titulo}`}
+      datos={
+        <>
+          <Dato label="Columna">
+            <DropdownMenu>
+              <DropdownMenuTrigger className={CHIP}>
+                <PuntoColumna estado={datos.estado} />
+                {ESTADOS_TAREA[datos.estado].label}
+                <ChevronDownIcon className="size-3.5 text-muted-foreground" aria-hidden="true" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-44">
+                <DropdownMenuRadioGroup
+                  value={datos.estado}
+                  onValueChange={(v) => {
+                    const estado = v as EstadoTarea
+                    cambiar({ estado }, () => cambiarColumnaTarea(tarea.id, estado))
+                  }}
+                >
+                  {ESTADOS_TAREA_ORDEN.map((e) => (
+                    <DropdownMenuRadioItem key={e} value={e}>
+                      <PuntoColumna estado={e} />
+                      {ESTADOS_TAREA[e].label}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </Dato>
+          <Dato label="Prioridad">
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                className={cn(
+                  CHIP,
+                  (datos.prioridad === "alta" || datos.prioridad === "urgente") && "font-semibold text-aviso"
+                )}
+              >
+                {PRIORIDADES_TAREA[datos.prioridad].label}
+                <ChevronDownIcon className="size-3.5 text-muted-foreground" aria-hidden="true" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-40">
+                <DropdownMenuRadioGroup
+                  value={datos.prioridad}
+                  onValueChange={(v) => {
+                    const prioridad = v as PrioridadTarea
+                    cambiar({ prioridad }, () => cambiarDatoTarea(tarea.id, { prioridad }))
+                  }}
+                >
+                  {Object.entries(PRIORIDADES_TAREA).map(([valor, p]) => (
+                    <DropdownMenuRadioItem key={valor} value={valor}>
+                      {p.label}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </Dato>
+          <Dato label="Responsable">
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                className={cn(
+                  responsable
+                    ? CHIP
+                    : "inline-flex min-h-8 items-center rounded-md text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                )}
+                aria-label={responsable ? `Responsable: ${responsable}. Cambiar` : "Asignar responsable"}
+              >
+                {responsable ? (
+                  <>
+                    <AvatarSocio nombre={responsable} className="-ml-1.5 size-5 text-[9px]" />
+                    {responsable}
+                  </>
+                ) : (
+                  "+ Asignar"
+                )}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-44">
+                <DropdownMenuRadioGroup
+                  value={datos.asignado_a ?? ""}
+                  onValueChange={(v) => {
+                    const asignado_a = (v as string) || null
+                    cambiar({ asignado_a }, () => cambiarDatoTarea(tarea.id, { asignado_a }))
+                  }}
+                >
+                  {socios.map((s) => (
+                    <DropdownMenuRadioItem key={s.id} value={s.id}>
+                      {s.nombre}
+                    </DropdownMenuRadioItem>
+                  ))}
+                  <DropdownMenuRadioItem value="">Sin asignar</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </Dato>
+          <Dato label="Vence">
+            {tarea.fecha_limite ? (
+              <FechaLimite tarea={{ ...tarea, estado: datos.estado }} corta={false} />
             ) : (
-              <div className="flex flex-col gap-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {CAMPOS_BRIEF.map((campo) =>
-                    tarea[campo] ? (
-                      <div
-                        key={campo}
-                        className={cn(
-                          "flex flex-col gap-1 rounded-lg border p-3",
-                          campo === "plan" && "sm:col-span-2"
-                        )}
-                      >
-                        <span className="text-xs font-medium text-muted-foreground">
-                          {BRIEF_TAREA[campo].label}
-                        </span>
-                        <p className="text-sm whitespace-pre-wrap">{tarea[campo]}</p>
-                      </div>
-                    ) : null
-                  )}
-                </div>
-                {/* Brief a medias: el caso típico son las tarjetas que salen de
-                    graduar una idea, que nacen con contexto y sin criterios. */}
-                {!tareaDesarrollada(tarea) && (
-                  <p className="text-sm text-muted-foreground">
-                    Falta el resultado esperado, así que todavía no es resoluble.
-                    Pedile a Claude &quot;desarrollá {codigoTarea(tarea.numero)}
-                    &quot; para completar el brief.
-                  </p>
-                )}
-              </div>
+              <span className="text-muted-foreground">Sin fecha</span>
             )}
-
-            {tarea.etiquetas.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {tarea.etiquetas.map((e) => (
-                  <Badge key={e} variant="secondary">
-                    {e}
-                  </Badge>
-                ))}
-              </div>
-            )}
-
-            <Separator />
-
-            <div className="flex flex-col gap-3">
-              <span className="text-sm font-medium">
-                Comentarios{comentarios.length > 0 && ` (${comentarios.length})`}
-              </span>
-              {comentarios.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Sin comentarios todavía.
-                </p>
+          </Dato>
+          <Dato label="Sprint">
+            {sprint
+              ? codigoSprint(sprint.numero)
+              : tarea.sprint_id
+                ? "Sprint cerrado (archivada)"
+                : <span className="text-muted-foreground">Sin sprint</span>}
+          </Dato>
+          <Dato label="Cliente · Proyecto">
+            <span>
+              {cliente ? (
+                <Link href={`/clientes/${cliente.id}`} className="hover:underline">
+                  {cliente.nombre}
+                </Link>
               ) : (
-                <div className="flex flex-col gap-3">
-                  {comentarios.map((c) => (
-                    <div key={c.id} className="flex flex-col gap-0.5">
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span className="font-medium text-foreground">
-                          {c.autor}
-                        </span>
-                        {c.created_at.slice(0, 10)}
-                      </div>
-                      <p className="text-sm whitespace-pre-wrap">{c.cuerpo}</p>
-                    </div>
-                  ))}
-                </div>
+                "Interna"
               )}
-              <form action={onComentar} className="flex flex-col items-end gap-2">
-                <Textarea
-                  name="cuerpo"
-                  rows={2}
-                  required
-                  placeholder="Escribir un comentario"
-                />
-                <Button type="submit" size="sm" variant="outline" disabled={comentando}>
-                  {comentando ? (
-                    <Spinner data-icon="inline-start" />
-                  ) : (
-                    <SendIcon data-icon="inline-start" />
-                  )}
-                  Comentar
-                </Button>
-              </form>
-            </div>
+              {" · "}
+              {proyecto ? (
+                <Link href={`/proyectos/${proyecto.id}`} className="hover:underline">
+                  {proyecto.nombre}
+                </Link>
+              ) : (
+                "—"
+              )}
+            </span>
+          </Dato>
+          {(tarea.estimacion || tarea.codigo_proyecto || tarea.epica || tarea.horas != null) && (
+            <Dato label="Planificación">
+              <span className="text-[13px]">
+                {[
+                  tarea.codigo_proyecto,
+                  tarea.epica,
+                  tarea.estimacion && `${tarea.estimacion} ${tarea.estimacion === 1 ? "punto" : "puntos"}`,
+                  tarea.horas != null && `${tarea.horas.toLocaleString("es-UY")} h`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            </Dato>
+          )}
+          {tarea.github_repo && tarea.github_issue_number && (
+            <Dato label="GitHub">
+              <a
+                href={`https://github.com/${tarea.github_repo}/issues/${tarea.github_issue_number}`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[13px] hover:underline"
+              >
+                {tarea.github_repo}#{tarea.github_issue_number} ↗
+              </a>
+            </Dato>
+          )}
+          <p className="m-0 text-xs leading-4 text-muted-foreground">
+            Creada{creador && ` por ${creador}`} · {minuscula(fechaRelativa(tarea.created_at))}
+            {versiones.length > 1 && ` · ${versiones.length} versiones`}
+          </p>
+        </>
+      }
+      acciones={
+        <div className="flex w-full items-center justify-between gap-2">
+          <BotonEliminar
+            soloIcono
+            accion={async () => {
+              await eliminarTarea(tarea.id)
+              onAbiertoChange(false)
+            }}
+            titulo={`¿Eliminar ${codigoTarea(tarea.numero)}?`}
+            descripcion="La tarjeta deja de verse en el tablero. Se puede recuperar desde la base si hiciera falta."
+          />
+          <Button onClick={onEditar} className="max-escritorio:h-12 max-escritorio:flex-1">
+            Editar
+          </Button>
+        </div>
+      }
+    >
+      <div className="pr-8">
+        <p className="m-0 text-xs leading-4 font-semibold text-muted-foreground">
+          {codigoTarea(tarea.numero)}
+        </p>
+        <PopoverTitulo className="mt-0.5">{tarea.titulo}</PopoverTitulo>
+      </div>
 
-            {versiones.length > 0 && (
-              <details>
-                <summary className="cursor-pointer text-xs text-muted-foreground select-none">
-                  Historial ({versiones.length}{" "}
-                  {versiones.length === 1 ? "versión" : "versiones"})
-                </summary>
-                <div className="flex flex-col gap-1.5 pt-2">
-                  {versiones.map((v, i) => (
-                    <div
-                      key={v.id}
-                      className="flex items-center gap-2 text-xs text-muted-foreground"
-                    >
-                      <span className="font-mono">v{versiones.length - i}</span>
-                      <span className="text-foreground">{v.autor}</span>
-                      <span className="ml-auto">{v.created_at.slice(0, 10)}</span>
-                    </div>
-                  ))}
-                </div>
-              </details>
-            )}
+      {tarea.etiquetas.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {tarea.etiquetas.map((e) => (
+            <span key={e} className="rounded-full bg-muted px-2.5 text-xs leading-[22px]">
+              {e}
+            </span>
+          ))}
+        </div>
+      )}
 
-            <DialogFooter>
-              <BotonEliminar
-                accion={async () => {
-                  await eliminarTarea(tarea.id)
-                  setAbierto(false)
-                }}
-                titulo={`¿Eliminar ${codigoTarea(tarea.numero)}?`}
-                descripcion="La tarjeta deja de verse en el tablero. Se puede recuperar desde la base si hiciera falta."
-              />
-              <Button variant="outline" onClick={() => setEditando(true)}>
-                <PencilIcon data-icon="inline-start" />
-                Editar
-              </Button>
-            </DialogFooter>
-          </div>
+      {tarea.descripcion && <Descripcion texto={tarea.descripcion} />}
+
+      <Brief tarea={tarea} />
+
+      <Comentarios tareaId={tarea.id} comentarios={comentarios} />
+    </Popover>
+  )
+}
+
+function Descripcion({ texto }: { texto: string }) {
+  const [completa, setCompleta] = useState(false)
+  const larga = texto.length > 280 || texto.split("\n").length > 4
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <p className={cn("m-0 whitespace-pre-wrap", !completa && larga && "line-clamp-4")}>{texto}</p>
+      {larga && (
+        <button
+          type="button"
+          onClick={() => setCompleta((v) => !v)}
+          className="text-[13px] font-semibold hover:underline"
+        >
+          {completa ? "Leer menos" : "Leer más"}
+        </button>
+      )}
+    </div>
+  )
+}
+
+// El brief: si falta el resultado esperado, invita a que Claude lo desarrolle;
+// si está, se lee desplegándolo.
+function Brief({ tarea }: { tarea: Tarea }) {
+  const [abierto, setAbierto] = useState(false)
+  const listo = tareaDesarrollada(tarea)
+  const vacio = briefVacio(tarea)
+
+  return (
+    <div className="flex flex-col gap-3 rounded-[10px] bg-muted px-4 py-3.5">
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden="true"
+          className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-lima text-carbon"
+        >
+          <SparklesIcon className="size-4" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <strong className="block font-semibold">
+            {listo ? "Brief listo" : vacio ? "Sin brief todavía" : "Brief a medias"}
+          </strong>
+          <span className="block text-xs leading-4 text-muted-foreground">
+            {listo
+              ? "Qué hay que lograr y cómo"
+              : vacio
+                ? "Claude te hace unas preguntas y lo completa"
+                : "Falta el resultado esperado: Claude lo completa"}
+          </span>
+        </span>
+        {listo ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-expanded={abierto}
+            onClick={() => setAbierto((v) => !v)}
+          >
+            {abierto ? "Ocultar" : "Leer"}
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={<a href={urlDesarrollarTarea(tarea)} target="_blank" rel="noreferrer" />}
+          >
+            Desarrollar
+          </Button>
         )}
-      </DialogContent>
-    </Dialog>
+      </div>
+      {(abierto || (!listo && !vacio)) && (
+        <dl className="m-0 flex flex-col gap-2.5 border-t border-border pt-3">
+          {CAMPOS_BRIEF.map((campo) =>
+            tarea[campo] ? (
+              <div key={campo}>
+                <dt className="zq-rotulo">{BRIEF_TAREA[campo].label}</dt>
+                <dd className="m-0 whitespace-pre-wrap">{tarea[campo]}</dd>
+              </div>
+            ) : null
+          )}
+        </dl>
+      )}
+    </div>
+  )
+}
+
+function Comentarios({ tareaId, comentarios }: { tareaId: string; comentarios: ComentarioTarea[] }) {
+  const [texto, setTexto] = useState("")
+  const [enviando, iniciarEnvio] = useTransition()
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  function enviar(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const cuerpo = texto.trim()
+    if (!cuerpo) return
+    const datos = new FormData()
+    datos.set("cuerpo", cuerpo)
+    iniciarEnvio(async () => {
+      try {
+        await comentarTarea(tareaId, datos)
+        setTexto("")
+        inputRef.current?.focus()
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "No se pudo comentar")
+      }
+    })
+  }
+
+  return (
+    <section className="mt-1 flex flex-1 flex-col gap-3" aria-label="Comentarios">
+      <h3 className="zq-rotulo">Comentarios</h3>
+      {comentarios.length === 0 ? (
+        <p className="m-0 -mt-1 text-xs text-muted-foreground">Sin comentarios todavía</p>
+      ) : (
+        <ul className="m-0 flex list-none flex-col gap-3 p-0">
+          {comentarios.map((c) => (
+            <li key={c.id} className="flex gap-2.5">
+              <AvatarSocio nombre={c.autor} className="size-7 text-[11px]" />
+              <div className="flex min-w-0 flex-col">
+                <span>
+                  <strong className="font-semibold">{c.autor.split(" ")[0]}</strong>{" "}
+                  <span className="text-xs text-muted-foreground" title={fechaCorta(c.created_at)}>
+                    · {minuscula(fechaRelativa(c.created_at))}
+                  </span>
+                </span>
+                <span className="whitespace-pre-wrap">{c.cuerpo}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form
+        onSubmit={enviar}
+        className="mt-auto flex items-center gap-2 rounded-[10px] border border-input py-1.5 pr-1.5 pl-3.5 focus-within:ring-2 focus-within:ring-ring"
+      >
+        <input
+          ref={inputRef}
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          placeholder="Escribí un comentario…"
+          aria-label="Comentario"
+          className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
+        />
+        <Button type="submit" size="icon" aria-label="Enviar comentario" disabled={enviando || !texto.trim()}>
+          {enviando ? <Spinner /> : <ArrowUpIcon />}
+        </Button>
+      </form>
+    </section>
   )
 }

@@ -63,9 +63,8 @@ function semanasDelMes(mes: string): string[][] {
 
 function hrefMes(mes: string, qs: string): string {
   const params = new URLSearchParams(qs)
-  params.set("vista", "calendario")
   params.set("mes", mes)
-  return `/tareas?${params.toString()}`
+  return `/tareas/calendario?${params.toString()}`
 }
 
 export function Calendario({

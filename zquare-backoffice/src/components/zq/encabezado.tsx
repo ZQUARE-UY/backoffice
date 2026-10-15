@@ -32,7 +32,14 @@ export function Encabezado({
   return (
     <header className={cn("zq-encabezado", className)}>
       <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-3">
-        <div className="flex min-w-0 items-center gap-3.5">
+        {/* En celular, el título de una sección ya está en la barra de
+            arriba: queda solo para lectores de pantalla. */}
+        <div
+          className={cn(
+            "flex min-w-0 items-center gap-3.5",
+            !volverA && !rotulo && "max-escritorio:sr-only"
+          )}
+        >
           {volverA && (
             <Link href={volverA.href} className="zq-volver" aria-label={volverA.label}>
               <ArrowLeftIcon className="size-[18px]" aria-hidden="true" />

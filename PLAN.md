@@ -927,3 +927,12 @@ cuatro.
   lateral de notificaciones (derivadas de la base, sin tabla nueva; lo leído
   se guarda en el navegador), encabezado de página, Popover/Hoja inferior y
   menú de celular por debajo de 720px con botón flotante para crear.
+- **2026-10-15** — Rediseño, Paso 2 · Tareas (tablero, ficha y nueva tarea):
+  las vistas pasan a rutas propias (`/tareas`, `/tareas/backlog`,
+  `/tareas/calendario`; los links viejos con `?vista=` redirigen). Tablero
+  con barra del sprint activo (avance contado en la base), tres columnas y
+  Hecho resumido; en celular, una columna por vez. Ficha de tarea en Popover
+  con chips para cambiar columna, prioridad y responsable al toque (acciones
+  `cambiarColumnaTarea` / `cambiarDatoTarea`, sin versionar) y botón
+  "Desarrollar" que abre claude.ai con el prompt de `desarrollar_tarea`.
+  Nueva tarea en Popover con el interruptor "Que Claude desarrolle el brief".

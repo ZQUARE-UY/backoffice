@@ -54,7 +54,6 @@ import {
   diasRestantesSprint,
   ESTADOS_SPRINT,
   type Sprint,
-  type Tarea,
 } from "@/lib/dominio"
 
 import {
@@ -66,27 +65,9 @@ import {
 } from "./actions"
 import { type ProyectoOpcion } from "./campos-tarea"
 import { CeremoniasSprint } from "./ceremonias-sprint"
+import { type ResumenSprint } from "./resumen"
 
-// Métricas de un sprint calculadas por quien lo renderiza (backlog o tablero),
-// a partir de las tarjetas que ya tiene cargadas.
-export type ResumenSprint = {
-  total: number
-  hechas: number
-  puntos: number
-  puntos_hechos: number
-}
-
-export function resumirSprint(tarjetas: Tarea[]): ResumenSprint {
-  return tarjetas.reduce<ResumenSprint>(
-    (r, t) => ({
-      total: r.total + 1,
-      hechas: r.hechas + (t.estado === "hecho" ? 1 : 0),
-      puntos: r.puntos + (t.estimacion ?? 0),
-      puntos_hechos: r.puntos_hechos + (t.estado === "hecho" ? (t.estimacion ?? 0) : 0),
-    }),
-    { total: 0, hechas: 0, puntos: 0, puntos_hechos: 0 }
-  )
-}
+export { resumirSprint, type ResumenSprint } from "./resumen"
 
 function fechaCorta(fecha: string): string {
   const [a, m, d] = fecha.split("-")
@@ -349,12 +330,8 @@ function SprintAcciones({
   const [editar, setEditar] = useState(false)
   const [ceremonias, setCeremonias] = useState(false)
   const [iniciar, setIniciar] = useState(false)
-  const [completar, setCompletar] = useState(false)
   const [eliminar, setEliminar] = useState(false)
   const [pendiente, iniciarTransicion] = useTransition()
-
-  const pendientes = resumen.total - resumen.hechas
-  const otrosPlanificados = sprintsPlanificados.filter((s) => s.id !== sprint.id)
 
   function onGuardar(formData: FormData) {
     iniciarTransicion(async () => {
@@ -366,14 +343,6 @@ function SprintAcciones({
       if (await conToast(() => iniciarSprint(sprint.id, formData))) {
         setIniciar(false)
         toast.success(`${sprint.nombre} iniciado: sus tarjetas ya están en el tablero`)
-      }
-    })
-  }
-  function onCompletar(formData: FormData) {
-    iniciarTransicion(async () => {
-      if (await conToast(() => completarSprint(sprint.id, formData))) {
-        setCompletar(false)
-        toast.success(`${sprint.nombre} completado. Tablero limpio.`)
       }
     })
   }
@@ -392,10 +361,11 @@ function SprintAcciones({
         </Button>
       )}
       {sprint.estado === "activo" && (
-        <Button size="sm" variant="outline" onClick={() => setCompletar(true)}>
-          <CheckCircle2Icon data-icon="inline-start" />
-          Completar sprint
-        </Button>
+        <CompletarSprint
+          sprint={sprint}
+          resumen={resumen}
+          sprintsPlanificados={sprintsPlanificados}
+        />
       )}
       <DropdownMenu>
         <DropdownMenuTrigger
@@ -502,12 +472,72 @@ function SprintAcciones({
         </DialogContent>
       </Dialog>
 
+      <AlertDialog open={eliminar} onOpenChange={setEliminar}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar {sprint.nombre}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Sus tarjetas vuelven al backlog. No se borra ninguna tarjeta.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pendiente}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={pendiente}
+              onClick={(e) => {
+                e.preventDefault()
+                onEliminar()
+              }}
+            >
+              {pendiente && <Spinner data-icon="inline-start" />}
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+
+// "Completar sprint": lo hecho queda archivado en el sprint y sale del
+// tablero; las pendientes van a otro sprint planificado o al backlog.
+export function CompletarSprint({
+  sprint,
+  resumen,
+  sprintsPlanificados,
+  variante = "outline",
+}: {
+  sprint: Sprint
+  resumen: ResumenSprint
+  sprintsPlanificados: Sprint[]
+  variante?: "outline" | "ghost"
+}) {
+  const [completar, setCompletar] = useState(false)
+  const [pendiente, iniciarTransicion] = useTransition()
+  const pendientes = resumen.total - resumen.hechas
+  const otrosPlanificados = sprintsPlanificados.filter((s) => s.id !== sprint.id)
+
+  function onCompletar(formData: FormData) {
+    iniciarTransicion(async () => {
+      if (await conToast(() => completarSprint(sprint.id, formData))) {
+        setCompletar(false)
+        toast.success(`${codigoSprint(sprint.numero)} completado. Tablero limpio.`)
+      }
+    })
+  }
+
+  return (
+    <>
+      <Button size="sm" variant={variante} onClick={() => setCompletar(true)}>
+        {variante === "outline" && <CheckCircle2Icon data-icon="inline-start" />}
+        Completar sprint
+      </Button>
       <Dialog open={completar} onOpenChange={setCompletar}>
         <DialogContent className="sm:max-w-lg">
           {completar && (
             <form action={onCompletar}>
               <DialogHeader>
-                <DialogTitle>Completar {sprint.nombre}</DialogTitle>
+                <DialogTitle>Completar {codigoSprint(sprint.numero)}</DialogTitle>
                 <DialogDescription>
                   {resumen.hechas} {resumen.hechas === 1 ? "tarjeta hecha" : "tarjetas hechas"}
                   {resumen.puntos > 0 && ` (${resumen.puntos_hechos} de ${resumen.puntos} pts)`}
@@ -549,29 +579,6 @@ function SprintAcciones({
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={eliminar} onOpenChange={setEliminar}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar {sprint.nombre}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Sus tarjetas vuelven al backlog. No se borra ninguna tarjeta.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={pendiente}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={pendiente}
-              onClick={(e) => {
-                e.preventDefault()
-                onEliminar()
-              }}
-            >
-              {pendiente && <Spinner data-icon="inline-start" />}
-              Eliminar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   )
 }
