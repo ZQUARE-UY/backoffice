@@ -5,19 +5,31 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { type Cliente, type Decision, type Socio } from "@/lib/dominio"
+import { fechaCorta } from "@/lib/formato"
+
+// Reuniones agendadas para elegir de cuál salió una decisión (`dia` en
+// YYYY-MM-DD, hora de Montevideo).
+export type OpcionReunion = { id: string; titulo: string; dia: string }
 
 export function CamposDecision({
   decision,
   socios,
   clientes,
+  reuniones,
 }: {
   decision?: Decision
   socios: Socio[]
   clientes: Pick<Cliente, "id" | "nombre">[]
+  reuniones: OpcionReunion[]
 }) {
   const opcionesCliente = [
     { valor: "", label: "Sin cliente (decisión de empresa)" },
     ...clientes.map((c) => ({ valor: c.id, label: c.nombre })),
+  ]
+
+  const opcionesReunion = [
+    { valor: "", label: "No salió de una reunión" },
+    ...reuniones.map((r) => ({ valor: r.id, label: `${fechaCorta(r.dia)} · ${r.titulo}` })),
   ]
 
   return (
@@ -78,6 +90,15 @@ export function CamposDecision({
           name="cliente_id"
           defaultValue={decision?.cliente_id ?? ""}
           opciones={opcionesCliente}
+        />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="reunion_id">Reunión de origen (opcional)</FieldLabel>
+        <SelectCampo
+          id="reunion_id"
+          name="reunion_id"
+          defaultValue={decision?.reunion_id ?? ""}
+          opciones={opcionesReunion}
         />
       </Field>
     </FieldGroup>

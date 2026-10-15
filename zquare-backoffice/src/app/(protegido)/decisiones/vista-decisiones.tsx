@@ -10,12 +10,13 @@ import { type Cliente, type Decision, type Socio } from "@/lib/dominio"
 import { fechaCorta, iniciales } from "@/lib/formato"
 import { cn } from "@/lib/utils"
 
+import { type OpcionReunion } from "./campos-decision"
 import { DecisionAcciones } from "./decision-acciones"
 import { NuevaDecision } from "./nueva-decision"
 import { esSocio, puntosDe, resumenDe } from "./puntos"
 
-// La reunión de la que salió la decisión (mismo día y mismo cliente o
-// proyecto), con su transcripción si la hay. La arma el server.
+// La reunión de la que salió la decisión (`reunion_id`), con su
+// transcripción si la hay. La arma el server.
 export type OrigenDecision = { id: string; titulo: string; transcripcion: string | null }
 
 export function VistaDecisiones({
@@ -24,6 +25,7 @@ export function VistaDecisiones({
   clientes,
   proyectos,
   origenes,
+  reuniones,
   decisionAbierta,
 }: {
   decisiones: Decision[]
@@ -31,6 +33,7 @@ export function VistaDecisiones({
   clientes: Pick<Cliente, "id" | "nombre">[]
   proyectos: { id: string; nombre: string; cliente_id: string | null }[]
   origenes: Record<string, OrigenDecision>
+  reuniones: OpcionReunion[]
   decisionAbierta?: string
 }) {
   const router = useRouter()
@@ -75,7 +78,7 @@ export function VistaDecisiones({
             </h2>
             <span className="text-xs text-sidebar-muted">Siempre fijados arriba</span>
           </div>
-          <NuevaDecision socios={socios} clientes={clientes} acuerdo />
+          <NuevaDecision socios={socios} clientes={clientes} reuniones={reuniones} acuerdo />
         </div>
         {acuerdos.length === 0 ? (
           <p className="m-0 text-sm text-sidebar-muted">Todavía no hay acuerdos de socios.</p>
@@ -170,6 +173,7 @@ export function VistaDecisiones({
           decision={decision}
           socios={socios}
           clientes={clientes}
+          reuniones={reuniones}
           cliente={clienteDe(decision) ? (nombreCliente.get(clienteDe(decision)!) ?? null) : null}
           clienteId={clienteDe(decision)}
           proyecto={decision.proyecto_id ? (proyecto.get(decision.proyecto_id) ?? null) : null}
@@ -188,6 +192,7 @@ function FichaDecision({
   decision,
   socios,
   clientes,
+  reuniones,
   cliente,
   clienteId,
   proyecto,
@@ -197,6 +202,7 @@ function FichaDecision({
   decision: Decision
   socios: Socio[]
   clientes: Pick<Cliente, "id" | "nombre">[]
+  reuniones: OpcionReunion[]
   cliente: string | null
   clienteId: string | null
   proyecto: { id: string; nombre: string } | null
@@ -220,7 +226,7 @@ function FichaDecision({
       aria-label={decision.titulo}
       acciones={
         <>
-          <DecisionAcciones decision={decision} socios={socios} clientes={clientes} />
+          <DecisionAcciones decision={decision} socios={socios} clientes={clientes} reuniones={reuniones} />
           <PopoverCancelar>Cerrar</PopoverCancelar>
         </>
       }
@@ -237,7 +243,11 @@ function FichaDecision({
           )}
         </div>
         <PopoverTitulo>{decision.titulo}</PopoverTitulo>
-        {origen && <span className="text-[13px] text-muted-foreground">Reunión «{origen.titulo}»</span>}
+        {origen && (
+          <Link href={`/reuniones/${origen.id}`} className="self-start text-[13px] text-muted-foreground hover:underline">
+            Reunión «{origen.titulo}»
+          </Link>
+        )}
       </div>
 
       {puntos.length > 0 && (

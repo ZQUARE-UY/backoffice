@@ -642,6 +642,8 @@ export type Decision = {
   participantes: string[]
   cliente_id: string | null
   proyecto_id: string | null
+  // La reunión de la que salió, si salió de una.
+  reunion_id: string | null
   created_at: string
   updated_at: string
 }

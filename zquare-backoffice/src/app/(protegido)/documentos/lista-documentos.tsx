@@ -30,7 +30,7 @@ export type FilaDocumento = {
   cliente: { id: string; nombre: string } | null
   proyecto: { id: string; nombre: string } | null
   // Con qué se relaciona: la reunión de la que es transcripción y las
-  // decisiones de ese día.
+  // decisiones que salieron de ella.
   vinculos: {
     reunion: { id: string; titulo: string } | null
     decisiones: { id: string; titulo: string }[]

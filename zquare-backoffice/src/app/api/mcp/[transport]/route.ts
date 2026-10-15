@@ -886,7 +886,7 @@ const handler = createMcpHandler(
               .is("deleted_at", null),
             supabase
               .from("decisiones")
-              .select("fecha, titulo, detalle, participantes")
+              .select("fecha, titulo, detalle, participantes, reunion:solicitudes_reunion(numero, titulo)")
               .eq("cliente_id", cliente.id)
               .is("deleted_at", null),
             supabase
@@ -1052,7 +1052,7 @@ const handler = createMcpHandler(
         const supabase = createAdminClient()
         const { data, error } = await supabase
           .from("decisiones")
-          .select("fecha, titulo, detalle, participantes, clientes(nombre)")
+          .select("fecha, titulo, detalle, participantes, clientes(nombre), reunion:solicitudes_reunion(numero, titulo)")
           .is("deleted_at", null)
           .order("fecha", { ascending: false })
           .limit(limite ?? 30)
@@ -1165,7 +1165,7 @@ const handler = createMcpHandler(
               .is("deleted_at", null),
             supabase
               .from("decisiones")
-              .select("fecha, titulo, detalle, participantes")
+              .select("fecha, titulo, detalle, participantes, reunion:solicitudes_reunion(numero, titulo)")
               .eq("proyecto_id", id)
               .is("deleted_at", null),
             supabase
@@ -3902,18 +3902,22 @@ const handler = createMcpHandler(
       {
         title: "Registrar una decisión",
         description:
-          "Registra una decisión en la bitácora de la empresa. Opcionalmente vinculada a un cliente y/o a un proyecto por nombre — las decisiones de arranque de un proyecto (alcance acordado, stack elegido, cadencia) conviene vincularlas, así aparecen en su ficha cuando alguien las discuta meses después.",
+          "Registra una decisión en la bitácora de la empresa. Opcionalmente vinculada a un cliente y/o a un proyecto por nombre — las decisiones de arranque de un proyecto (alcance acordado, stack elegido, cadencia) conviene vincularlas, así aparecen en su ficha cuando alguien las discuta meses después. Si salió de una reunión, pasá `reunion` (su código o número, como en `transcripcion_reunion`): queda vinculada a la reunión y su transcripción, y hereda su cliente y proyecto si no se pasan.",
         inputSchema: {
           titulo: z.string().min(3),
           detalle: z.string().optional(),
           participantes: z.array(z.string()).optional(),
           cliente_nombre: z.string().optional(),
           proyecto_nombre: z.string().optional(),
+          reunion: z
+            .union([z.string(), z.number()])
+            .describe("código o número de la reunión de la que salió")
+            .optional(),
           fecha: z.string().describe("YYYY-MM-DD, default hoy").optional(),
         },
       },
       async (
-        { titulo, detalle, participantes, cliente_nombre, proyecto_nombre, fecha },
+        { titulo, detalle, participantes, cliente_nombre, proyecto_nombre, reunion, fecha },
         extra
       ) => {
         const email = extra.authInfo?.extra?.email as string | undefined
@@ -3948,6 +3952,16 @@ const handler = createMcpHandler(
           clienteId ??= (proyecto.cliente_id as string | null) ?? null
         }
 
+        // La reunión de la que salió: completa cliente y proyecto si faltan.
+        let reunionId: string | null = null
+        if (reunion !== undefined) {
+          const solicitud = await solicitudPorReferencia(reunion, supabase)
+          if (!solicitud) return texto(`No encontré la reunión "${reunion}"; no registré nada.`)
+          reunionId = solicitud.id
+          proyectoId ??= solicitud.proyecto_id
+          clienteId ??= solicitud.cliente_id
+        }
+
         const { data, error } = await supabase
           .from("decisiones")
           .insert({
@@ -3956,6 +3970,7 @@ const handler = createMcpHandler(
             participantes: participantes ?? [],
             cliente_id: clienteId,
             proyecto_id: proyectoId,
+            reunion_id: reunionId,
             fecha: fecha ?? undefined,
             created_by: socioId,
           })
@@ -4709,7 +4724,7 @@ const handler = createMcpHandler(
       {
         title: "Transcripción de una reunión",
         description:
-          "Devuelve la transcripción de una reunión grabada desde el backoffice (Whisper), con el link al Google Doc en Drive y el estado de cada parte de audio. Sirve para resumir la reunión, sacar acuerdos o crear tareas y decisiones a partir de lo hablado.",
+          "Devuelve la transcripción de una reunión grabada desde el backoffice (Whisper), con el link al Google Doc en Drive, el estado de cada parte de audio y las decisiones ya registradas desde ella. Sirve para resumir la reunión, sacar acuerdos o crear tareas y decisiones a partir de lo hablado (al crear una decisión, pasá esta reunión en `reunion`).",
         inputSchema: { reunion: z.union([z.string(), z.number()]) },
       },
       async ({ reunion }) => {
@@ -4717,7 +4732,15 @@ const handler = createMcpHandler(
         const solicitud = await solicitudPorReferencia(reunion, supabase)
         if (!solicitud) return texto(`No encontré la reunión "${reunion}".`)
 
-        const partes = await listarGrabaciones(supabase, solicitud.id)
+        const [partes, { data: decisiones }] = await Promise.all([
+          listarGrabaciones(supabase, solicitud.id),
+          supabase
+            .from("decisiones")
+            .select("fecha, titulo")
+            .eq("reunion_id", solicitud.id)
+            .is("deleted_at", null)
+            .order("created_at"),
+        ])
         if (partes.length === 0) {
           return texto(
             `La reunión ${codigoReunion(solicitud.numero)} no tiene grabaciones. Se graba desde su página en el backoffice (/reuniones/${solicitud.id}).`
@@ -4728,6 +4751,8 @@ const handler = createMcpHandler(
           reunion: codigoReunion(solicitud.numero),
           titulo: solicitud.titulo,
           documento_drive: solicitud.drive_transcripcion_url,
+          // Las que ya se registraron desde esta reunión, para no duplicarlas.
+          decisiones_registradas: decisiones ?? [],
           partes: partes.map((p) => ({
             parte: p.parte,
             estado: p.estado,
