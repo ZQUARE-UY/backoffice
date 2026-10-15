@@ -1005,3 +1005,13 @@ cuatro.
   decisiones de ese día, proyecto y cliente), la ficha de siempre y "Abrir
   en Drive". No hay un vínculo guardado documento ↔ decisión: si hace
   falta exacto, va una columna en decisiones.
+- **2026-10-15** — Rediseño, Decisiones: "Acuerdos de socios" fijados
+  arriba en una tarjeta carbón (las decisiones sin cliente ni proyecto) con
+  "+ Nuevo acuerdo"; "Decisiones por cliente" con pestañas píldora y
+  conteo. Ficha de decisión en Popover de una columna: fecha y "Cliente ·
+  Proyecto →", origen (la reunión de ese día con el mismo cliente o
+  proyecto, buscada por fecha: no hay vínculo guardado), puntos numerados
+  armados del detalle con el minuto de la reunión como chip ("▶ 40:27", si
+  el detalle lo trae) que abre la transcripción, presentes (socios en lima,
+  el resto en arena) y "Transcripción completa". Deep link
+  `/decisiones?decision=<id>`.
