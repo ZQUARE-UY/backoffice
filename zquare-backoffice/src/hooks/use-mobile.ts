@@ -25,3 +25,22 @@ function esMobileEnServer() {
 export function useIsMobile() {
   return React.useSyncExternalStore(suscribir, esMobile, esMobileEnServer)
 }
+
+// Celular para el rediseño: menos de 720px (sidebar → menú ☰, Popover → Hoja
+// inferior). Es otro corte que el de shadcn (768) a propósito: lo fija la
+// guía del rediseño y coincide con el breakpoint `escritorio:` de globals.css.
+const CELULAR = "(max-width: 719px)"
+
+function suscribirCelular(alCambiar: () => void) {
+  const mql = window.matchMedia(CELULAR)
+  mql.addEventListener("change", alCambiar)
+  return () => mql.removeEventListener("change", alCambiar)
+}
+
+export function useEsCelular() {
+  return React.useSyncExternalStore(
+    suscribirCelular,
+    () => window.matchMedia(CELULAR).matches,
+    () => false
+  )
+}

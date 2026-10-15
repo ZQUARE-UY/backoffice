@@ -22,6 +22,9 @@ import { cn } from "@/lib/utils"
 
 type Tipo = "tarea" | "idea"
 
+// Evento que abre la caja desde afuera (el botón flotante de celular).
+export const EVENTO_CREAR = "zq:crear"
+
 const TIPOS: { valor: Tipo; label: string; icono: typeof KanbanIcon; placeholder: string }[] = [
   {
     valor: "tarea",
@@ -76,8 +79,15 @@ export function CapturaRapida() {
       e.preventDefault()
       setAbierto(true)
     }
+    function abrir() {
+      setAbierto(true)
+    }
     document.addEventListener("keydown", onKey)
-    return () => document.removeEventListener("keydown", onKey)
+    window.addEventListener(EVENTO_CREAR, abrir)
+    return () => {
+      document.removeEventListener("keydown", onKey)
+      window.removeEventListener(EVENTO_CREAR, abrir)
+    }
   }, [])
 
   // Los proyectos se cargan la primera vez que se abre la caja; si falla se
