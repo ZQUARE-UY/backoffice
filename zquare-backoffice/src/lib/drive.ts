@@ -118,6 +118,29 @@ export async function listarArchivos(
   }))
 }
 
+// Archivos de una carpeta y sus subcarpetas (hasta `profundidad` niveles),
+// cada uno con el nombre de la carpeta que lo contiene. Para la pestaña
+// Documentos de un proyecto: recorre solo su carpeta, no la unidad entera.
+export async function listarArchivosDeCarpeta(
+  carpetaId: string,
+  profundidad = 3
+): Promise<(ArchivoDrive & { carpeta: string })[]> {
+  const archivos: (ArchivoDrive & { carpeta: string })[] = []
+  let nivel: { id: string; nombre: string }[] = [{ id: carpetaId, nombre: "" }]
+  for (let i = 0; i < profundidad && nivel.length > 0; i++) {
+    const hijos = await Promise.all(nivel.map((c) => listarArchivos(c.id).then((h) => ({ c, h }))))
+    const siguiente: { id: string; nombre: string }[] = []
+    for (const { c, h } of hijos) {
+      for (const a of h) {
+        if (a.esCarpeta) siguiente.push({ id: a.id, nombre: a.nombre })
+        else archivos.push({ ...a, carpeta: c.nombre })
+      }
+    }
+    nivel = siguiente
+  }
+  return archivos
+}
+
 export function urlCarpeta(carpetaId: string): string {
   return `https://drive.google.com/drive/folders/${carpetaId}`
 }

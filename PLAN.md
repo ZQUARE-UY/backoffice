@@ -944,3 +944,14 @@ cuatro.
   se superponen), chips de reuniones agendadas y ceremonias (sin dailies),
   arranques/entregas de proyectos y tareas que vencen, con filtros por capa;
   en celular, lista por día que salta los vacíos.
+- **2026-10-15** — Rediseño, Proyectos y Ficha de proyecto. Listado en
+  tabla (estado, salud, responsable, avance en el sprint activo, fin con
+  cuánto falta y plata: acordado o presupuesto más firme) con filtros de
+  estado/cliente/responsable en el encabezado y aviso "N proyectos sin
+  arrancar · Comenzar con Claude"; en celular, tarjetas. Ficha con "←",
+  rótulo cliente · tipo, badge de urgencia de entrega y pestañas por URL
+  (`?tab=`): Resumen (sprint, responsable y equipo, fin estimado, objetivo,
+  brief desplegable), Tareas abiertas, Documentos (carpeta del proyecto en
+  Drive, recorrida en el momento), Decisiones (puntos desde el detalle) y
+  Plata (acordado, cobrado/gastos de movimientos, presupuestos; estado vacío
+  con "Cargar monto" y "Crear presupuesto").
