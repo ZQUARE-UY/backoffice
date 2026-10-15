@@ -1,12 +1,6 @@
-import { FilesIcon } from "lucide-react"
-
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty"
+import { BusquedaGlobal } from "@/components/busqueda-global"
+import { Encabezado } from "@/components/zq/encabezado"
+import { paredEnZona } from "@/lib/disponibilidad"
 import { driveConfigurado, listarArchivosConRuta } from "@/lib/drive"
 import { type Documento } from "@/lib/dominio"
 import { createClient } from "@/lib/supabase/server"
@@ -22,8 +16,14 @@ export const maxDuration = 60
 
 export default async function DocumentosPage() {
   const supabase = await createClient()
-  const [{ data: anotaciones }, { data: clientes }, { data: proyectos }, indice] =
-    await Promise.all([
+  const [
+    { data: anotaciones },
+    { data: clientes },
+    { data: proyectos },
+    indice,
+    { data: transcripciones },
+    { data: decisionesData },
+  ] = await Promise.all([
       supabase.from("documentos").select("*").is("deleted_at", null),
       supabase
         .from("clientes")
@@ -34,6 +34,13 @@ export default async function DocumentosPage() {
         .select("id, nombre, cliente_id, drive_folder_id")
         .is("deleted_at", null),
       estadoIndice(),
+      // Reuniones con transcripción: el archivo de Drive sabe de qué reunión es.
+      supabase
+        .from("solicitudes_reunion")
+        .select("id, titulo, inicio, cliente_id, proyecto_id, drive_transcripcion_id")
+        .not("drive_transcripcion_id", "is", null)
+        .is("deleted_at", null),
+      supabase.from("decisiones").select("id, titulo, fecha, cliente_id, proyecto_id").is("deleted_at", null),
     ])
 
   // Carpeta de Drive → cliente / proyecto. Es lo que permite decir de quién es
@@ -66,6 +73,36 @@ export default async function DocumentosPage() {
   const nombreProyecto = new Map((proyectos ?? []).map((p) => [p.id, p.nombre]))
 
   const archivos = driveConfigurado() ? await listarArchivosConRuta() : []
+
+  // Vínculos de un archivo. No hay una relación guardada entre documentos y
+  // decisiones: si el archivo es la transcripción de una reunión, se vincula
+  // esa reunión y las decisiones de ese día para su cliente o proyecto.
+  type Reunion = {
+    id: string
+    titulo: string
+    inicio: string | null
+    cliente_id: string | null
+    proyecto_id: string | null
+    drive_transcripcion_id: string
+  }
+  type DecisionCorta = { id: string; titulo: string; fecha: string; cliente_id: string | null; proyecto_id: string | null }
+  const reunionPorArchivo = new Map(((transcripciones ?? []) as Reunion[]).map((r) => [r.drive_transcripcion_id, r]))
+  const decisiones = (decisionesData ?? []) as DecisionCorta[]
+  function vinculosDe(fileId: string): FilaDocumento["vinculos"] {
+    const r = reunionPorArchivo.get(fileId)
+    if (!r) return { reunion: null, decisiones: [] }
+    const dia = r.inicio ? paredEnZona(Date.parse(r.inicio)).fecha : null
+    return {
+      reunion: { id: r.id, titulo: r.titulo },
+      decisiones: decisiones
+        .filter(
+          (d) =>
+            d.fecha === dia &&
+            ((r.proyecto_id && d.proyecto_id === r.proyecto_id) || (r.cliente_id && d.cliente_id === r.cliente_id))
+        )
+        .map((d) => ({ id: d.id, titulo: d.titulo })),
+    }
+  }
 
   const filas: FilaDocumento[] = archivos
     .map((archivo) => {
@@ -107,6 +144,7 @@ export default async function DocumentosPage() {
       }
 
       return {
+        vinculos: vinculosDe(archivo.id),
         fileId: archivo.id,
         nombre: anotacion?.titulo ?? archivo.nombre,
         nombreArchivo: archivo.nombre,
@@ -135,30 +173,21 @@ export default async function DocumentosPage() {
 
   return (
     <>
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Documentos</h1>
-        <p className="text-muted-foreground">
-          {!driveConfigurado()
-            ? "Drive no está configurado en este entorno."
-            : `${filas.length} ${
-                filas.length === 1 ? "archivo" : "archivos"
-              } en Drive · ${porFileId.size} con ficha`}
-        </p>
+      <Encabezado titulo="Documentos" />
+
+      <div className="flex flex-col items-center gap-2">
+        <BusquedaGlobal
+          placeholder="Buscá por nombre o por significado"
+          className="h-14 w-full max-w-[640px] rounded-full bg-card px-6 text-base"
+        />
+        <IndiceBusqueda estado={indice} totalArchivos={filas.length} />
       </div>
 
       {!driveConfigurado() || filas.length === 0 ? (
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <FilesIcon />
-            </EmptyMedia>
-            <EmptyTitle>Sin archivos</EmptyTitle>
-            <EmptyDescription>
-              Acá se ve todo lo que hay en la unidad compartida de Drive, con la
-              ficha de cada archivo cuando alguien se la puso.
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
+        <div className="rounded-xl border border-dashed border-input p-8 text-center text-muted-foreground">
+          <p className="m-0 font-semibold text-foreground">Sin archivos</p>
+          <p className="m-0 mt-1">Acá se ve todo lo que hay en la unidad compartida de Drive, ordenado por cliente.</p>
+        </div>
       ) : (
         <ListaDocumentos
           filas={filas}
@@ -175,8 +204,6 @@ export default async function DocumentosPage() {
           }))}
         />
       )}
-
-      <IndiceBusqueda estado={indice} />
     </>
   )
 }

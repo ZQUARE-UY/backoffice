@@ -1,23 +1,18 @@
 "use client"
 
 import { useState } from "react"
-import { RefreshCwIcon, SparklesIcon } from "lucide-react"
+import { RefreshCwIcon } from "lucide-react"
 import { toast } from "sonner"
 
-import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { cn } from "@/lib/utils"
+
 import { indexar, type EstadoIndice } from "./indice-actions"
 
-// Estado y actualización del índice de búsqueda semántica. La indexación
+// Estado y actualización del índice de búsqueda semántica, en una línea bajo
+// el buscador ("44 de 59 documentos indexados · Actualizar índice"). La indexación
 // procesa de a lotes: seguimos llamando a la action hasta que no queden
 // pendientes (así no chocamos con el timeout de Vercel).
-export function IndiceBusqueda({ estado }: { estado: EstadoIndice }) {
+export function IndiceBusqueda({ estado, totalArchivos }: { estado: EstadoIndice; totalArchivos: number }) {
   const [corriendo, setCorriendo] = useState(false)
   const [progreso, setProgreso] = useState<string | null>(null)
 
@@ -63,37 +58,26 @@ export function IndiceBusqueda({ estado }: { estado: EstadoIndice }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <SparklesIcon className="size-4" />
-          Búsqueda semántica
-        </CardTitle>
-        <CardDescription>
-          Indexa el contenido de los archivos de Drive y las decisiones para
-          poder buscarlos por significado desde ⌘K (por ejemplo: “propuesta de
-          contabilidad para Iberpark”).
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-wrap items-center gap-4">
-        <p className="text-sm text-muted-foreground">
-          {estado.fragmentos === 0
-            ? "Todavía no hay nada indexado."
-            : `${estado.documentos} documentos indexados (${estado.fragmentos} fragmentos).`}
-          {!estado.driveConfigurado && " Drive no está configurado."}
-        </p>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={actualizar}
-          disabled={corriendo}
-        >
-          <RefreshCwIcon
-            className={corriendo ? "animate-spin" : undefined}
-          />
-          {corriendo ? (progreso ?? "Indexando…") : "Actualizar índice"}
-        </Button>
-      </CardContent>
-    </Card>
+    <p className="m-0 flex flex-wrap items-center justify-center gap-x-1.5 text-[13px] text-muted-foreground" aria-live="polite">
+      {!estado.driveConfigurado
+        ? "Drive no está configurado en este entorno."
+        : corriendo
+          ? (progreso ?? "Indexando…")
+          : `${estado.archivosIndexados} de ${totalArchivos} documentos indexados`}
+      {estado.driveConfigurado && (
+        <>
+          <span aria-hidden="true">·</span>
+          <button
+            type="button"
+            onClick={actualizar}
+            disabled={corriendo}
+            className="inline-flex items-center gap-1 font-semibold text-foreground underline-offset-2 hover:underline disabled:opacity-60"
+          >
+            <RefreshCwIcon className={cn("size-3.5", corriendo && "animate-spin")} aria-hidden="true" />
+            Actualizar índice
+          </button>
+        </>
+      )}
+    </p>
   )
 }
