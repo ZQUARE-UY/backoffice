@@ -32,16 +32,18 @@ import { Spinner } from "@/components/ui/spinner"
 import { type Cliente, type Decision, type Socio } from "@/lib/dominio"
 
 import { actualizarDecision, eliminarDecision } from "./actions"
-import { CamposDecision } from "./campos-decision"
+import { CamposDecision, type OpcionReunion } from "./campos-decision"
 
 export function DecisionAcciones({
   decision,
   socios,
   clientes,
+  reuniones,
 }: {
   decision: Decision
   socios: Socio[]
   clientes: Pick<Cliente, "id" | "nombre">[]
+  reuniones: OpcionReunion[]
 }) {
   const [editar, setEditar] = useState(false)
   const [eliminar, setEliminar] = useState(false)
@@ -99,6 +101,7 @@ export function DecisionAcciones({
                 decision={decision}
                 socios={socios}
                 clientes={clientes}
+                reuniones={reuniones}
               />
               <DialogFooter>
                 <Button type="submit" disabled={pendiente}>

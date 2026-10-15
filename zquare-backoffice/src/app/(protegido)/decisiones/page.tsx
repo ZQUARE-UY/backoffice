@@ -3,6 +3,7 @@ import { paredEnZona } from "@/lib/disponibilidad"
 import { type Cliente, type Decision, type Socio } from "@/lib/dominio"
 import { createClient } from "@/lib/supabase/server"
 
+import { type OpcionReunion } from "./campos-decision"
 import { NuevaDecision } from "./nueva-decision"
 import { VistaDecisiones, type OrigenDecision } from "./vista-decisiones"
 
@@ -24,10 +25,11 @@ export default async function DecisionesPage({
       supabase.from("proyectos").select("id, nombre, cliente_id").is("deleted_at", null),
       supabase
         .from("solicitudes_reunion")
-        .select("id, titulo, inicio, cliente_id, proyecto_id, drive_transcripcion_url")
+        .select("id, titulo, inicio, drive_transcripcion_url")
         .eq("estado", "agendada")
         .not("inicio", "is", null)
-        .is("deleted_at", null),
+        .is("deleted_at", null)
+        .order("inicio", { ascending: false }),
     ])
 
   const decisiones = (decisionesData ?? []) as Decision[]
@@ -35,38 +37,32 @@ export default async function DecisionesPage({
   const clientes = (clientesData ?? []) as Pick<Cliente, "id" | "nombre">[]
   const proyectos = (proyectosData ?? []) as { id: string; nombre: string; cliente_id: string | null }[]
 
-  // Origen de cada decisión: no hay un vínculo guardado con la reunión, así
-  // que se busca la reunión de ese mismo día con el mismo proyecto o
-  // cliente (y su transcripción, si la hay).
-  type Reunion = {
-    id: string
-    titulo: string
-    inicio: string
-    cliente_id: string | null
-    proyecto_id: string | null
-    drive_transcripcion_url: string | null
-  }
-  const reuniones = ((reunionesData ?? []) as Reunion[]).map((r) => ({ ...r, dia: paredEnZona(Date.parse(r.inicio)).fecha }))
+  // Origen de cada decisión: la reunión de la que salió (`reunion_id`), con
+  // su transcripción si la hay.
+  type Reunion = { id: string; titulo: string; inicio: string; drive_transcripcion_url: string | null }
+  const reunionesAgendadas = (reunionesData ?? []) as Reunion[]
+  const reunionPorId = new Map(reunionesAgendadas.map((r) => [r.id, r]))
   const origenes: Record<string, OrigenDecision> = {}
   for (const d of decisiones) {
-    if (!d.cliente_id && !d.proyecto_id) continue
-    const r = reuniones.find(
-      (r) =>
-        r.dia === d.fecha &&
-        ((d.proyecto_id && r.proyecto_id === d.proyecto_id) || (d.cliente_id && r.cliente_id === d.cliente_id))
-    )
+    const r = d.reunion_id ? reunionPorId.get(d.reunion_id) : null
     if (r) origenes[d.id] = { id: r.id, titulo: r.titulo, transcripcion: r.drive_transcripcion_url }
   }
+  const reuniones: OpcionReunion[] = reunionesAgendadas.map((r) => ({
+    id: r.id,
+    titulo: r.titulo,
+    dia: paredEnZona(Date.parse(r.inicio)).fecha,
+  }))
 
   return (
     <>
-      <Encabezado titulo="Decisiones" acciones={<NuevaDecision socios={socios} clientes={clientes} escucharCrear />} />
+      <Encabezado titulo="Decisiones" acciones={<NuevaDecision socios={socios} clientes={clientes} reuniones={reuniones} escucharCrear />} />
       <VistaDecisiones
         decisiones={decisiones}
         socios={socios}
         clientes={clientes}
         proyectos={proyectos}
         origenes={origenes}
+        reuniones={reuniones}
         decisionAbierta={decisionAbierta}
       />
     </>

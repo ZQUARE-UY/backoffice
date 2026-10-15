@@ -1025,3 +1025,13 @@ cuatro.
   entre decisión, movimiento, reunión, proyecto y archivo de Drive). En
   celular, lista o ficha con "← Todos los clientes". El FAB crea cliente.
   La ficha completa `/clientes/[id]` no cambió.
+- **2026-10-16** — Decisión ↔ reunión guardada: `decisiones.reunion_id`
+  (FK a `solicitudes_reunion`; migración `20261016000001_decisiones_reunion`
+  rellena las viejas con la regla de antes —misma fecha y mismo proyecto o
+  cliente— solo si había una única reunión candidata). El formulario de
+  decisión tiene "Reunión de origen"; si no se elige cliente, hereda el de
+  la reunión (y al crear, su proyecto). Decisiones, Documentos y la página
+  de la reunión ("Decisiones de esta reunión") usan el vínculo en vez de
+  deducirlo por fecha. MCP: `crear_decision` acepta `reunion`,
+  `transcripcion_reunion` devuelve `decisiones_registradas` y los listados
+  de decisiones muestran la reunión.

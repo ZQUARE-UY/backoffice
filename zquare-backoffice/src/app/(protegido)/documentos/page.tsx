@@ -1,6 +1,5 @@
 import { BusquedaGlobal } from "@/components/busqueda-global"
 import { Encabezado } from "@/components/zq/encabezado"
-import { paredEnZona } from "@/lib/disponibilidad"
 import { driveConfigurado, listarArchivosConRuta } from "@/lib/drive"
 import { type Documento } from "@/lib/dominio"
 import { createClient } from "@/lib/supabase/server"
@@ -37,10 +36,10 @@ export default async function DocumentosPage() {
       // Reuniones con transcripción: el archivo de Drive sabe de qué reunión es.
       supabase
         .from("solicitudes_reunion")
-        .select("id, titulo, inicio, cliente_id, proyecto_id, drive_transcripcion_id")
+        .select("id, titulo, drive_transcripcion_id")
         .not("drive_transcripcion_id", "is", null)
         .is("deleted_at", null),
-      supabase.from("decisiones").select("id, titulo, fecha, cliente_id, proyecto_id").is("deleted_at", null),
+      supabase.from("decisiones").select("id, titulo, reunion_id").not("reunion_id", "is", null).is("deleted_at", null),
     ])
 
   // Carpeta de Drive → cliente / proyecto. Es lo que permite decir de quién es
@@ -74,33 +73,18 @@ export default async function DocumentosPage() {
 
   const archivos = driveConfigurado() ? await listarArchivosConRuta() : []
 
-  // Vínculos de un archivo. No hay una relación guardada entre documentos y
-  // decisiones: si el archivo es la transcripción de una reunión, se vincula
-  // esa reunión y las decisiones de ese día para su cliente o proyecto.
-  type Reunion = {
-    id: string
-    titulo: string
-    inicio: string | null
-    cliente_id: string | null
-    proyecto_id: string | null
-    drive_transcripcion_id: string
-  }
-  type DecisionCorta = { id: string; titulo: string; fecha: string; cliente_id: string | null; proyecto_id: string | null }
+  // Vínculos de un archivo: si es la transcripción de una reunión, esa
+  // reunión y las decisiones que salieron de ella.
+  type Reunion = { id: string; titulo: string; drive_transcripcion_id: string }
+  type DecisionCorta = { id: string; titulo: string; reunion_id: string }
   const reunionPorArchivo = new Map(((transcripciones ?? []) as Reunion[]).map((r) => [r.drive_transcripcion_id, r]))
   const decisiones = (decisionesData ?? []) as DecisionCorta[]
   function vinculosDe(fileId: string): FilaDocumento["vinculos"] {
     const r = reunionPorArchivo.get(fileId)
     if (!r) return { reunion: null, decisiones: [] }
-    const dia = r.inicio ? paredEnZona(Date.parse(r.inicio)).fecha : null
     return {
       reunion: { id: r.id, titulo: r.titulo },
-      decisiones: decisiones
-        .filter(
-          (d) =>
-            d.fecha === dia &&
-            ((r.proyecto_id && d.proyecto_id === r.proyecto_id) || (r.cliente_id && d.cliente_id === r.cliente_id))
-        )
-        .map((d) => ({ id: d.id, titulo: d.titulo })),
+      decisiones: decisiones.filter((d) => d.reunion_id === r.id).map((d) => ({ id: d.id, titulo: d.titulo })),
     }
   }
 

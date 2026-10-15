@@ -75,6 +75,7 @@ export default async function ReunionPage({
     { data: sociosData },
     { data: clientesData },
     { data: proyectosData },
+    { data: decisionesData },
     hoy,
   ] =
     await Promise.all([
@@ -118,11 +119,18 @@ export default async function ReunionPage({
             .is("deleted_at", null)
             .order("nombre")
         : Promise.resolve({ data: null }),
+      supabase
+        .from("decisiones")
+        .select("id, titulo, fecha")
+        .eq("reunion_id", id)
+        .is("deleted_at", null)
+        .order("created_at"),
       fechaDeHoy(),
     ])
 
   const respuestas = (respuestasData ?? []) as RespuestaReunion[]
   const grabaciones = (grabacionesData ?? []) as GrabacionReunion[]
+  const decisiones = (decisionesData ?? []) as { id: string; titulo: string; fecha: string }[]
   const miRespuesta =
     respuestas.find((r) => r.socio_id === socioId) ?? null
 
@@ -277,6 +285,25 @@ export default async function ReunionPage({
           partes={grabaciones}
           transcripcionUrl={solicitud.drive_transcripcion_url}
         />
+      )}
+
+      {decisiones.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Decisiones de esta reunión</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+              {decisiones.map((d) => (
+                <li key={d.id}>
+                  <Link href={`/decisiones?decision=${d.id}`} className="hover:underline">
+                    {d.titulo}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
       )}
 
       <Card>

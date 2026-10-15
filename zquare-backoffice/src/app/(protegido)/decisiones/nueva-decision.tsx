@@ -17,16 +17,18 @@ import { Spinner } from "@/components/ui/spinner"
 import { type Cliente, type Socio } from "@/lib/dominio"
 
 import { crearDecision } from "./actions"
-import { CamposDecision } from "./campos-decision"
+import { CamposDecision, type OpcionReunion } from "./campos-decision"
 
 export function NuevaDecision({
   socios,
   clientes,
+  reuniones,
   acuerdo = false,
   escucharCrear = false,
 }: {
   socios: Socio[]
   clientes: Pick<Cliente, "id" | "nombre">[]
+  reuniones: OpcionReunion[]
   // "+ Nuevo acuerdo" en la tarjeta de acuerdos de socios: la misma alta,
   // sin cliente (un acuerdo de socios es una decisión de la empresa).
   acuerdo?: boolean
@@ -76,7 +78,7 @@ export function NuevaDecision({
             <DialogHeader>
               <DialogTitle>{acuerdo ? "Nuevo acuerdo de socios" : "Nueva decisión"}</DialogTitle>
             </DialogHeader>
-            <CamposDecision socios={socios} clientes={clientes} />
+            <CamposDecision socios={socios} clientes={clientes} reuniones={reuniones} />
             <DialogFooter>
               <Button type="submit" disabled={pendiente}>
                 {pendiente && <Spinner data-icon="inline-start" />}
