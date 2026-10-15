@@ -2527,7 +2527,7 @@ const handler = createMcpHandler(
       {
         title: "Listar ideas",
         description:
-          "Ideas del banco agrupadas por estado (semilla, en_exploracion, lista, aprobada, descartada), con sus votos. Por defecto omite las descartadas.",
+          "Ideas del banco agrupadas por estado (semilla, en_exploracion, lista, aprobada, descartada), con sus votos de \"¿La hacemos?\" contados por opción (si / dudas / no). Por defecto omite las descartadas.",
         inputSchema: {
           estado: z.enum(ESTADOS_IDEA).optional(),
           incluir_descartadas: z.boolean().optional(),
@@ -2552,10 +2552,13 @@ const handler = createMcpHandler(
 
         const { data: votos } = await supabase
           .from("ideas_votos")
-          .select("idea_id")
-        const votosPorIdea = new Map<string, number>()
-        for (const v of votos ?? []) {
-          votosPorIdea.set(v.idea_id, (votosPorIdea.get(v.idea_id) ?? 0) + 1)
+          .select("idea_id, valor")
+        // "¿La hacemos?": conteo por opción.
+        const votosPorIdea = new Map<string, { si: number; dudas: number; no: number }>()
+        for (const v of (votos ?? []) as { idea_id: string; valor: "si" | "dudas" | "no" }[]) {
+          const c = votosPorIdea.get(v.idea_id) ?? { si: 0, dudas: 0, no: 0 }
+          c[v.valor]++
+          votosPorIdea.set(v.idea_id, c)
         }
 
         const porEstado: Record<string, unknown[]> = {}
@@ -2563,7 +2566,7 @@ const handler = createMcpHandler(
           const { id, numero, ...resto } = i
           ;(porEstado[i.estado] ??= []).push({
             codigo: `IDEA-${numero}`,
-            votos: votosPorIdea.get(id) ?? 0,
+            votos: votosPorIdea.get(id) ?? { si: 0, dudas: 0, no: 0 },
             ...resto,
           })
         }
@@ -2576,7 +2579,7 @@ const handler = createMcpHandler(
       {
         title: "Ficha de una idea",
         description:
-          "Detalle completo de una idea: one-pager, votos, comentarios e historial de versiones. Se identifica por número o código (7 o IDEA-7).",
+          "Detalle completo de una idea: one-pager, votos (quién votó si / dudas / no), comentarios e historial de versiones. Se identifica por número o código (7 o IDEA-7).",
         inputSchema: { idea: z.union([z.string(), z.number()]) },
       },
       async ({ idea }) => {
@@ -2609,7 +2612,7 @@ const handler = createMcpHandler(
               .order("created_at"),
             supabase
               .from("ideas_votos")
-              .select("socios(nombre)")
+              .select("valor, socios(nombre)")
               .eq("idea_id", data.id),
           ])
 
@@ -2617,9 +2620,13 @@ const handler = createMcpHandler(
         void id
         return texto({
           idea: { codigo: `IDEA-${n}`, ...ficha },
+          // "¿La hacemos?": quién votó qué.
           votos: (votos ?? []).map((v) => {
             const socio = v.socios as { nombre: string } | { nombre: string }[] | null
-            return (Array.isArray(socio) ? socio[0]?.nombre : socio?.nombre) ?? "?"
+            return {
+              socio: (Array.isArray(socio) ? socio[0]?.nombre : socio?.nombre) ?? "?",
+              voto: v.valor,
+            }
           }),
           comentarios: comentarios ?? [],
           versiones: versiones ?? [],
@@ -2804,13 +2811,14 @@ const handler = createMcpHandler(
       {
         title: "Votar una idea",
         description:
-          "Suma el +1 del socio dueño del token a una idea (o lo quita con quitar_voto). Un voto por socio por idea.",
+          "Vota \"¿La hacemos?\" una idea en nombre del socio dueño del token: si, dudas o no (default si). Un voto por socio por idea: votar de nuevo cambia el valor; quitar_voto lo saca.",
         inputSchema: {
           idea: z.union([z.string(), z.number()]),
+          voto: z.enum(["si", "dudas", "no"]).optional(),
           quitar_voto: z.boolean().optional(),
         },
       },
-      async ({ idea, quitar_voto }, extra) => {
+      async ({ idea, voto, quitar_voto }, extra) => {
         const numero = numeroDeIdea(idea)
         if (!numero) return texto(`"${idea}" no parece un número de idea.`)
 
@@ -2838,15 +2846,17 @@ const handler = createMcpHandler(
           if (error) throw new Error(error.message)
           return texto({ voto_quitado: `IDEA-${numero}` })
         }
-        // Upsert sobre la unique (idea_id, socio_id): votar dos veces no duplica.
+        // Upsert sobre la unique (idea_id, socio_id): votar de nuevo cambia el
+        // valor, no duplica.
+        const valor = voto ?? "si"
         const { error } = await supabase
           .from("ideas_votos")
           .upsert(
-            { idea_id: data.id, socio_id: socioId },
+            { idea_id: data.id, socio_id: socioId, valor, updated_at: new Date().toISOString() },
             { onConflict: "idea_id,socio_id" }
           )
         if (error) throw new Error(error.message)
-        return texto({ votada: `IDEA-${numero}` })
+        return texto({ votada: `IDEA-${numero}`, voto: valor })
       }
     )
 

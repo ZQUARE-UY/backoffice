@@ -31,7 +31,8 @@ import { MarkdownIdea } from "../markdown-idea"
 import { ComentariosIdea } from "./comentarios-idea"
 import { DeshacerGraduacion } from "./deshacer-graduacion"
 import { GraduarIdea } from "./graduar-idea"
-import { IdeaAcciones, VotarIdea } from "./idea-acciones"
+import { Votacion } from "../votacion"
+import { IdeaAcciones } from "./idea-acciones"
 
 export const metadata = { title: "Idea" }
 
@@ -71,7 +72,7 @@ export default async function IdeaPage({
       .select("id, idea_id, snapshot, autor, autor_socio_id, created_at")
       .eq("idea_id", id)
       .order("created_at", { ascending: false }),
-    supabase.from("ideas_votos").select("idea_id, socio_id").eq("idea_id", id),
+    supabase.from("ideas_votos").select("idea_id, socio_id, valor").eq("idea_id", id),
     supabase.from("socios").select("id, nombre, email").is("deleted_at", null),
     idSocioActual(),
   ])
@@ -154,26 +155,17 @@ export default async function IdeaPage({
                 <SparklesIcon data-icon="inline-start" />
                 Iterar con Claude
               </Button>
-              <VotarIdea
-                ideaId={idea.id}
-                votos={votos.length}
-                yaVote={votos.some((v) => v.socio_id === socioActual)}
-              />
               {idea.estado !== "aprobada" && idea.estado !== "descartada" && (
                 <GraduarIdea idea={idea} />
               )}
               <IdeaAcciones idea={idea} />
             </div>
-            {votos.length > 0 && (
-              <span className="text-xs text-muted-foreground">
-                Votada por{" "}
-                {votos
-                  .map((v) => nombreSocio.get(v.socio_id) ?? "?")
-                  .join(", ")}
-              </span>
-            )}
           </div>
         </div>
+      </div>
+
+      <div className="max-w-xl">
+        <Votacion ideaId={idea.id} votos={votos} socios={socios} miSocioId={socioActual} />
       </div>
 
       {/* Qué generó la idea al graduarse: el link de trazabilidad. */}

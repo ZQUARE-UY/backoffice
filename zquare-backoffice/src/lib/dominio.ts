@@ -742,9 +742,21 @@ export type VersionIdea = {
   created_at: string
 }
 
+// "¿La hacemos?": un voto por socio por idea, con su valor.
+export const VALORES_VOTO = {
+  si: { label: "Sí" },
+  dudas: { label: "Tengo dudas" },
+  no: { label: "No" },
+}
+
+export type ValorVoto = keyof typeof VALORES_VOTO
+
+export const VALORES_VOTO_ORDEN = Object.keys(VALORES_VOTO) as ValorVoto[]
+
 export type VotoIdea = {
   idea_id: string
   socio_id: string
+  valor: ValorVoto
 }
 
 export type Socio = {
