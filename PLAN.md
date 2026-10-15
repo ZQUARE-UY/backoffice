@@ -955,3 +955,11 @@ cuatro.
   Drive, recorrida en el momento), Decisiones (puntos desde el detalle) y
   Plata (acordado, cobrado/gastos de movimientos, presupuestos; estado vacío
   con "Cargar monto" y "Crear presupuesto").
+- **2026-10-15** — Rediseño, Inicio "Mi día": saludo con la fecha y el
+  buscador; "Para atender hoy" armado con datos reales (sprint activo
+  vencido con Completar sprint, entregas de mis proyectos en ≤7 días, mis
+  tareas que vencen en ≤3 días, reuniones donde me falta marcar
+  disponibilidad, tareas del sprint sin responsable); mis tareas del sprint
+  activo; agenda de hoy y mañana desde mi Google Calendar (mascota si no
+  hay); mis proyectos con su avance en el sprint y la empresa por estado.
+  Los números de plata dejan Inicio (viven en Finanzas).
