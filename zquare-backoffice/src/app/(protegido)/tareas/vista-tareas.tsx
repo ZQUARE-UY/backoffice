@@ -1,5 +1,6 @@
 import { Encabezado } from "@/components/zq/encabezado"
 import {
+  codigoTarea,
   type ComentarioTarea,
   type Socio,
   type Sprint,
@@ -11,7 +12,7 @@ import { paredEnZona, sumarDias } from "@/lib/disponibilidad"
 import { createClient } from "@/lib/supabase/server"
 
 import { Backlog } from "./backlog"
-import { Calendario, type CeremoniaCalendario } from "./calendario"
+import { Calendario, type CeremoniaCalendario, type EventoCalendario } from "./calendario"
 import { type ProyectoOpcion } from "./campos-tarea"
 import { FiltrosTareas } from "./filtros-tareas"
 import { NuevaTarea } from "./nueva-tarea"
@@ -199,6 +200,7 @@ export async function VistaTareas({
   const mes = mesDeParam(params.mes)
   let sprintsMes: Sprint[] = []
   let ceremoniasMes: CeremoniaCalendario[] = []
+  let eventosMes: EventoCalendario[] = []
   if (vistaCalendario) {
     const { desde, hasta } = rangoMes(mes)
     // El filtro por proyecto (o por cliente, vía sus proyectos) aplica a los
@@ -224,17 +226,84 @@ export async function VistaTareas({
       .is("sprint.deleted_at", null)
       .gte("inicio", `${sumarDias(desde, -1)}T00:00:00Z`)
       .lt("inicio", `${sumarDias(hasta, 2)}T00:00:00Z`)
+      // Las dailies son ruido en una vista de mes: solo los hitos del sprint.
+      .neq("tipo", "daily")
       .order("inicio", { ascending: true })
+    // Arranques y entregas de proyectos que caen en el mes.
+    let proyectosQuery = supabase
+      .from("proyectos")
+      .select("id, nombre, fecha_inicio, fecha_fin_estimada, clientes(nombre)")
+      .is("deleted_at", null)
+      .neq("estado", "cancelado")
+      .or(
+        `and(fecha_inicio.gte.${desde},fecha_inicio.lte.${hasta}),and(fecha_fin_estimada.gte.${desde},fecha_fin_estimada.lte.${hasta})`
+      )
+    // Tareas abiertas que vencen en el mes.
+    let tareasMesQuery = supabase
+      .from("tareas")
+      .select("numero, titulo, fecha_limite")
+      .is("deleted_at", null)
+      .neq("estado", "hecho")
+      .gte("fecha_limite", desde)
+      .lte("fecha_limite", hasta)
+    // Reuniones agendadas del mes (el mismo margen de un día que las ceremonias).
+    let reunionesQuery = supabase
+      .from("solicitudes_reunion")
+      .select("id, titulo, inicio")
+      .is("deleted_at", null)
+      .eq("estado", "agendada")
+      .gte("inicio", `${sumarDias(desde, -1)}T00:00:00Z`)
+      .lt("inicio", `${sumarDias(hasta, 2)}T00:00:00Z`)
     if (idsProyecto) {
       sprintsQuery = sprintsQuery.in("proyecto_id", idsProyecto)
       ceremoniasQuery = ceremoniasQuery.in("sprint.proyecto_id", idsProyecto)
+      proyectosQuery = proyectosQuery.in("id", idsProyecto)
     }
-    const [{ data: sprintsMesData }, { data: ceremoniasData }] = await Promise.all([
-      sprintsQuery,
-      ceremoniasQuery,
-    ])
+    if (params.cliente) {
+      tareasMesQuery = tareasMesQuery.eq("cliente_id", params.cliente)
+      reunionesQuery = reunionesQuery.eq("cliente_id", params.cliente)
+    }
+    if (params.proyecto) {
+      tareasMesQuery = tareasMesQuery.eq("proyecto_id", params.proyecto)
+      reunionesQuery = reunionesQuery.eq("proyecto_id", params.proyecto)
+    }
+    if (params.socio) tareasMesQuery = tareasMesQuery.eq("asignado_a", params.socio)
+    const [
+      { data: sprintsMesData },
+      { data: ceremoniasData },
+      { data: proyectosMes },
+      { data: tareasMes },
+      { data: reunionesMes },
+    ] = await Promise.all([sprintsQuery, ceremoniasQuery, proyectosQuery, tareasMesQuery, reunionesQuery])
     sprintsMes = (sprintsMesData ?? []) as Sprint[]
     ceremoniasMes = (ceremoniasData ?? []) as unknown as CeremoniaCalendario[]
+
+    const enMes = (fecha: string | null): fecha is string =>
+      fecha !== null && fecha >= desde && fecha <= hasta
+    type ProyectoMes = {
+      id: string
+      nombre: string
+      fecha_inicio: string | null
+      fecha_fin_estimada: string | null
+      clientes: { nombre: string } | null
+    }
+    for (const p of (proyectosMes ?? []) as unknown as ProyectoMes[]) {
+      if (enMes(p.fecha_inicio)) {
+        eventosMes.push({ fecha: p.fecha_inicio, tipo: "proyecto", texto: `Arranca ${p.nombre}`, href: `/proyectos/${p.id}` })
+      }
+      if (enMes(p.fecha_fin_estimada)) {
+        eventosMes.push({ fecha: p.fecha_fin_estimada, tipo: "proyecto", texto: `Entrega ${p.nombre}`, href: `/proyectos/${p.id}` })
+      }
+    }
+    for (const t of (tareasMes ?? []) as { numero: number; titulo: string; fecha_limite: string }[]) {
+      const codigo = codigoTarea(t.numero)
+      eventosMes.push({ fecha: t.fecha_limite, tipo: "tarea", texto: `${codigo} ${t.titulo}`, href: `/tareas?tarea=${codigo}` })
+    }
+    for (const r of (reunionesMes ?? []) as { id: string; titulo: string; inicio: string }[]) {
+      const { fecha, hora } = paredEnZona(Date.parse(r.inicio))
+      eventosMes.push({ fecha, hora, tipo: "reunion", texto: r.titulo, href: `/reuniones/${r.id}` })
+    }
+    eventosMes = eventosMes.filter((e) => enMes(e.fecha))
   }
 
   // Las pestañas preservan los filtros activos.
@@ -277,6 +346,7 @@ export async function VistaTareas({
           hoy={hoyEnZona()}
           sprints={sprintsMes}
           ceremonias={ceremoniasMes}
+          eventos={eventosMes}
           proyectos={proyectos}
           qsFiltros={qs}
         />

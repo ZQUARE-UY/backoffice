@@ -936,3 +936,11 @@ cuatro.
   `cambiarColumnaTarea` / `cambiarDatoTarea`, sin versionar) y botón
   "Desarrollar" que abre claude.ai con el prompt de `desarrollar_tarea`.
   Nueva tarea en Popover con el interruptor "Que Claude desarrolle el brief".
+- **2026-10-15** — Rediseño, Paso 2 · Backlog y Calendario. Backlog: lista
+  corta de tareas sin sprint con selector de proyecto (buscador, solo los que
+  tienen pendientes) y panel carbón fijo del próximo sprint planificado
+  (arrastrar o "Al sprint →", ✕ para sacar, Iniciar sprint con el motivo si
+  no se puede). Calendario: grilla de mes con franjas de sprint (rayadas si
+  se superponen), chips de reuniones agendadas y ceremonias (sin dailies),
+  arranques/entregas de proyectos y tareas que vencen, con filtros por capa;
+  en celular, lista por día que salta los vacíos.
