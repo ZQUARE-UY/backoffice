@@ -575,6 +575,36 @@
     height: 15px;
   }
 
+  /* ── Post-it (Ideas) ── */
+  /* La ficha de una idea es la misma nota agrandada: girada 1°, en lima si
+     está aprobada. Se apoya en el Popover (o la Hoja en celular). */
+  .zq-popover.zq-postit {
+    width: min(620px, calc(100vw - 32px));
+    border-radius: 8px;
+    transform: translate(-50%, -50%) rotate(-1deg);
+    box-shadow: 0 24px 48px rgba(30, 39, 44, 0.25);
+  }
+  .zq-postit .zq-popover-contenido {
+    padding: 26px 28px;
+    gap: 16px;
+  }
+  .zq-postit-lima {
+    background: var(--lima);
+    color: var(--carbon);
+  }
+  .zq-postit-lima :focus-visible {
+    outline-color: var(--carbon);
+  }
+  .zq-postit-rotulo {
+    display: block;
+    font-size: 11px;
+    line-height: 14px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.6;
+  }
+
   /* ── Panel del sprint (Backlog) ── */
   .zq-sprint-panel {
     position: sticky;

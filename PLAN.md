@@ -974,3 +974,13 @@ cuatro.
   grande, quién lo pagó/cobró con avatares, resumen que se recalcula
   ("Cada socio le debe…"), y a la derecha categoría, fecha, entre quiénes
   se divide, cliente o proyecto, si se repite y estado.
+- **2026-10-15** — Rediseño, Ideas: muro de post-its (aprobadas en lima,
+  giradas ±1°) con la nota "Anotá una semilla" al final, y la ficha como la
+  misma nota agrandada en Popover: Problema / Solución / Deja en una línea,
+  "Leer más" con Competencia / Esfuerzo / Próximo paso, votación "¿La
+  hacemos?" (Sí / Tengo dudas / No con iniciales y "Faltan…"), comentario
+  rápido y "Ya es proyecto" / "Pasar a proyecto". Migración
+  `20261015000001_ideas_voto_valor.sql`: `ideas_votos.valor` (si / dudas /
+  no; los votos viejos quedan como sí) + `updated_at`. MCP: `votar_idea`
+  acepta `voto`, y `listar_ideas` / `ficha_idea` devuelven los votos por
+  opción.

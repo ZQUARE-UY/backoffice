@@ -23,7 +23,16 @@ import { graduarIdea } from "../actions"
 // Graduación: la idea aprobada se convierte en trabajo real. Ideas grandes
 // gradúan a proyecto interno (con sus tareas); ideas chicas, a tareas
 // sueltas del kanban.
-export function GraduarIdea({ idea }: { idea: Idea }) {
+export function GraduarIdea({
+  idea,
+  etiqueta = "Graduar",
+  className,
+}: {
+  idea: Idea
+  // En la nota del muro dice "Pasar a proyecto".
+  etiqueta?: string
+  className?: string
+}) {
   const [abierto, setAbierto] = useState(false)
   const [destino, setDestino] = useState("proyecto")
   const [pendiente, iniciarTransicion] = useTransition()
@@ -37,9 +46,9 @@ export function GraduarIdea({ idea }: { idea: Idea }) {
 
   return (
     <>
-      <Button size="sm" onClick={() => setAbierto(true)}>
+      <Button size="sm" className={className} onClick={() => setAbierto(true)}>
         <GraduationCapIcon data-icon="inline-start" />
-        Graduar
+        {etiqueta}
       </Button>
 
       <Dialog open={abierto} onOpenChange={setAbierto}>

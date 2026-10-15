@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
-import { codigoIdea, type Idea } from "@/lib/dominio"
+import { codigoIdea, VALORES_VOTO, type Idea, type ValorVoto } from "@/lib/dominio"
 import { idSocioActual } from "@/lib/socio-actual"
 import { createClient } from "@/lib/supabase/server"
 
@@ -107,6 +107,7 @@ export async function comentarIdea(ideaId: string, formData: FormData) {
     autor_socio_id: socioId,
   })
   if (error) throw new Error(error.message)
+  revalidatePath("/ideas")
   revalidatePath(`/ideas/${ideaId}`)
 }
 
@@ -305,24 +306,30 @@ export async function deshacerGraduacion(id: string) {
   revalidatePath("/tareas", "layout")
 }
 
-// Toggle del +1 del socio logueado.
-export async function votarIdea(ideaId: string) {
+// Voto "¿La hacemos?" del socio logueado: elegir una opción la guarda (o
+// cambia la que tenía); tocar la propia otra vez saca el voto.
+export async function votarIdea(ideaId: string, valor: ValorVoto) {
+  if (!(valor in VALORES_VOTO)) throw new Error("Voto inválido")
   const socioId = await idSocioActual()
   if (!socioId) throw new Error("No se encontró el socio logueado")
 
   const supabase = await createClient()
   const { data: voto } = await supabase
     .from("ideas_votos")
-    .select("id")
+    .select("id, valor")
     .eq("idea_id", ideaId)
     .eq("socio_id", socioId)
     .maybeSingle()
 
-  const { error } = voto
-    ? await supabase.from("ideas_votos").delete().eq("id", voto.id)
-    : await supabase
-        .from("ideas_votos")
-        .insert({ idea_id: ideaId, socio_id: socioId })
+  const { error } =
+    voto?.valor === valor
+      ? await supabase.from("ideas_votos").delete().eq("id", voto.id)
+      : await supabase
+          .from("ideas_votos")
+          .upsert(
+            { idea_id: ideaId, socio_id: socioId, valor, updated_at: new Date().toISOString() },
+            { onConflict: "idea_id,socio_id" }
+          )
   if (error) throw new Error(error.message)
   revalidatePath("/ideas")
   revalidatePath(`/ideas/${ideaId}`)

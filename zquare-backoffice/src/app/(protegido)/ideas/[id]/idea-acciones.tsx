@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { PencilIcon, ThumbsUpIcon } from "lucide-react"
+import { PencilIcon } from "lucide-react"
 
 import { BotonEliminar } from "@/components/boton-eliminar"
 import { Button } from "@/components/ui/button"
@@ -17,36 +17,8 @@ import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
 import { codigoIdea, type Idea } from "@/lib/dominio"
 
-import { actualizarIdea, eliminarIdea, votarIdea } from "../actions"
+import { actualizarIdea, eliminarIdea } from "../actions"
 import { CamposIdea } from "../campos-idea"
-
-export function VotarIdea({
-  ideaId,
-  votos,
-  yaVote,
-}: {
-  ideaId: string
-  votos: number
-  yaVote: boolean
-}) {
-  const [pendiente, iniciarTransicion] = useTransition()
-
-  return (
-    <Button
-      variant={yaVote ? "default" : "outline"}
-      size="sm"
-      disabled={pendiente}
-      onClick={() => iniciarTransicion(() => votarIdea(ideaId))}
-    >
-      {pendiente ? (
-        <Spinner data-icon="inline-start" />
-      ) : (
-        <ThumbsUpIcon data-icon="inline-start" />
-      )}
-      {votos}
-    </Button>
-  )
-}
 
 export function IdeaAcciones({ idea }: { idea: Idea }) {
   const router = useRouter()
