@@ -46,7 +46,14 @@ const GRUPOS: { kind: ResultadoBusqueda["kind"]; label: string }[] = [
   { kind: "contenido", label: "Contenido (semántico)" },
 ]
 
-export function BusquedaGlobal({ className }: { className?: string }) {
+export function BusquedaGlobal({
+  className,
+  placeholder = "Buscar…",
+}: {
+  className?: string
+  // Documentos usa el buscador grande: "Buscá por nombre o por significado".
+  placeholder?: string
+}) {
   const [abierto, setAbierto] = useState(false)
   const [query, setQuery] = useState("")
   const [resultados, setResultados] = useState<ResultadoBusqueda[]>([])
@@ -119,7 +126,7 @@ export function BusquedaGlobal({ className }: { className?: string }) {
         )}
       >
         <SearchIcon className="size-4 shrink-0" />
-        <span>Buscar…</span>
+        <span>{placeholder}</span>
         <kbd className="ml-auto hidden rounded border bg-muted px-1.5 font-mono text-[10px] sm:inline">
           ⌘K
         </kbd>

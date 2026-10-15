@@ -995,3 +995,13 @@ cuatro.
   Popover: grilla días hábiles × horas de 9 a 17, día entero al tocar el
   nombre, puntitos de quién puede, Respuestas y Mejores huecos; conserva lo
   que el socio cargó fuera de 9–18 desde la ficha completa.
+- **2026-10-15** — Rediseño, Documentos: buscador grande en píldora (abre
+  ⌘K, por nombre o por significado) con "N de M documentos indexados ·
+  Actualizar índice"; carpetas por cliente como tarjetas (cantidad y fecha
+  del último archivo; en celular, con scroll horizontal) y la lista de la
+  carpeta elegida (tipo, nombre, subcarpeta, fecha). Ficha de documento en
+  Popover: vista previa en hoja blanca (desde el índice, sin volver a
+  Drive), tipo, carpeta y "Vinculado" (reunión de la que es transcripción,
+  decisiones de ese día, proyecto y cliente), la ficha de siempre y "Abrir
+  en Drive". No hay un vínculo guardado documento ↔ decisión: si hace
+  falta exacto, va una columna en decisiones.
