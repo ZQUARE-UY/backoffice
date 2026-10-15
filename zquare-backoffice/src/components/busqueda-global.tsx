@@ -26,6 +26,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command"
+import { cn } from "@/lib/utils"
 
 const ICONOS = {
   cliente: UsersIcon,
@@ -45,7 +46,7 @@ const GRUPOS: { kind: ResultadoBusqueda["kind"]; label: string }[] = [
   { kind: "contenido", label: "Contenido (semántico)" },
 ]
 
-export function BusquedaGlobal() {
+export function BusquedaGlobal({ className }: { className?: string }) {
   const [abierto, setAbierto] = useState(false)
   const [query, setQuery] = useState("")
   const [resultados, setResultados] = useState<ResultadoBusqueda[]>([])
@@ -112,7 +113,10 @@ export function BusquedaGlobal() {
       <button
         type="button"
         onClick={() => setAbierto(true)}
-        className="flex w-full items-center gap-2 rounded-lg border border-input bg-background px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
+        className={cn(
+          "flex w-full items-center gap-2 rounded-lg border border-input bg-background px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted",
+          className
+        )}
       >
         <SearchIcon className="size-4 shrink-0" />
         <span>Buscar…</span>

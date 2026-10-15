@@ -918,3 +918,12 @@ cuatro.
 - **2026-10-01** — Finanzas: alta unificada de movimientos con checkbox "Se
   repite" (crea el recurrente con ese cobro como el primero) y conversión de
   un movimiento existente en recurrente.
+- **2026-10-15** — Rediseño del backoffice, Pasos 0 y 1 (guía en
+  `docs/REDISENO-BACKOFFICE.md`): tokens ZQUARE mapeados a las variables de
+  shadcn en claro y oscuro (tema con next-themes, elegible desde el menú del
+  usuario), Plus Jakarta Sans (la display SK Reykjavik Rounded queda en TODO
+  hasta tener el archivo licenciado), helpers de formato es-UY de números y
+  fechas relativas, sidebar carbón propio de 240px con campanita y panel
+  lateral de notificaciones (derivadas de la base, sin tabla nueva; lo leído
+  se guarda en el navegador), encabezado de página, Popover/Hoja inferior y
+  menú de celular por debajo de 720px con botón flotante para crear.

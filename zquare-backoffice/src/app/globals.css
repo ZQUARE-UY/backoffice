@@ -1,3 +1,12 @@
+/*
+ * Estilos del backoffice ZQUARE (rediseño, Paso 0).
+ *
+ * Los tokens salen del design system ZQUARE (tokens.json: carbón, lima,
+ * crema, arena + los propuestos para UI) y se mapean a las variables de
+ * shadcn, así los componentes de `ui/` toman la marca sin tocarlos uno por
+ * uno. El tema oscuro es la clase `.dark` en <html>: mismo layout, solo
+ * cambian los tokens. Ver docs/REDISENO-BACKOFFICE.md.
+ */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -8,8 +17,8 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-display: var(--font-display);
+  --font-heading: var(--font-display);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -17,6 +26,7 @@
   --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
   --color-sidebar: var(--sidebar);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
@@ -39,6 +49,15 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  /* Colores de marca y de estado, para usarlos como utilidades
+     (`bg-lima`, `text-negativo`, `border-aviso`…). */
+  --color-lima: var(--lima);
+  --color-carbon: var(--carbon);
+  --color-crema: var(--crema);
+  --color-arena: var(--arena);
+  --color-positivo: var(--positivo);
+  --color-negativo: var(--negativo);
+  --color-aviso: var(--aviso);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -48,73 +67,109 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* Debajo de 720px el sidebar se reemplaza por el menú de celular.
+   `escritorio:` = 720px o más. */
+@theme {
+  --breakpoint-escritorio: 45rem;
+}
+
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* Marca (iguales en los dos temas). */
+  --carbon: #1e272c;
+  --lima: #cadd5d;
+  --crema: #f3f0e9;
+  --arena: #b3a284;
+  --papel: #ffffff;
+
+  /* Estados: siempre en texto, bordes e íconos, nunca como fondos grandes. */
+  --positivo: #3f6212;
+  --negativo: #b3261e;
+  --aviso: #8a5300;
+
+  /* SK Reykjavik Rounded es comercial y todavía no está en el repo.
+     TODO: cargar el .woff2 licenciado con next/font/local y ponerlo primero
+     en este stack. Mientras tanto cae a Plus Jakarta Sans. */
+  --font-display: "SK Reykjavik Rounded", var(--font-jakarta), system-ui, sans-serif;
+  --font-sans: var(--font-jakarta), system-ui, sans-serif;
+
+  --background: var(--crema); /* superficie */
+  --foreground: var(--carbon); /* tinta */
+  --card: var(--papel); /* superficie elevada */
+  --card-foreground: var(--carbon);
+  --popover: var(--papel);
+  --popover-foreground: var(--carbon);
+  --primary: var(--carbon);
+  --primary-foreground: var(--crema);
+  --secondary: #ebe6dc; /* superficie hundida */
+  --secondary-foreground: var(--carbon);
+  --muted: #ebe6dc;
+  --muted-foreground: #5a6166; /* tinta tenue */
+  --accent: #ebe6dc;
+  --accent-foreground: var(--carbon);
+  --destructive: var(--negativo);
+  --border: #d9d2c3; /* línea */
+  --input: #857e71; /* línea de control: 3:1 sobre todas las superficies */
+  --ring: var(--carbon); /* foco */
+  --chart-1: var(--lima);
+  --chart-2: var(--carbon);
+  --chart-3: var(--arena);
+  --chart-4: #5a6166;
+  --chart-5: #d9d2c3;
+  --radius: 0.5rem;
+  --sidebar: var(--carbon);
+  --sidebar-foreground: var(--crema);
+  --sidebar-primary: var(--lima);
+  --sidebar-primary-foreground: var(--carbon);
+  --sidebar-accent: #2b363c; /* hover */
+  --sidebar-accent-foreground: var(--crema);
+  --sidebar-muted: #9aa3a6; /* rótulos y datos del usuario */
+  --sidebar-border: #2b363c;
+  --sidebar-ring: var(--lima);
+
+  --sombra-flotante: 0 8px 24px rgba(30, 39, 44, 0.16);
+  --velo: rgba(30, 39, 44, 0.22);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --positivo: var(--lima);
+  --negativo: #ff8f7d;
+  --aviso: #f2c46b;
+
+  --background: var(--carbon);
+  --foreground: var(--crema);
+  --card: #273238;
+  --card-foreground: var(--crema);
+  --popover: #273238;
+  --popover-foreground: var(--crema);
+  --primary: var(--lima);
+  --primary-foreground: var(--carbon);
+  --secondary: #2e3a41;
+  --secondary-foreground: var(--crema);
+  --muted: #2e3a41;
+  --muted-foreground: #a7aca4;
+  --accent: #2e3a41;
+  --accent-foreground: var(--crema);
+  --destructive: var(--negativo);
+  --border: #3b474e;
+  --input: #7c8a91;
+  --ring: var(--lima);
+  --chart-1: var(--lima);
+  --chart-2: var(--crema);
+  --chart-3: var(--arena);
+  --chart-4: #a7aca4;
+  --chart-5: #3b474e;
+  --sidebar: #161d21;
+  --sidebar-foreground: var(--crema);
+  --sidebar-primary: var(--lima);
+  --sidebar-primary-foreground: var(--carbon);
+  --sidebar-accent: #222b30;
+  --sidebar-accent-foreground: var(--crema);
+  --sidebar-muted: #9aa3a6;
+  --sidebar-border: #222b30;
+  --sidebar-ring: var(--lima);
+
+  --sombra-flotante: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --velo: rgba(0, 0, 0, 0.4);
 }
 
 @layer base {
@@ -123,8 +178,495 @@
   }
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
   }
   html {
     @apply font-sans;
+  }
+  /* Foco visible en todo lo interactivo: anillo de 2px en --ring. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  /* Íconos de trazo: grilla 24, trazo 1.75. */
+  svg.lucide {
+    stroke-width: 1.75;
+  }
+}
+
+/* ─── Patrones ZQUARE (zq-*) ─────────────────────────────────────────── */
+
+@layer components {
+  .zq-num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Rótulo chico en mayúsculas ("IBER · DESARROLLO A MEDIDA"). */
+  .zq-rotulo {
+    margin: 0;
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+
+  /* ── Layout ── */
+  .zq-sidebar {
+    position: sticky;
+    top: 0;
+    height: 100dvh;
+    width: 240px;
+    flex: none;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    background: var(--sidebar);
+    color: var(--sidebar-foreground);
+    padding: 20px 12px 16px;
+    overflow-y: auto;
+  }
+  .zq-sidebar-seccion {
+    margin: 18px 10px 6px;
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--sidebar-muted);
+  }
+  .zq-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 36px;
+    padding: 0 10px;
+    border-radius: 8px;
+    color: var(--sidebar-foreground);
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+  }
+  .zq-nav-item:hover {
+    background: var(--sidebar-accent);
+  }
+  .zq-nav-item[aria-current="page"] {
+    background: var(--lima);
+    color: var(--carbon);
+    font-weight: 600;
+  }
+  .zq-nav-item:focus-visible,
+  .zq-sidebar :focus-visible {
+    outline-color: var(--sidebar-ring);
+  }
+  .zq-avatar {
+    width: 28px;
+    height: 28px;
+    flex: none;
+    border-radius: 999px;
+    background: var(--lima);
+    color: var(--carbon);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  /* Badge lima con la cantidad sin leer, sobre la campanita. */
+  .zq-contador {
+    position: absolute;
+    top: 2px;
+    right: 0;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    box-sizing: border-box;
+    border-radius: 999px;
+    background: var(--lima);
+    color: var(--carbon);
+    font-size: 10px;
+    line-height: 16px;
+    font-weight: 700;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .zq-contenido {
+    width: 100%;
+    max-width: 1240px;
+    box-sizing: border-box;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 24px;
+    padding: 20px 16px 96px;
+  }
+  @media (min-width: 720px) {
+    .zq-contenido {
+      padding: 40px 40px 56px;
+      gap: 28px;
+    }
+  }
+
+  /* ── Encabezado de página ── */
+  .zq-encabezado {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px 24px;
+    padding: 4px 0 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .zq-encabezado-titulo {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 32px;
+    line-height: 38px;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+  .zq-encabezado-acciones {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .zq-volver {
+    width: 40px;
+    height: 40px;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    border: 1px solid var(--input);
+    color: var(--foreground);
+  }
+  .zq-volver:hover {
+    background: var(--muted);
+  }
+  /* Pestañas píldora (Tablero · Backlog · Calendario). */
+  .zq-pildoras {
+    display: inline-flex;
+    padding: 3px;
+    gap: 2px;
+    border-radius: 999px;
+    background: var(--muted);
+    font-size: 13px;
+  }
+  .zq-pildoras a {
+    padding: 5px 12px;
+    border-radius: 999px;
+    color: var(--foreground);
+    text-decoration: none;
+  }
+  .zq-pildoras a:hover {
+    background: color-mix(in oklab, var(--foreground) 6%, transparent);
+  }
+  .zq-pildoras a[aria-current="page"] {
+    background: var(--foreground);
+    color: var(--background);
+    font-weight: 600;
+  }
+
+  /* ── Popover (ficha o formulario) ── */
+  .zq-velo {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: var(--velo);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .zq-popover {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    z-index: 50;
+    transform: translate(-50%, -50%);
+    width: min(860px, calc(100vw - 32px));
+    max-height: calc(100dvh - 48px);
+    display: flex;
+    overflow: hidden;
+    border-radius: 14px;
+    background: var(--card);
+    color: var(--card-foreground);
+    box-shadow: var(--sombra-flotante);
+    outline: none;
+  }
+  .zq-popover[data-una-columna] {
+    width: min(640px, calc(100vw - 32px));
+  }
+  .zq-popover-contenido {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .zq-popover-datos {
+    flex: 0 0 clamp(220px, 32%, 300px);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 24px 16px 16px;
+    background: var(--background);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+  }
+  .zq-popover-pie {
+    margin-top: auto;
+    padding-top: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  /* Qué falta para poder guardar, abajo a la izquierda. */
+  .zq-falta {
+    margin: auto 0 0;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--muted-foreground);
+  }
+  .zq-cerrar {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+  }
+  /* Primario que todavía no se puede usar: 45% y aria-disabled. */
+  .zq-primario-pendiente,
+  [aria-disabled="true"].zq-primario-pendiente:hover {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  /* ── Hoja inferior (celular) ── */
+  .zq-hoja {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 50;
+    max-height: calc(100dvh - 40px);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
+    padding: 12px 18px calc(22px + env(safe-area-inset-bottom));
+    border-radius: 24px 24px 0 0;
+    background: var(--card);
+    color: var(--card-foreground);
+    box-shadow: var(--sombra-flotante);
+    outline: none;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+  }
+  .zq-hoja[data-starting-style],
+  .zq-hoja[data-ending-style] {
+    transform: translateY(2.5rem);
+    opacity: 0;
+  }
+  .zq-hoja-velo {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: rgba(30, 39, 44, 0.32);
+  }
+  .zq-manija {
+    align-self: center;
+    width: 40px;
+    height: 5px;
+    flex: none;
+    border-radius: 999px;
+    background: var(--input);
+  }
+  /* En la hoja, los datos van como chips y los botones a todo el ancho. */
+  .zq-hoja .zq-popover-datos {
+    flex-basis: auto;
+    padding: 0;
+    background: none;
+    border: 0;
+    overflow: visible;
+  }
+  .zq-hoja .zq-popover-pie {
+    flex-wrap: nowrap;
+  }
+  .zq-hoja .zq-popover-pie > * {
+    flex: 1;
+    min-height: 48px;
+  }
+  .zq-hoja .zq-cancelar {
+    border-color: var(--input);
+  }
+  .zq-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 32px;
+    padding: 0 12px;
+    border-radius: 999px;
+    background: var(--muted);
+    color: var(--foreground);
+    font-size: 13px;
+  }
+
+  /* ── Panel lateral (notificaciones) ── */
+  .zq-panel-velo {
+    position: fixed;
+    inset: 0 0 0 240px;
+    z-index: 40;
+    background: var(--velo);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .zq-panel-lateral {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 240px;
+    z-index: 41;
+    width: 380px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    background: var(--card);
+    color: var(--card-foreground);
+    border-right: 1px solid var(--border);
+    box-shadow: var(--sombra-flotante);
+    outline: none;
+    transition: transform 0.18s ease, opacity 0.18s ease;
+  }
+  .zq-panel-lateral[data-starting-style],
+  .zq-panel-lateral[data-ending-style] {
+    transform: translateX(-1.5rem);
+    opacity: 0;
+  }
+  @media (max-width: 719px) {
+    .zq-panel-velo {
+      left: 0;
+    }
+    .zq-panel-lateral {
+      left: 0;
+      width: 100%;
+      border-right: 0;
+    }
+  }
+  .zq-cuadradito {
+    width: 28px;
+    height: 28px;
+    flex: none;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .zq-cuadradito svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  /* ── Celular (<720px) ── */
+  .zq-barra-movil {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px;
+    background: var(--background);
+    border-bottom: 1px solid var(--border);
+  }
+  .zq-barra-movil-titulo {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 24px;
+    line-height: 30px;
+    font-weight: 400;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* Botón de solo ícono con área táctil de 44px. */
+  .zq-tactil {
+    position: relative;
+    width: 44px;
+    height: 44px;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 12px;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+  }
+  .zq-tactil:hover {
+    background: color-mix(in oklab, currentColor 8%, transparent);
+  }
+  .zq-menu-movil {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow-y: auto;
+    padding: 12px 16px calc(24px + env(safe-area-inset-bottom));
+    background: var(--sidebar);
+    color: var(--sidebar-foreground);
+    outline: none;
+    transition: opacity 0.15s ease;
+  }
+  .zq-menu-movil[data-starting-style],
+  .zq-menu-movil[data-ending-style] {
+    opacity: 0;
+  }
+  .zq-menu-movil-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 48px;
+    padding: 0 14px;
+    border-radius: 12px;
+    color: var(--sidebar-foreground);
+    font-size: 20px;
+    line-height: 26px;
+    text-decoration: none;
+  }
+  .zq-menu-movil-item[aria-current="page"] {
+    background: var(--sidebar-accent);
+    color: var(--lima);
+    font-weight: 600;
+  }
+  .zq-menu-movil :focus-visible {
+    outline-color: var(--sidebar-ring);
+  }
+  .zq-fab {
+    position: fixed;
+    right: 18px;
+    bottom: calc(24px + env(safe-area-inset-bottom));
+    z-index: 30;
+    width: 56px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 18px;
+    background: var(--carbon);
+    color: var(--lima);
+    box-shadow: var(--sombra-flotante);
+    cursor: pointer;
+  }
+  .zq-fab svg {
+    width: 28px;
+    height: 28px;
   }
 }

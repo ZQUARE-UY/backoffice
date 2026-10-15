@@ -3,13 +3,10 @@ import { redirect } from "next/navigation"
 import { AppSidebar } from "@/components/app-sidebar"
 import { CapturaRapida } from "@/components/captura-rapida"
 import { Toaster } from "@/components/ui/sonner"
-import {
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar"
+import { BarraMovil, BotonCrear } from "@/components/zq/menu-movil"
+import { notificacionesRecientes } from "@/lib/notificaciones"
 import { solicitudesPendientes } from "@/lib/reuniones"
-import { idSocioActual } from "@/lib/socio-actual"
+import { socioActual } from "@/lib/socio-actual"
 import { createClient } from "@/lib/supabase/server"
 
 export default async function ProtegidoLayout({
@@ -26,29 +23,35 @@ export default async function ProtegidoLayout({
     redirect("/login")
   }
 
-  // idSocioActual y solicitudesPendientes van con `cache`: el dashboard los
+  // socioActual y solicitudesPendientes van con `cache`: el dashboard los
   // vuelve a pedir en el mismo request y comparten resultado.
-  const socioId = await idSocioActual()
-  const pendientesReuniones = socioId
-    ? (await solicitudesPendientes(socioId)).length
-    : 0
+  const socio = await socioActual()
+  const [pendientesReuniones, notificaciones] = await Promise.all([
+    socio ? solicitudesPendientes(socio.id).then((s) => s.length) : 0,
+    notificacionesRecientes(socio?.id ?? null),
+  ])
+
+  const email = user.email ?? ""
+  const nombre = socio?.nombre ?? email.split("@")[0]
 
   return (
-    <SidebarProvider>
+    <div className="flex min-h-dvh w-full">
       <AppSidebar
-        email={user.email ?? ""}
+        nombre={nombre}
+        email={email}
+        notificaciones={notificaciones}
         pendientesReuniones={pendientesReuniones}
       />
-      <SidebarInset>
-        <header className="flex h-14 items-center border-b px-4 md:hidden">
-          <SidebarTrigger />
-        </header>
-        <div className="flex flex-1 flex-col gap-6 p-6">{children}</div>
-      </SidebarInset>
-      {/* Tecla N: captura rápida de tareas e ideas desde cualquier pantalla. */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <BarraMovil nombre={nombre} email={email} notificaciones={notificaciones} />
+        <main className="zq-contenido">{children}</main>
+      </div>
+      <BotonCrear />
+      {/* Tecla N (o el botón flotante en celular): captura rápida de tareas e
+          ideas desde cualquier pantalla. */}
       <CapturaRapida />
       {/* Sin esto los toast (sonner) no se muestran en ninguna pantalla. */}
       <Toaster />
-    </SidebarProvider>
+    </div>
   )
 }
