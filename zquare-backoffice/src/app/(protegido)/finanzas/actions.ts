@@ -141,7 +141,7 @@ export async function crearMovimiento(formData: FormData) {
     .single()
   if (error) throw new Error(error.message)
   await guardarReparto(data.id, reparto)
-  revalidatePath("/finanzas")
+  revalidatePath("/finanzas", "layout")
 }
 
 export async function actualizarMovimiento(id: string, formData: FormData) {
@@ -156,7 +156,7 @@ export async function actualizarMovimiento(id: string, formData: FormData) {
     .eq("id", id)
   if (error) throw new Error(error.message)
   await guardarReparto(id, reparto)
-  revalidatePath("/finanzas")
+  revalidatePath("/finanzas", "layout")
 }
 
 export async function eliminarMovimiento(id: string) {
@@ -166,7 +166,7 @@ export async function eliminarMovimiento(id: string) {
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id)
   if (error) throw new Error(error.message)
-  revalidatePath("/finanzas")
+  revalidatePath("/finanzas", "layout")
 }
 
 // ── Movimientos recurrentes ─────────────────────────────────────────────────
@@ -204,7 +204,7 @@ async function resincronizar(recurrenteId: string) {
   await borrarPrevistosFuturos(supabase, recurrenteId)
   const { errores } = await sincronizarRecurrentes(supabase)
   if (errores.length > 0) throw new Error(errores.join("; "))
-  revalidatePath("/finanzas")
+  revalidatePath("/finanzas", "layout")
 }
 
 async function insertarRecurrente(
@@ -315,7 +315,7 @@ export async function crearLiquidacion(formData: FormData) {
     created_by: await idSocioActual(),
   })
   if (error) throw new Error(error.message)
-  revalidatePath("/finanzas")
+  revalidatePath("/finanzas", "layout")
   revalidatePath("/")
 }
 
@@ -326,6 +326,6 @@ export async function eliminarLiquidacion(id: string) {
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id)
   if (error) throw new Error(error.message)
-  revalidatePath("/finanzas")
+  revalidatePath("/finanzas", "layout")
   revalidatePath("/")
 }

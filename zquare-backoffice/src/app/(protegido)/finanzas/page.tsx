@@ -1,354 +1,257 @@
 import Link from "next/link"
-import { RepeatIcon, WalletIcon } from "lucide-react"
+import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon } from "lucide-react"
 
 import { BalanceSociosTabla } from "@/components/balance-socios-tabla"
-import { Badge } from "@/components/ui/badge"
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
-  ESTADOS_MOVIMIENTO,
-  formatearMonto,
-  formatearUsd,
-  TIPOS_MOVIMIENTO,
-  type BalanceSocio,
-  type Cliente,
-  type Liquidacion,
-  type Movimiento,
-  type MovimientoParticipacion,
-  type MovimientoRecurrente,
-  type Proyecto,
-  type Socio,
-} from "@/lib/dominio"
-import { hoyUruguay } from "@/lib/finanzas"
-import { createClient } from "@/lib/supabase/server"
+import { Encabezado } from "@/components/zq/encabezado"
+import { formatearMonto, formatearUsd, type Movimiento } from "@/lib/dominio"
+import { hoyUruguay, transferenciasSugeridas } from "@/lib/finanzas"
+import { fechaCorta, iniciales } from "@/lib/formato"
+import { cn } from "@/lib/utils"
 
+import { cargarFinanzas } from "./datos"
+import { GraficoResultado } from "./grafico-resultado"
 import { Liquidaciones } from "./liquidaciones"
-import { MovimientoAcciones } from "./movimiento-acciones"
 import { NuevoMovimiento } from "./nuevo-movimiento"
 import { Recurrentes } from "./recurrentes"
 
 export const metadata = { title: "Finanzas" }
 
-const usd = formatearUsd
+// Número con signo y sin moneda, para saldos y totales chicos ("+18,91").
+function conSigno(v: number): string {
+  const redondo = Math.round(v * 100) / 100
+  if (redondo === 0) return "0"
+  return `${redondo > 0 ? "+" : "−"}${Math.abs(redondo).toLocaleString("es-UY", { maximumFractionDigits: 2 })}`
+}
 
 export default async function FinanzasPage() {
-  const supabase = await createClient()
-
-  const [
-    { data: movimientosData },
-    { data: sociosData },
-    { data: clientesData },
-    { data: proyectosData },
-    { data: participacionesData },
-    { data: balanceData },
-    { data: recurrentesData },
-    { data: liquidacionesData },
-  ] = await Promise.all([
-    supabase
-      .from("movimientos")
-      .select("*")
-      .is("deleted_at", null)
-      .order("fecha", { ascending: false })
-      .order("created_at", { ascending: false }),
-    supabase.from("socios").select("id, nombre, email").is("deleted_at", null),
-    supabase
-      .from("clientes")
-      .select("id, nombre")
-      .is("deleted_at", null)
-      .order("nombre"),
-    supabase
-      .from("proyectos")
-      .select("id, nombre, cliente_id")
-      .is("deleted_at", null)
-      .order("nombre"),
-    supabase.from("movimiento_participaciones").select("*"),
-    supabase.from("balance_socios").select("*").order("nombre"),
-    supabase
-      .from("movimientos_recurrentes")
-      .select("*")
-      .is("deleted_at", null)
-      .order("activo", { ascending: false })
-      .order("descripcion"),
-    supabase
-      .from("liquidaciones")
-      .select("*")
-      .is("deleted_at", null)
-      .order("fecha", { ascending: false })
-      .order("created_at", { ascending: false }),
-  ])
-
-  const movimientos = (movimientosData ?? []) as Movimiento[]
-  const socios = (sociosData ?? []) as Socio[]
-  const clientes = (clientesData ?? []) as Pick<Cliente, "id" | "nombre">[]
-  const proyectos = (proyectosData ?? []) as Pick<
-    Proyecto,
-    "id" | "nombre" | "cliente_id"
-  >[]
-  const participaciones = (participacionesData ??
-    []) as MovimientoParticipacion[]
-  const balance = (balanceData ?? []) as BalanceSocio[]
-  const recurrentes = (recurrentesData ?? []) as MovimientoRecurrente[]
-  const liquidaciones = (liquidacionesData ?? []) as Liquidacion[]
+  const { movimientos, socios, clientes, proyectos, balance, recurrentes, liquidaciones } = await cargarFinanzas()
   const hoy = hoyUruguay()
-  const nombreSocio = new Map(socios.map((s) => [s.id, s.nombre]))
-  const recurrentePorId = new Map(recurrentes.map((r) => [r.id, r]))
+  const nombre = new Map(socios.map((s) => [s.id, s.nombre.split(" ")[0]]))
+  const nombreCliente = new Map(clientes.map((c) => [c.id, c.nombre]))
   const nombreProyecto = new Map(proyectos.map((p) => [p.id, p.nombre]))
 
-  // Participaciones agrupadas por movimiento, para el formulario de edición.
-  const repartoPorMovimiento = new Map<string, MovimientoParticipacion[]>()
-  for (const p of participaciones) {
-    const filas = repartoPorMovimiento.get(p.movimiento_id) ?? []
-    filas.push(p)
-    repartoPorMovimiento.set(p.movimiento_id, filas)
-  }
-
-  // Los previstos son compromisos a futuro: no cuentan en el resultado ni en la
-  // caja, se muestran aparte.
+  // Los previstos son compromisos a futuro: no cuentan en el resultado ni en
+  // la caja.
   const confirmados = movimientos.filter((m) => m.estado !== "previsto")
   const previstos = movimientos.filter((m) => m.estado === "previsto")
-  const total = (
-    lista: Movimiento[],
-    tipo: Movimiento["tipo"],
-    filtro: (m: Movimiento) => boolean = () => true,
-  ) =>
-    lista
-      .filter((m) => m.tipo === tipo && filtro(m))
-      .reduce((acc, m) => acc + m.monto_usd, 0)
+  const total = (lista: Movimiento[], tipo: Movimiento["tipo"], filtro: (m: Movimiento) => boolean = () => true) =>
+    lista.filter((m) => m.tipo === tipo && filtro(m)).reduce((acc, m) => acc + Number(m.monto_usd), 0)
 
-  // Resultado del período (todo consolidado a USD).
   const ingresos = total(confirmados, "ingreso")
   const gastos = total(confirmados, "gasto")
   const resultado = ingresos - gastos
-
-  // Caja del fondo común: solo lo que entró y salió de la cuenta de la empresa.
-  // Lo que un socio cobró o pagó de su bolsillo no pasó por la caja; eso se
-  // salda en el balance entre socios.
+  // Caja del fondo común: solo lo que pasó por la cuenta de la empresa. Lo
+  // que un socio cobró o pagó de su bolsillo se salda entre socios.
   const enFondo = (m: Movimiento) => m.socio_id == null
-  const caja =
-    total(confirmados, "ingreso", enFondo) - total(confirmados, "gasto", enFondo)
-
-  // Comprometido a futuro: neto de los movimientos previstos.
+  const caja = total(confirmados, "ingreso", enFondo) - total(confirmados, "gasto", enFondo)
   const comprometido = total(previstos, "ingreso") - total(previstos, "gasto")
+
+  // Entre socios: el saldo de cada uno y cómo dejarlo en cero.
+  const sugeridas = transferenciasSugeridas(balance)
+  const receptores = new Set(sugeridas.map((t) => t.para_socio_id))
+  const montos = new Set(sugeridas.map((t) => Math.round(t.monto_usd * 100)))
+  const sugerencia =
+    sugeridas.length === 0
+      ? "Están a mano: nadie le debe a nadie."
+      : receptores.size === 1 && montos.size === 1 && sugeridas.length > 1
+        ? `${nombre.get(sugeridas[0].para_socio_id)} recibe ${formatearUsd(sugeridas[0].monto_usd)} de cada uno y quedan en cero.`
+        : "Con estas transferencias quedan en cero."
+
+  const ultimos = movimientos.slice(0, 5)
 
   return (
     <>
-      <div className="flex items-center justify-between">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Finanzas</h1>
-          <p className="text-muted-foreground">
-            Ingresos y gastos de la empresa, consolidado en USD.
-          </p>
-        </div>
-        <NuevoMovimiento
-          socios={socios}
-          clientes={clientes}
-          proyectos={proyectos}
-        />
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader>
-            <CardDescription>Caja (fondo común)</CardDescription>
-            <CardTitle
-              className={`text-2xl ${caja < 0 ? "text-destructive" : ""}`}
-            >
-              {usd(caja)}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>Ingresos</CardDescription>
-            <CardTitle className="text-2xl text-emerald-600 dark:text-emerald-500">
-              {usd(ingresos)}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>Gastos</CardDescription>
-            <CardTitle className="text-2xl text-destructive">
-              {usd(gastos)}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>Resultado</CardDescription>
-            <CardTitle className="text-2xl">{usd(resultado)}</CardTitle>
-          </CardHeader>
-        </Card>
-        {previstos.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardDescription>Comprometido (previsto)</CardDescription>
-              <CardTitle className="text-2xl text-muted-foreground">
-                {comprometido > 0 ? "+" : ""}
-                {usd(comprometido)}
-              </CardTitle>
-            </CardHeader>
-          </Card>
-        )}
-      </div>
-
-      <BalanceSociosTabla balance={balance} />
-
-      <Liquidaciones
-        balance={balance}
-        socios={socios}
-        liquidaciones={liquidaciones}
-        hoy={hoy}
-      />
-
-      <Recurrentes
-        recurrentes={recurrentes}
-        hoy={hoy}
-        socios={socios}
-        clientes={clientes}
-        proyectos={proyectos}
-      />
-
-      {movimientos.length === 0 ? (
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <WalletIcon />
-            </EmptyMedia>
-            <EmptyTitle>Sin movimientos</EmptyTitle>
-            <EmptyDescription>
-              Cargá el primer ingreso o gasto para empezar a llevar las finanzas
-              de la empresa.
-            </EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
+      <Encabezado
+        titulo="Finanzas"
+        acciones={
+          <>
             <NuevoMovimiento
               socios={socios}
               clientes={clientes}
               proyectos={proyectos}
+              tipoInicial="ingreso"
+              variante="outline"
+              etiqueta={
+                <>
+                  <span className="font-bold text-positivo">+</span> Ingreso
+                </>
+              }
             />
-          </EmptyContent>
-        </Empty>
-      ) : (
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Fecha</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Detalle</TableHead>
-                <TableHead>Puso / cobró</TableHead>
-                <TableHead className="text-right">Monto</TableHead>
-                <TableHead className="text-right">USD</TableHead>
-                <TableHead className="w-0" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {movimientos.map((m) => {
-                const tipo = TIPOS_MOVIMIENTO[m.tipo]
-                return (
-                  <TableRow
-                    key={m.id}
-                    className={m.estado === "previsto" ? "opacity-60" : ""}
+            <NuevoMovimiento
+              socios={socios}
+              clientes={clientes}
+              proyectos={proyectos}
+              tipoInicial="gasto"
+              variante="outline"
+              escucharCrear
+              etiqueta={
+                <>
+                  <span className="font-bold text-negativo">−</span> Gasto
+                </>
+              }
+            />
+            <NuevoMovimiento
+              socios={socios}
+              clientes={clientes}
+              proyectos={proyectos}
+              tipoInicial="transferencia"
+              variante="outline"
+              etiqueta="⇄ Transferencia"
+            />
+          </>
+        }
+      />
+
+      <section aria-label="Resultado" className="flex flex-wrap items-end gap-x-10 gap-y-6 rounded-xl border bg-card px-7 py-6">
+        <div className="flex flex-[0_1_280px] flex-col gap-3.5">
+          <div>
+            <p className="m-0 text-[13px] text-muted-foreground">Resultado acumulado</p>
+            <p className={cn("zq-num m-0 font-display text-[44px] leading-[50px]", resultado < 0 && "text-negativo")}>
+              {formatearUsd(resultado)}
+            </p>
+          </div>
+          <div className="zq-num flex gap-6">
+            <div>
+              <p className="m-0 text-xs text-muted-foreground">Entró</p>
+              <p className="m-0 font-semibold text-positivo">{conSigno(ingresos)}</p>
+            </div>
+            <div>
+              <p className="m-0 text-xs text-muted-foreground">Salió</p>
+              <p className="m-0 font-semibold text-negativo">{conSigno(-gastos)}</p>
+            </div>
+            <div>
+              <p className="m-0 text-xs text-muted-foreground">En caja</p>
+              <p className={cn("m-0 font-semibold", caja < 0 && "text-negativo")}>{caja.toLocaleString("es-UY", { maximumFractionDigits: 2 })}</p>
+            </div>
+          </div>
+          {previstos.length > 0 && (
+            <p className="zq-num m-0 text-xs text-muted-foreground">
+              Previsto a futuro: {conSigno(comprometido)} USD
+            </p>
+          )}
+        </div>
+        <GraficoResultado movimientos={confirmados} hoy={hoy} />
+      </section>
+
+      <div className="flex flex-wrap items-start gap-5">
+        <section aria-labelledby="socios" className="flex min-w-0 flex-[1_1_340px] flex-col gap-4 rounded-xl border bg-card px-6 py-5">
+          <h2 id="socios" className="m-0 text-base font-semibold">
+            Entre socios
+          </h2>
+          <ul className="zq-num m-0 grid list-none grid-cols-4 gap-2 p-0">
+            {balance.map((b) => {
+              const aFavor = Math.round(b.saldo_usd * 100) > 0
+              const enContra = Math.round(b.saldo_usd * 100) < 0
+              return (
+                <li key={b.socio_id} className="flex flex-col items-center gap-1.5 text-center">
+                  <span
+                    className={cn(
+                      "inline-flex size-10 items-center justify-center rounded-full text-[13px] font-bold",
+                      aFavor ? "bg-lima text-carbon" : "bg-muted text-foreground"
+                    )}
                   >
-                    <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">
-                      {m.fecha}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap items-center gap-1">
-                        <Badge variant={tipo.variant}>{tipo.label}</Badge>
-                        {m.recurrente_id && (
-                          <RepeatIcon
-                            aria-label="Generado por un recurrente"
-                            className="size-3.5 text-muted-foreground"
-                          />
-                        )}
-                        {m.estado === "previsto" && (
-                          <Badge variant={ESTADOS_MOVIMIENTO.previsto.variant}>
-                            {ESTADOS_MOVIMIENTO.previsto.label}
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span>{m.descripcion ?? m.categoria ?? "—"}</span>
-                        {(m.proyecto_id || (m.descripcion && m.categoria)) && (
-                          <span className="text-xs text-muted-foreground">
-                            {[
-                              m.descripcion && m.categoria ? m.categoria : null,
-                              m.proyecto_id
-                                ? nombreProyecto.get(m.proyecto_id)
-                                : null,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {m.socio_id
-                        ? nombreSocio.get(m.socio_id) ?? "—"
-                        : "Fondo común"}
-                    </TableCell>
-                    <TableCell className="text-right whitespace-nowrap tabular-nums">
-                      {m.comprobante_url ? (
-                        <Link
-                          href={m.comprobante_url}
-                          target="_blank"
-                          className="text-primary hover:underline"
-                        >
-                          {formatearMonto(m.monto, m.moneda)}
-                        </Link>
-                      ) : (
-                        formatearMonto(m.monto, m.moneda)
+                    {iniciales(b.nombre)}
+                  </span>
+                  <span className="text-[13px]">{b.nombre.split(" ")[0]}</span>
+                  <span
+                    className={cn(
+                      "text-[13px] font-semibold",
+                      aFavor ? "text-positivo" : enContra ? "text-negativo" : "text-muted-foreground"
+                    )}
+                    aria-label={aFavor ? `a favor ${conSigno(b.saldo_usd)}` : enContra ? `debe ${conSigno(b.saldo_usd)}` : "a mano"}
+                  >
+                    {conSigno(b.saldo_usd)}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+          <div className="flex flex-col gap-2 rounded-[10px] bg-muted px-3.5 py-3">
+            <span>{sugerencia}</span>
+            {sugeridas.map((t, i) => (
+              <div key={`${t.de_socio_id}-${t.para_socio_id}`} className="flex items-center justify-between gap-3">
+                <span className="zq-num flex items-center gap-1.5 text-[13px]">
+                  {nombre.get(t.de_socio_id)}
+                  <ArrowRightIcon className="size-3.5 text-muted-foreground" aria-label="le pasa a" />
+                  {nombre.get(t.para_socio_id)} · {formatearUsd(t.monto_usd)}
+                </span>
+                <NuevoMovimiento
+                  socios={socios}
+                  clientes={clientes}
+                  proyectos={proyectos}
+                  transferencia={{ de: t.de_socio_id, para: t.para_socio_id, monto: t.monto_usd }}
+                  etiqueta="Registrar"
+                  variante={i === 0 ? "default" : "outline"}
+                  tamano="sm"
+                />
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section aria-labelledby="ultimos" className="flex min-w-0 flex-[1.4_1_420px] flex-col rounded-xl border bg-card px-6 pt-5 pb-3">
+          <div className="mb-2 flex items-baseline justify-between">
+            <h2 id="ultimos" className="m-0 text-base font-semibold">
+              Últimos movimientos
+            </h2>
+            <Link href="/finanzas/movimientos" className="text-sm font-semibold">
+              Ver todos →
+            </Link>
+          </div>
+          {ultimos.length === 0 ? (
+            <p className="m-0 border-t py-4 text-muted-foreground">Todavía no hay movimientos. Cargá el primero con + Ingreso o − Gasto.</p>
+          ) : (
+            <ul className="m-0 list-none p-0">
+              {ultimos.map((m) => {
+                const ingreso = m.tipo === "ingreso"
+                const extra = m.proyecto_id
+                  ? nombreProyecto.get(m.proyecto_id)
+                  : m.cliente_id
+                    ? nombreCliente.get(m.cliente_id)
+                    : null
+                return (
+                  <li key={m.id} className={cn("flex items-center gap-3.5 border-t py-2.5", m.estado === "previsto" && "opacity-60")}>
+                    <span
+                      aria-label={ingreso ? "Ingreso" : "Gasto"}
+                      className={cn(
+                        "flex size-8 shrink-0 items-center justify-center rounded-full",
+                        ingreso ? "bg-lima text-carbon" : "bg-muted text-foreground"
                       )}
-                    </TableCell>
-                    <TableCell className="text-right whitespace-nowrap tabular-nums text-muted-foreground">
-                      {usd(m.monto_usd)}
-                    </TableCell>
-                    <TableCell>
-                      <MovimientoAcciones
-                        movimiento={m}
-                        recurrente={
-                          m.recurrente_id
-                            ? recurrentePorId.get(m.recurrente_id)
-                            : undefined
-                        }
-                        socios={socios}
-                        clientes={clientes}
-                        proyectos={proyectos}
-                        reparto={repartoPorMovimiento.get(m.id) ?? []}
-                      />
-                    </TableCell>
-                  </TableRow>
+                    >
+                      {ingreso ? <ArrowUpIcon className="size-4" /> : <ArrowDownIcon className="size-4" />}
+                    </span>
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate font-medium">
+                        {m.descripcion ?? m.categoria ?? "Sin descripción"}
+                        {extra && ` · ${extra}`}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {m.socio_id ? nombre.get(m.socio_id) : "Fondo común"} · {fechaCorta(m.fecha, hoy)}
+                        {m.estado === "previsto" && " · previsto"}
+                      </span>
+                    </span>
+                    <span className={cn("zq-num font-semibold whitespace-nowrap", ingreso && "text-positivo")}>
+                      {ingreso ? "+" : "−"}
+                      {formatearMonto(Number(m.monto), m.moneda)}
+                    </span>
+                  </li>
                 )
               })}
-            </TableBody>
-          </Table>
+            </ul>
+          )}
+        </section>
+      </div>
+
+      <details className="rounded-xl border bg-card px-6 py-4">
+        <summary className="cursor-pointer font-semibold select-none">
+          Recurrentes, transferencias hechas y balance detallado
+        </summary>
+        <div className="flex flex-col gap-5 pt-4">
+          <Recurrentes recurrentes={recurrentes} hoy={hoy} socios={socios} clientes={clientes} proyectos={proyectos} />
+          <Liquidaciones balance={balance} socios={socios} liquidaciones={liquidaciones} hoy={hoy} />
+          <BalanceSociosTabla balance={balance} />
         </div>
-      )}
+      </details>
     </>
   )
 }

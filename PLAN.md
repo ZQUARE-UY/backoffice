@@ -963,3 +963,14 @@ cuatro.
   activo; agenda de hoy y mañana desde mi Google Calendar (mascota si no
   hay); mis proyectos con su avance en el sprint y la empresa por estado.
   Los números de plata dejan Inicio (viven en Finanzas).
+- **2026-10-15** — Rediseño, Finanzas y Nuevo movimiento. Encabezado con
+  + Ingreso / − Gasto / ⇄ Transferencia; resultado acumulado grande con
+  entró / salió / en caja y gráfico de área por mes (SVG propio); "Entre
+  socios" con el saldo de cada uno y las transferencias sugeridas para
+  saldar (Registrar abre la transferencia ya armada); últimos 5 movimientos
+  y "Ver todos" (`/finanzas/movimientos`, la tabla completa con editar y
+  eliminar). Recurrentes, transferencias hechas y balance detallado quedan
+  en un desplegable. Nuevo movimiento en Popover: tipo, moneda y monto
+  grande, quién lo pagó/cobró con avatares, resumen que se recalcula
+  ("Cada socio le debe…"), y a la derecha categoría, fecha, entre quiénes
+  se divide, cliente o proyecto, si se repite y estado.
