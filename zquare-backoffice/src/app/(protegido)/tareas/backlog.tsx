@@ -1,62 +1,56 @@
 "use client"
 
 import { useOptimistic, useState, useTransition } from "react"
-import {
-  ArrowRightIcon,
-  CalendarIcon,
-  ChevronsUpDownIcon,
-  FlagIcon,
-  UserIcon,
-} from "lucide-react"
+import Link from "next/link"
+import { Popover } from "@base-ui/react/popover"
+import { ChevronDownIcon, GripVerticalIcon, SearchIcon, XIcon } from "lucide-react"
+import { toast } from "sonner"
 
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
+import { useEsCelular } from "@/hooks/use-mobile"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { cn } from "@/lib/utils"
-import {
+  codigoSprint,
   codigoTarea,
-  ESTADOS_TAREA,
-  ESTADOS_TAREA_ORDEN,
-  PRIORIDADES_TAREA,
-  tareaDesarrollada,
   type ComentarioTarea,
+  type PrioridadTarea,
   type Socio,
   type Sprint,
   type Tarea,
   type VersionTarea,
 } from "@/lib/dominio"
+import { cn } from "@/lib/utils"
 
 import { moverASprint, moverTarea, pasarAlTablero } from "./actions"
 import { type ClienteOpcion, type ProyectoOpcion } from "./campos-tarea"
 import { DetalleTarea } from "./detalle-tarea"
-import { NuevaTarea } from "./nueva-tarea"
 import { ordenEntre } from "./orden"
-import { EncabezadoSprint, NuevoSprint, resumirSprint } from "./sprints"
+import { resumirSprint } from "./resumen"
+import { IniciarSprint, MenuSprint, NuevoSprint } from "./sprints"
+import { nombreSinNumero } from "./tarjeta"
 
 // Cambios optimistas: reordenar, sacar del backlog ("Al tablero") o cambiar de
-// sección (sprint ↔ backlog).
+// sprint.
 type Cambio =
   | { id: string; orden: number }
   | { id: string; quitar: true }
   | { id: string; sprint_id: string | null; estado: Tarea["estado"] }
 
-// Clave de sección para el drag & drop: un sprint (su id) o el backlog libre.
-const BACKLOG = "backlog"
+const TODOS = "todos"
+const SIN_PROYECTO = "sin"
 
-// La vista Backlog al estilo Jira: arriba los sprints (el activo y los
-// planificados) con sus tarjetas, abajo el backlog libre priorizado. Se
-// arrastra entre secciones para armar un sprint y dentro de una sección para
-// priorizar. El sprint activo se ve pero no se reordena acá (su orden vive en
-// el tablero).
+// Punto de urgencia de cada fila.
+const COLOR_PRIORIDAD: Record<PrioridadTarea, string> = {
+  urgente: "bg-negativo",
+  alta: "bg-aviso",
+  media: "bg-input",
+  baja: "bg-input",
+}
+
+// Cuadradito de color de cada proyecto (por orden, se repite si hay más).
+const COLORES_PROYECTO = ["bg-lima", "bg-arena", "bg-[#d8d6c9]", "bg-carbon dark:bg-crema", "bg-muted-foreground"]
+
+// Backlog: a la izquierda las tareas sin sprint del proyecto elegido; a la
+// derecha (fija) el panel del próximo sprint, donde se arrastran o se suman
+// con "Al sprint →", y se inicia.
 export function Backlog({
   tareas,
   sprints,
@@ -76,373 +70,443 @@ export function Backlog({
   proyectos: ProyectoOpcion[]
   tareaAbierta?: number
 }) {
+  const esCelular = useEsCelular()
   const [, iniciarTransicion] = useTransition()
-  const [vista, aplicarOptimista] = useOptimistic(
-    tareas,
-    (actual: Tarea[], cambio: Cambio) => {
-      if ("quitar" in cambio) return actual.filter((t) => t.id !== cambio.id)
-      if ("sprint_id" in cambio)
-        return actual.map((t) =>
-          t.id === cambio.id
-            ? { ...t, sprint_id: cambio.sprint_id, estado: cambio.estado }
-            : t
-        )
+  const [vista, aplicarOptimista] = useOptimistic(tareas, (actual: Tarea[], cambio: Cambio) => {
+    if ("quitar" in cambio) return actual.filter((t) => t.id !== cambio.id)
+    if ("sprint_id" in cambio)
       return actual.map((t) =>
-        t.id === cambio.id ? { ...t, orden: cambio.orden } : t
+        t.id === cambio.id ? { ...t, sprint_id: cambio.sprint_id, estado: cambio.estado } : t
       )
-    }
-  )
+    return actual.map((t) => (t.id === cambio.id ? { ...t, orden: cambio.orden } : t))
+  })
   const [arrastrada, setArrastrada] = useState<string | null>(null)
-  const [seccionActiva, setSeccionActiva] = useState<string | null>(null)
-
-  const nombreCliente = new Map(clientes.map((c) => [c.id, c.nombre]))
-  const nombreSocio = new Map(socios.map((s) => [s.id, s.nombre]))
+  const [sobrePanel, setSobrePanel] = useState(false)
+  const [proyectoSel, setProyectoSel] = useState(TODOS)
 
   const activo = sprints.find((s) => s.estado === "activo") ?? null
   const planificados = sprints.filter((s) => s.estado === "planificado")
+  const [elegidoId, setElegidoId] = useState<string | null>(planificados[0]?.id ?? null)
+  const elegido = planificados.find((s) => s.id === elegidoId) ?? planificados[0] ?? null
   const siguienteNumero = Math.max(0, ...sprints.map((s) => s.numero)) + 1
 
-  const rango = (estado: Tarea["estado"]) => ESTADOS_TAREA_ORDEN.indexOf(estado)
+  const libres = vista
+    .filter((t) => !t.sprint_id && t.estado === "backlog")
+    .sort((a, b) => Number(a.orden) - Number(b.orden))
+  const enSprint = elegido
+    ? vista.filter((t) => t.sprint_id === elegido.id).sort((a, b) => Number(a.orden) - Number(b.orden))
+    : []
+  const enActivo = activo ? vista.filter((t) => t.sprint_id === activo.id) : []
 
-  function seccion(clave: string): Tarea[] {
-    if (clave === BACKLOG) {
-      return vista
-        .filter((t) => !t.sprint_id && t.estado === "backlog")
-        .sort((a, b) => Number(a.orden) - Number(b.orden))
-    }
-    const items = vista.filter((t) => t.sprint_id === clave)
-    // El sprint activo se muestra en orden de tablero: columna más avanzada
-    // primero. Los planificados, por prioridad.
-    return activo?.id === clave
-      ? items.sort(
-          (a, b) => rango(b.estado) - rango(a.estado) || Number(a.orden) - Number(b.orden)
-        )
-      : items.sort((a, b) => Number(a.orden) - Number(b.orden))
+  const nombreProyecto = new Map(proyectos.map((p) => [p.id, p.nombre]))
+  const visibles = libres.filter((t) =>
+    proyectoSel === TODOS
+      ? true
+      : proyectoSel === SIN_PROYECTO
+        ? !t.proyecto_id
+        : t.proyecto_id === proyectoSel
+  )
+
+  function cambiarSprint(tarea: Tarea, sprintId: string | null) {
+    const estado: Tarea["estado"] = sprintId && activo?.id === sprintId ? "por_hacer" : "backlog"
+    iniciarTransicion(async () => {
+      aplicarOptimista({ id: tarea.id, sprint_id: sprintId, estado })
+      try {
+        await moverASprint(tarea.id, sprintId)
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "No se pudo mover la tarea")
+      }
+    })
   }
 
-  function seccionDe(tarea: Tarea): string {
-    return tarea.sprint_id ?? BACKLOG
+  // Sin sprint planificado, la tarea va directo al tablero (y al sprint
+  // activo, si hay uno).
+  function alTablero(tarea: Tarea) {
+    iniciarTransicion(async () => {
+      if (activo) aplicarOptimista({ id: tarea.id, sprint_id: activo.id, estado: "por_hacer" })
+      else aplicarOptimista({ id: tarea.id, quitar: true })
+      await pasarAlTablero(tarea.id)
+    })
   }
 
-  // Soltar en una sección: si es la misma, reordena (punto medio entre las
-  // vecinas, una sola fila); si es otra, la tarjeta cambia de sprint (y el
-  // server acomoda la columna). `indice` es la posición sin contar la movida.
-  function soltar(clave: string, indice: number, idSoltado?: string) {
-    const id = idSoltado || arrastrada
+  // Soltar sobre una fila de la lista: reordena el backlog (punto medio entre
+  // las vecinas, una sola fila). Si venía del sprint, vuelve al backlog.
+  function soltarEnLista(idSoltado: string, antesDe?: Tarea) {
     setArrastrada(null)
-    setSeccionActiva(null)
-    if (!id) return
-    const tarea = vista.find((t) => t.id === id)
+    const tarea = vista.find((t) => t.id === idSoltado)
     if (!tarea) return
-
-    if (seccionDe(tarea) !== clave) {
-      const sprintId = clave === BACKLOG ? null : clave
-      const estado: Tarea["estado"] =
-        sprintId && activo?.id === sprintId ? "por_hacer" : "backlog"
-      iniciarTransicion(async () => {
-        aplicarOptimista({ id, sprint_id: sprintId, estado })
-        await moverASprint(id, sprintId)
-      })
+    if (tarea.sprint_id) {
+      cambiarSprint(tarea, null)
       return
     }
-
-    // Dentro del sprint activo el orden es el del tablero: no se reordena acá.
-    if (activo && clave === activo.id) return
-
-    const destino = seccion(clave).filter((t) => t.id !== id)
+    const destino = libres.filter((t) => t.id !== idSoltado)
+    const indice = antesDe ? destino.findIndex((t) => t.id === antesDe.id) : destino.length
     const orden = ordenEntre(destino[indice - 1], destino[indice])
     if (Number(tarea.orden) === orden) return
     iniciarTransicion(async () => {
-      aplicarOptimista({ id, orden })
-      await moverTarea(id, "backlog", orden)
+      aplicarOptimista({ id: idSoltado, orden })
+      await moverTarea(idSoltado, "backlog", orden)
     })
   }
 
-  function pasar(id: string) {
-    iniciarTransicion(async () => {
-      if (activo) aplicarOptimista({ id, sprint_id: activo.id, estado: "por_hacer" })
-      else aplicarOptimista({ id, quitar: true })
-      await pasarAlTablero(id)
-    })
+  function idArrastrado(e: React.DragEvent): string | null {
+    return e.dataTransfer.getData("text/plain") || arrastrada
   }
 
-  function cambiarSprint(tarea: Tarea, sprintId: string | null) {
-    const estado: Tarea["estado"] =
-      sprintId && activo?.id === sprintId ? "por_hacer" : "backlog"
-    iniciarTransicion(async () => {
-      aplicarOptimista({ id: tarea.id, sprint_id: sprintId, estado })
-      await moverASprint(tarea.id, sprintId)
-    })
+  // Tareas sin sprint por proyecto, para el selector.
+  const conteos = new Map<string, number>()
+  for (const t of libres) {
+    const clave = t.proyecto_id ?? SIN_PROYECTO
+    conteos.set(clave, (conteos.get(clave) ?? 0) + 1)
   }
 
-  function propsZona(clave: string, items: Tarea[]) {
-    return {
-      onDragOver: (e: React.DragEvent) => {
-        e.preventDefault()
-        e.dataTransfer.dropEffect = "move"
-        setSeccionActiva(clave)
-      },
-      onDragLeave: () => setSeccionActiva((s) => (s === clave ? null : s)),
-      onDrop: (e: React.DragEvent) => {
-        e.preventDefault()
-        // Soltar fuera de las filas: la tarjeta va al final.
-        const id = e.dataTransfer.getData("text/plain") || arrastrada
-        if (!id) return
-        soltar(clave, items.filter((t) => t.id !== id).length, id)
-      },
-      className: cn(
-        "flex flex-col gap-2 rounded-xl border p-2 transition-colors",
-        seccionActiva === clave && arrastrada && "border-primary bg-muted"
-      ),
-    }
-  }
+  return (
+    <div className="flex flex-wrap items-start gap-5">
+      <section aria-label="Tareas sin sprint" className="flex min-w-0 flex-[999_1_420px] flex-col gap-3.5">
+        <SelectorProyecto
+          proyectos={proyectos}
+          conteos={conteos}
+          total={libres.length}
+          valor={proyectoSel}
+          onChange={setProyectoSel}
+        />
 
-  function fila(tarea: Tarea, clave: string, items: Tarea[]) {
-    const enSprintActivo = Boolean(activo && tarea.sprint_id === activo.id)
-    return (
-      <div
-        key={tarea.id}
-        draggable
-        onDragStart={(e) => {
-          setArrastrada(tarea.id)
-          // Firefox no dispara el drop si el drag no lleva datos.
-          e.dataTransfer.setData("text/plain", tarea.id)
-          e.dataTransfer.effectAllowed = "move"
+        <ul
+          className="m-0 flex list-none flex-col gap-2 p-0"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault()
+            const id = idArrastrado(e)
+            if (id) soltarEnLista(id)
+          }}
+        >
+          {visibles.map((t) => (
+            <li
+              key={t.id}
+              draggable={!esCelular}
+              onDragStart={(e) => {
+                setArrastrada(t.id)
+                // Firefox no dispara el drop si el drag no lleva datos.
+                e.dataTransfer.setData("text/plain", t.id)
+                e.dataTransfer.effectAllowed = "move"
+              }}
+              onDragEnd={() => {
+                setArrastrada(null)
+                setSobrePanel(false)
+              }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                const id = idArrastrado(e)
+                if (id && id !== t.id) soltarEnLista(id, t)
+                else setArrastrada(null)
+              }}
+              className={cn(
+                "group flex items-center gap-2.5 rounded-[10px] border bg-card py-1.5 pr-1.5 pl-3 hover:border-input",
+                !esCelular && "cursor-grab active:cursor-grabbing",
+                arrastrada === t.id && "opacity-40"
+              )}
+            >
+              <GripVerticalIcon aria-hidden="true" className="size-4 shrink-0 text-input max-escritorio:hidden" />
+              <div className="min-w-0 flex-1">
+                <DetalleTarea
+                  tarea={t}
+                  sprints={sprints}
+                  comentarios={comentarios.filter((c) => c.tarea_id === t.id)}
+                  versiones={versiones.filter((v) => v.tarea_id === t.id)}
+                  socios={socios}
+                  clientes={clientes}
+                  proyectos={proyectos}
+                  abiertoInicial={t.numero === tareaAbierta}
+                >
+                  <span className="flex min-h-8 items-center gap-2.5" title={t.titulo}>
+                    <span
+                      aria-label={`Prioridad ${t.prioridad}`}
+                      className={cn("size-2 shrink-0 rounded-full", COLOR_PRIORIDAD[t.prioridad])}
+                    />
+                    <span className="min-w-0 flex-1 truncate">{t.titulo}</span>
+                    {proyectoSel === TODOS && t.proyecto_id && (
+                      <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">
+                        {nombreProyecto.get(t.proyecto_id)}
+                      </span>
+                    )}
+                    <span className="zq-num shrink-0 text-xs text-muted-foreground">
+                      {codigoTarea(t.numero)}
+                    </span>
+                  </span>
+                </DetalleTarea>
+              </div>
+              <button
+                type="button"
+                onClick={() => (elegido ? cambiarSprint(t, elegido.id) : alTablero(t))}
+                className="h-8 shrink-0 rounded-lg bg-muted px-2.5 text-xs font-semibold opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-escritorio:opacity-100"
+              >
+                {elegido ? "Al sprint →" : "Al tablero →"}
+              </button>
+            </li>
+          ))}
+          {visibles.length === 0 && (
+            <li className="rounded-xl border border-dashed border-input p-7 text-center text-muted-foreground">
+              {libres.length === 0
+                ? "No hay tareas sin sprint: todo está planificado."
+                : "Todas las tareas de este proyecto ya están en un sprint."}
+            </li>
+          )}
+        </ul>
+      </section>
+
+      <aside
+        aria-label={elegido ? `${codigoSprint(elegido.numero)}, próximo sprint` : "Próximo sprint"}
+        className="zq-sprint-panel"
+        data-sobre={sobrePanel || undefined}
+        onDragOver={(e) => {
+          if (!elegido) return
+          e.preventDefault()
+          e.dataTransfer.dropEffect = "move"
         }}
-        onDragEnd={() => {
-          setArrastrada(null)
-          setSeccionActiva(null)
+        onDragEnter={(e) => {
+          if (!elegido) return
+          e.preventDefault()
+          setSobrePanel(true)
+        }}
+        onDragLeave={(e) => {
+          // Pasar de un hijo a otro dispara dragleave: solo vale salir del panel.
+          if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+          setSobrePanel(false)
         }}
         onDrop={(e) => {
           e.preventDefault()
-          e.stopPropagation()
-          // Soltar sobre una fila: la movida se inserta antes.
-          const id = e.dataTransfer.getData("text/plain") || arrastrada
-          if (!id || id === tarea.id) {
-            setArrastrada(null)
-            setSeccionActiva(null)
-            return
-          }
-          const destino = items.filter((t) => t.id !== id)
-          soltar(clave, destino.findIndex((t) => t.id === tarea.id), id)
+          setSobrePanel(false)
+          setArrastrada(null)
+          const id = idArrastrado(e)
+          const tarea = vista.find((t) => t.id === id)
+          if (tarea && elegido && tarea.sprint_id !== elegido.id) cambiarSprint(tarea, elegido.id)
         }}
-        className={cn(
-          "flex items-center gap-2 cursor-grab active:cursor-grabbing",
-          arrastrada === tarea.id && "opacity-40"
-        )}
       >
-        <div className="min-w-0 flex-1">
-          <DetalleTarea
-            tarea={tarea}
-            sprints={sprints}
-            comentarios={comentarios.filter((c) => c.tarea_id === tarea.id)}
-            versiones={versiones.filter((v) => v.tarea_id === tarea.id)}
-            socios={socios}
-            clientes={clientes}
-            proyectos={proyectos}
-            abiertoInicial={tarea.numero === tareaAbierta}
-          >
-            <Card className="flex-row items-center gap-3 p-3 hover:border-primary/50">
-              <span className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
-                {codigoTarea(tarea.numero)}
-                {!tareaDesarrollada(tarea) && tarea.estado !== "hecho" && (
-                  // Punto ámbar: falta el resultado esperado, así que
-                  // todavía no es resoluble.
-                  <span
-                    title="Sin desarrollar: falta el resultado esperado"
-                    className="size-1.5 rounded-full bg-amber-500"
-                  />
-                )}
-              </span>
-              <span
-                className={cn(
-                  "min-w-0 flex-1 truncate text-sm font-medium",
-                  tarea.estado === "hecho" && "text-muted-foreground line-through"
-                )}
-              >
-                {tarea.titulo}
-              </span>
-              <div className="flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
-                {enSprintActivo && (
-                  <Badge variant={ESTADOS_TAREA[tarea.estado].variant}>
-                    {ESTADOS_TAREA[tarea.estado].label}
-                  </Badge>
-                )}
-                {tarea.cliente_id && nombreCliente.has(tarea.cliente_id) && (
-                  <span className="hidden sm:inline">
-                    {nombreCliente.get(tarea.cliente_id)}
-                  </span>
-                )}
-                {tarea.asignado_a && nombreSocio.has(tarea.asignado_a) && (
-                  <span className="hidden items-center gap-1 sm:flex">
-                    <UserIcon className="size-3" />
-                    {nombreSocio.get(tarea.asignado_a)}
-                  </span>
-                )}
-                {tarea.fecha_limite && (
-                  <span className="hidden items-center gap-1 sm:flex">
-                    <CalendarIcon className="size-3" />
-                    {tarea.fecha_limite}
-                  </span>
-                )}
-                {tarea.estimacion && (
-                  <span
-                    title={`${tarea.estimacion} puntos`}
-                    className="rounded-full bg-muted px-1.5 font-mono"
-                  >
-                    {tarea.estimacion}
-                  </span>
-                )}
-                <Badge variant={PRIORIDADES_TAREA[tarea.prioridad].variant}>
-                  {PRIORIDADES_TAREA[tarea.prioridad].label}
-                </Badge>
-              </div>
-            </Card>
-          </DetalleTarea>
-        </div>
-
-        {/* Mover a un sprint (o sacarla). Sin sprints creados, queda el botón
-            "Al tablero" de siempre. */}
-        {sprints.length > 0 ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0"
-                  title="Mover a un sprint"
-                >
-                  <FlagIcon data-icon="inline-start" />
-                  <span className="hidden md:inline">
-                    {tarea.sprint_id ? "Mover" : "Sprint"}
-                  </span>
-                  <ChevronsUpDownIcon data-icon="inline-end" />
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" className="min-w-52">
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>Mover a…</DropdownMenuLabel>
-                {sprints
-                  .filter((s) => s.id !== tarea.sprint_id)
-                  .map((s) => (
-                    <DropdownMenuItem key={s.id} onClick={() => cambiarSprint(tarea, s.id)}>
-                      <FlagIcon />
-                      {s.nombre}
-                      {s.estado === "activo" && (
-                        <span className="ml-auto text-xs text-muted-foreground">
-                          al tablero
-                        </span>
-                      )}
-                    </DropdownMenuItem>
-                  ))}
-                {tarea.sprint_id && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => cambiarSprint(tarea, null)}>
-                      Quitar del sprint (al backlog)
-                    </DropdownMenuItem>
-                  </>
-                )}
-                {!tarea.sprint_id && !activo && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => pasar(tarea.id)}>
-                      <ArrowRightIcon />
-                      Al tablero sin sprint
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            title="Pasar al tablero (a Por hacer)"
-            onClick={() => pasar(tarea.id)}
-          >
-            <ArrowRightIcon data-icon="inline-start" />
-            <span className="hidden md:inline">Al tablero</span>
-          </Button>
+        {activo && (
+          <Link href="/tareas" className="zq-sprint-panel-tenue -mt-1 text-xs hover:text-crema">
+            {codigoSprint(activo.numero)} en curso · {resumirSprint(enActivo).hechas}/{enActivo.length} · Ver tablero →
+          </Link>
         )}
-      </div>
-    )
-  }
 
-  const backlogLibre = seccion(BACKLOG)
+        {elegido ? (
+          <>
+            <div className="flex items-center gap-2.5">
+              <p className="zq-sprint-panel-tenue m-0 text-xs font-bold tracking-[0.04em] uppercase">
+                {codigoSprint(elegido.numero)}
+              </p>
+              <span className="zq-num min-w-[22px] rounded-full bg-lima px-[7px] text-center text-xs leading-[22px] font-bold text-carbon">
+                {enSprint.length}
+              </span>
+              {planificados.length > 1 && (
+                <select
+                  aria-label="Sprint a planificar"
+                  value={elegido.id}
+                  onChange={(e) => setElegidoId(e.target.value)}
+                  className="h-8 rounded-md border border-sidebar-border bg-transparent px-1.5 text-xs text-crema"
+                >
+                  {planificados.map((s) => (
+                    <option key={s.id} value={s.id} className="text-foreground">
+                      {codigoSprint(s.numero)}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <MenuSprint
+                sprint={elegido}
+                proyectos={proyectos}
+                className="ml-auto text-crema hover:bg-sidebar-accent hover:text-crema"
+              />
+            </div>
+            {nombreSinNumero(elegido) !== codigoSprint(elegido.numero) && (
+              <p className="m-0 -mt-2 text-[13px] text-crema/80">{nombreSinNumero(elegido)}</p>
+            )}
 
-  return (
-    <div className="flex max-w-3xl flex-col gap-6">
-      {/* Sprints: el activo primero, después los planificados. */}
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium">Sprints</span>
-          <NuevoSprint proyectos={proyectos} siguienteNumero={siguienteNumero} />
-        </div>
-        {sprints.length === 0 && (
-          <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-            <p>
-              Todavía no hay sprints. Creá uno, arrastrale tarjetas del backlog
-              e inicialo: entran al tablero, y al completarlo el tablero queda
-              limpio para el siguiente.
+            <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+              {enSprint.map((t) => (
+                <li
+                  key={t.id}
+                  title={t.titulo}
+                  draggable={!esCelular}
+                  onDragStart={(e) => {
+                    setArrastrada(t.id)
+                    e.dataTransfer.setData("text/plain", t.id)
+                    e.dataTransfer.effectAllowed = "move"
+                  }}
+                  onDragEnd={() => setArrastrada(null)}
+                  className="flex items-center gap-2 rounded-lg bg-lima py-1 pr-1 pl-2.5 text-[13px] text-carbon"
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "size-2 shrink-0 rounded-full",
+                      t.prioridad === "urgente" ? "bg-negativo" : t.prioridad === "alta" ? "bg-aviso" : "bg-carbon/35"
+                    )}
+                  />
+                  <span className="min-w-0 flex-1 truncate">{t.titulo}</span>
+                  <button
+                    type="button"
+                    aria-label={`Sacar ${codigoTarea(t.numero)} del sprint`}
+                    onClick={() => cambiarSprint(t, null)}
+                    className="flex size-7 shrink-0 items-center justify-center rounded-md text-carbon/60 hover:bg-carbon/10 hover:text-carbon"
+                  >
+                    <XIcon className="size-3.5" aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="zq-sprint-zona" aria-hidden="true">
+              Arrastrá tareas acá
+            </div>
+
+            <div className="mt-auto flex flex-col gap-2.5">
+              <span className="zq-sprint-panel-tenue text-xs">
+                {activo
+                  ? `Primero completá el ${codigoSprint(activo.numero)} para iniciar este`
+                  : enSprint.length === 0
+                    ? 'Arrastrá tareas o usá "Al sprint →"'
+                    : `${enSprint.length} ${enSprint.length === 1 ? "tarea elegida" : "tareas elegidas"}`}
+              </span>
+              <IniciarSprint
+                sprint={elegido}
+                resumen={resumirSprint(enSprint)}
+                bloqueo={
+                  activo
+                    ? `Hay un sprint activo (${codigoSprint(activo.numero)})`
+                    : enSprint.length === 0
+                      ? "El sprint está vacío"
+                      : null
+                }
+                className="h-11 w-full bg-lima text-carbon hover:bg-lima/90"
+              />
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-1 flex-col items-start gap-3">
+            <p className="zq-sprint-panel-tenue m-0 text-xs font-bold tracking-[0.04em] uppercase">
+              Próximo sprint
+            </p>
+            <p className="m-0 text-crema/80">
+              No hay ningún sprint planificado. Creá el {codigoSprint(siguienteNumero)} y sumale tareas
+              para iniciarlo.
             </p>
             <NuevoSprint
               proyectos={proyectos}
               siguienteNumero={siguienteNumero}
-              variante="vacio"
+              className="mt-auto h-11 w-full border-0 bg-lima text-carbon hover:bg-lima/90"
             />
           </div>
         )}
-        {[...(activo ? [activo] : []), ...planificados].map((sprint) => {
-          const items = seccion(sprint.id)
-          return (
-            <div key={sprint.id} {...propsZona(sprint.id, items)}>
-              <div className="px-1 py-1">
-                <EncabezadoSprint
-                  sprint={sprint}
-                  resumen={resumirSprint(items)}
-                  sprintsPlanificados={planificados}
-                  proyectos={proyectos}
-                />
-              </div>
-              {items.map((t) => fila(t, sprint.id, items))}
-              {items.length === 0 && (
-                <p className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
-                  Arrastrá tarjetas del backlog acá para planificar el sprint.
-                </p>
-              )}
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Backlog libre: lo que no está comprometido en ningún sprint. */}
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between px-1">
-          <span className="text-sm font-medium">Backlog</span>
-          <span className="text-xs text-muted-foreground">{backlogLibre.length}</span>
-        </div>
-        <div {...propsZona(BACKLOG, backlogLibre)}>
-          {backlogLibre.map((t) => fila(t, BACKLOG, backlogLibre))}
-          {backlogLibre.length === 0 && (
-            <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-              No hay tarjetas en el backlog.
-            </p>
-          )}
-          <NuevaTarea
-            socios={socios}
-            clientes={clientes}
-            proyectos={proyectos}
-            sprints={sprints}
-            estadoInicial="backlog"
-            variante="columna"
-          />
-        </div>
-      </div>
+      </aside>
     </div>
+  )
+}
+
+// Selector de proyecto: botón grande con el proyecto elegido y un
+// desplegable con buscador (por proyecto o cliente). Solo lista los
+// proyectos con tareas pendientes, así escala a muchos proyectos.
+function SelectorProyecto({
+  proyectos,
+  conteos,
+  total,
+  valor,
+  onChange,
+}: {
+  proyectos: ProyectoOpcion[]
+  conteos: Map<string, number>
+  total: number
+  valor: string
+  onChange: (v: string) => void
+}) {
+  const [abierto, setAbierto] = useState(false)
+  const [busca, setBusca] = useState("")
+
+  const conTareas = proyectos
+    .filter((p) => (conteos.get(p.id) ?? 0) > 0)
+    .sort((a, b) => (conteos.get(b.id) ?? 0) - (conteos.get(a.id) ?? 0))
+  const color = new Map(conTareas.map((p, i) => [p.id, COLORES_PROYECTO[i % COLORES_PROYECTO.length]]))
+
+  type Opcion = { valor: string; nombre: string; cliente: string; n: number; cuadrado: string }
+  const opciones: Opcion[] = [
+    { valor: TODOS, nombre: "Todos los proyectos", cliente: "", n: total, cuadrado: "border border-dashed border-input" },
+    ...conTareas.map((p) => ({
+      valor: p.id,
+      nombre: p.nombre,
+      cliente: p.cliente_id ? p.cliente : "Interno",
+      n: conteos.get(p.id) ?? 0,
+      cuadrado: color.get(p.id) ?? "bg-muted",
+    })),
+    ...((conteos.get(SIN_PROYECTO) ?? 0) > 0
+      ? [{ valor: SIN_PROYECTO, nombre: "Sin proyecto", cliente: "", n: conteos.get(SIN_PROYECTO) ?? 0, cuadrado: "bg-muted" }]
+      : []),
+  ]
+  const q = busca.trim().toLowerCase()
+  const filtradas = q ? opciones.filter((o) => `${o.nombre} ${o.cliente}`.toLowerCase().includes(q)) : opciones
+  const actual = opciones.find((o) => o.valor === valor) ?? opciones[0]
+
+  return (
+    <Popover.Root
+      open={abierto}
+      onOpenChange={(v) => {
+        setAbierto(v)
+        if (!v) setBusca("")
+      }}
+    >
+      <Popover.Trigger
+        className="flex w-full items-center gap-2.5 rounded-xl border border-input bg-card px-3.5 py-3 text-left hover:bg-muted/40"
+      >
+        <span aria-hidden="true" className={cn("size-3 shrink-0 rounded-[4px]", actual.cuadrado)} />
+        <strong className="truncate text-base font-semibold">{actual.nombre}</strong>
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {actual.cliente && `${actual.cliente} · `}
+          {actual.n} {actual.n === 1 ? "tarea" : "tareas"}
+        </span>
+        <ChevronDownIcon aria-hidden="true" className="ml-auto size-4 shrink-0 text-muted-foreground" />
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Positioner sideOffset={6} align="start" className="z-50">
+          <Popover.Popup className="flex max-h-[min(420px,70dvh)] w-[min(360px,calc(100vw-32px))] flex-col gap-0.5 overflow-y-auto rounded-xl border bg-popover p-2 text-popover-foreground shadow-[var(--sombra-flotante)] outline-none">
+            <Popover.Title className="sr-only">Elegir proyecto</Popover.Title>
+            <label className="mb-1.5 flex items-center gap-2 rounded-lg border border-input px-2.5 focus-within:ring-2 focus-within:ring-ring">
+              <SearchIcon className="size-4 text-muted-foreground" aria-hidden="true" />
+              <input
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar proyecto o cliente…"
+                aria-label="Buscar proyecto o cliente"
+                className="h-9 min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground"
+              />
+            </label>
+            {filtradas.map((o) => (
+              <button
+                key={o.valor}
+                type="button"
+                aria-pressed={o.valor === valor}
+                onClick={() => {
+                  onChange(o.valor)
+                  setAbierto(false)
+                  setBusca("")
+                }}
+                className={cn(
+                  "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-muted",
+                  o.valor === valor && "bg-muted font-semibold"
+                )}
+              >
+                <span aria-hidden="true" className={cn("size-3 shrink-0 rounded-[4px]", o.cuadrado)} />
+                <span className="min-w-0 flex-1 truncate">
+                  {o.nombre}
+                  {o.cliente && <span className="ml-1.5 text-xs font-normal text-muted-foreground">{o.cliente}</span>}
+                </span>
+                <span className="zq-num text-xs text-muted-foreground">{o.n}</span>
+              </button>
+            ))}
+            {filtradas.length === 0 && (
+              <span className="px-2.5 py-2 text-xs text-muted-foreground">Ningún proyecto coincide</span>
+            )}
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
   )
 }

@@ -3,9 +3,7 @@
 import { useState, useTransition } from "react"
 import {
   CalendarDaysIcon,
-  CalendarIcon,
   CheckCircle2Icon,
-  FlagIcon,
   MoreHorizontalIcon,
   PencilIcon,
   PlayIcon,
@@ -25,7 +23,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -51,8 +48,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import {
   codigoSprint,
-  diasRestantesSprint,
-  ESTADOS_SPRINT,
   type Sprint,
 } from "@/lib/dominio"
 
@@ -68,11 +63,6 @@ import { CeremoniasSprint } from "./ceremonias-sprint"
 import { type ResumenSprint } from "./resumen"
 
 export { resumirSprint, type ResumenSprint } from "./resumen"
-
-function fechaCorta(fecha: string): string {
-  const [a, m, d] = fecha.split("-")
-  return `${d}/${m}/${a.slice(2)}`
-}
 
 function hoyIso(desplazamientoDias = 0): string {
   const d = new Date()
@@ -166,10 +156,12 @@ export function NuevoSprint({
   proyectos,
   siguienteNumero,
   variante = "boton",
+  className,
 }: {
   proyectos: ProyectoOpcion[]
   siguienteNumero: number
   variante?: "boton" | "vacio"
+  className?: string
 }) {
   const [abierto, setAbierto] = useState(false)
   const [pendiente, iniciarTransicion] = useTransition()
@@ -185,12 +177,12 @@ export function NuevoSprint({
       <DialogTrigger
         render={
           variante === "vacio" ? (
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className={className}>
               <PlusIcon data-icon="inline-start" />
               Crear el primer sprint
             </Button>
           ) : (
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className={className}>
               <PlusIcon data-icon="inline-start" />
               Crear sprint
             </Button>
@@ -224,217 +216,50 @@ export function NuevoSprint({
   )
 }
 
-// Encabezado de un sprint: nombre, estado, fechas, métricas y acciones. Lo usan
-// la sección del backlog y el banner del tablero.
-export function EncabezadoSprint({
+// "Iniciar sprint": sus tarjetas entran a Por hacer. Pide las fechas (con
+// las del sprint, o hoy + 14 días, como sugerencia). `bloqueo` explica por
+// qué todavía no se puede (otro sprint activo, sprint vacío): el botón queda
+// al 45% con aria-disabled y el motivo al lado.
+export function IniciarSprint({
   sprint,
   resumen,
-  sprintsPlanificados,
-  proyectos,
-  compacto = false,
+  bloqueo,
+  className,
 }: {
   sprint: Sprint
   resumen: ResumenSprint
-  // Para "Completar": a qué sprint planificado mandar lo pendiente.
-  sprintsPlanificados: Sprint[]
-  proyectos: ProyectoOpcion[]
-  compacto?: boolean
+  bloqueo?: string | null
+  className?: string
 }) {
-  const dias = sprint.estado === "activo" ? diasRestantesSprint(sprint) : null
-  const nombreProyecto = proyectos.find((p) => p.id === sprint.proyecto_id)?.nombre
-
-  return (
-    <div className="flex flex-col gap-1">
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-      <FlagIcon
-        className={cn(
-          "size-4 shrink-0",
-          sprint.estado === "activo" ? "text-primary" : "text-muted-foreground"
-        )}
-      />
-      <span className="font-medium">
-        {sprint.nombre}
-        {sprint.nombre !== codigoSprint(sprint.numero) && (
-          <span className="ml-1.5 font-mono text-xs font-normal text-muted-foreground">
-            {codigoSprint(sprint.numero)}
-          </span>
-        )}
-      </span>
-      <Badge variant={ESTADOS_SPRINT[sprint.estado].variant}>
-        {ESTADOS_SPRINT[sprint.estado].label}
-      </Badge>
-      {nombreProyecto && (
-        <Badge variant="outline" className="font-normal">
-          {nombreProyecto}
-        </Badge>
-      )}
-      <span className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
-        {(sprint.fecha_inicio || sprint.fecha_fin) && (
-          <span className="flex items-center gap-1">
-            <CalendarIcon className="size-3" />
-            {sprint.fecha_inicio ? fechaCorta(sprint.fecha_inicio) : "…"}
-            {" → "}
-            {sprint.fecha_fin ? fechaCorta(sprint.fecha_fin) : "…"}
-          </span>
-        )}
-        {dias !== null && (
-          <span
-            className={cn(
-              dias < 0 && "text-destructive",
-              dias === 0 && "text-amber-600"
-            )}
-          >
-            {dias > 1 && `${dias} días restantes`}
-            {dias === 1 && "último día"}
-            {dias === 0 && "termina hoy"}
-            {dias < 0 && `vencido hace ${-dias} ${-dias === 1 ? "día" : "días"}`}
-          </span>
-        )}
-        <span>
-          {sprint.estado === "activo"
-            ? `${resumen.hechas}/${resumen.total} hechas`
-            : `${resumen.total} ${resumen.total === 1 ? "tarjeta" : "tarjetas"}`}
-          {resumen.puntos > 0 &&
-            (sprint.estado === "activo"
-              ? ` · ${resumen.puntos_hechos}/${resumen.puntos} pts`
-              : ` · ${resumen.puntos} pts`)}
-        </span>
-      </span>
-      <span className="ml-auto flex items-center gap-1">
-        <SprintAcciones
-          sprint={sprint}
-          resumen={resumen}
-          sprintsPlanificados={sprintsPlanificados}
-          proyectos={proyectos}
-        />
-      </span>
-    </div>
-      {sprint.objetivo && !compacto && (
-        <p className="pl-7 text-sm text-muted-foreground">{sprint.objetivo}</p>
-      )}
-    </div>
-  )
-}
-
-function SprintAcciones({
-  sprint,
-  resumen,
-  sprintsPlanificados,
-  proyectos,
-}: {
-  sprint: Sprint
-  resumen: ResumenSprint
-  sprintsPlanificados: Sprint[]
-  proyectos: ProyectoOpcion[]
-}) {
-  const [editar, setEditar] = useState(false)
-  const [ceremonias, setCeremonias] = useState(false)
-  const [iniciar, setIniciar] = useState(false)
-  const [eliminar, setEliminar] = useState(false)
+  const [abierto, setAbierto] = useState(false)
   const [pendiente, iniciarTransicion] = useTransition()
 
-  function onGuardar(formData: FormData) {
-    iniciarTransicion(async () => {
-      if (await conToast(() => actualizarSprint(sprint.id, formData))) setEditar(false)
-    })
-  }
   function onIniciar(formData: FormData) {
     iniciarTransicion(async () => {
       if (await conToast(() => iniciarSprint(sprint.id, formData))) {
-        setIniciar(false)
-        toast.success(`${sprint.nombre} iniciado: sus tarjetas ya están en el tablero`)
+        setAbierto(false)
+        toast.success(`${codigoSprint(sprint.numero)} iniciado: sus tarjetas ya están en el tablero`)
       }
-    })
-  }
-  function onEliminar() {
-    iniciarTransicion(async () => {
-      if (await conToast(() => eliminarSprint(sprint.id))) setEliminar(false)
     })
   }
 
   return (
     <>
-      {sprint.estado === "planificado" && (
-        <Button size="sm" onClick={() => setIniciar(true)}>
-          <PlayIcon data-icon="inline-start" />
-          Iniciar sprint
-        </Button>
-      )}
-      {sprint.estado === "activo" && (
-        <CompletarSprint
-          sprint={sprint}
-          resumen={resumen}
-          sprintsPlanificados={sprintsPlanificados}
-        />
-      )}
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button variant="ghost" size="icon-sm" aria-label="Acciones del sprint">
-              <MoreHorizontalIcon />
-            </Button>
-          }
-        />
-        <DropdownMenuContent align="end">
-          <DropdownMenuGroup>
-            <DropdownMenuItem onClick={() => setEditar(true)}>
-              <PencilIcon />
-              Editar
-            </DropdownMenuItem>
-            {sprint.estado !== "cerrado" && (
-              <DropdownMenuItem onClick={() => setCeremonias(true)}>
-                <CalendarDaysIcon />
-                Ceremonias
-              </DropdownMenuItem>
-            )}
-            {sprint.estado === "planificado" && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onClick={() => setEliminar(true)}>
-                  <Trash2Icon />
-                  Eliminar
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <CeremoniasSprint
-        sprint={sprint}
-        abierto={ceremonias}
-        onAbiertoChange={setCeremonias}
-      />
-
-      <Dialog open={editar} onOpenChange={setEditar}>
+      <Button
+        aria-disabled={bloqueo ? true : undefined}
+        className={cn(bloqueo && "zq-primario-pendiente", className)}
+        onClick={() => !bloqueo && setAbierto(true)}
+      >
+        Iniciar sprint
+      </Button>
+      <Dialog open={abierto} onOpenChange={setAbierto}>
         <DialogContent className="sm:max-w-lg">
-          {editar && (
-            <form action={onGuardar}>
-              <DialogHeader>
-                <DialogTitle>Editar {sprint.nombre}</DialogTitle>
-              </DialogHeader>
-              <CamposSprint sprint={sprint} proyectos={proyectos} />
-              <DialogFooter>
-                <Button type="submit" disabled={pendiente}>
-                  {pendiente && <Spinner data-icon="inline-start" />}
-                  Guardar cambios
-                </Button>
-              </DialogFooter>
-            </form>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={iniciar} onOpenChange={setIniciar}>
-        <DialogContent className="sm:max-w-lg">
-          {iniciar && (
+          {abierto && (
             <form action={onIniciar}>
               <DialogHeader>
-                <DialogTitle>Iniciar {sprint.nombre}</DialogTitle>
+                <DialogTitle>Iniciar {codigoSprint(sprint.numero)}</DialogTitle>
                 <DialogDescription>
-                  {resumen.total === 0
-                    ? "El sprint está vacío: se puede iniciar igual y sumarle tarjetas desde el tablero."
-                    : `Sus ${resumen.total} ${resumen.total === 1 ? "tarjeta entra" : "tarjetas entran"} a Por hacer, en el orden que tienen acá.`}
+                  {`Sus ${resumen.total} ${resumen.total === 1 ? "tarjeta entra" : "tarjetas entran"} a Por hacer, en el orden que tienen acá.`}
                   {resumen.puntos > 0 && ` Compromiso: ${resumen.puntos} puntos.`}
                 </DialogDescription>
               </DialogHeader>
@@ -471,11 +296,102 @@ function SprintAcciones({
           )}
         </DialogContent>
       </Dialog>
+    </>
+  )
+}
+
+// Menú "⋯" de un sprint: editar, ceremonias y (si está planificado)
+// eliminar.
+export function MenuSprint({
+  sprint,
+  proyectos,
+  className,
+}: {
+  sprint: Sprint
+  proyectos: ProyectoOpcion[]
+  className?: string
+}) {
+  const [editar, setEditar] = useState(false)
+  const [ceremonias, setCeremonias] = useState(false)
+  const [eliminar, setEliminar] = useState(false)
+  const [pendiente, iniciarTransicion] = useTransition()
+
+  function onGuardar(formData: FormData) {
+    iniciarTransicion(async () => {
+      if (await conToast(() => actualizarSprint(sprint.id, formData))) setEditar(false)
+    })
+  }
+  function onEliminar() {
+    iniciarTransicion(async () => {
+      if (await conToast(() => eliminarSprint(sprint.id))) setEliminar(false)
+    })
+  }
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`Acciones de ${codigoSprint(sprint.numero)}`}
+              className={className}
+            >
+              <MoreHorizontalIcon />
+            </Button>
+          }
+        />
+        <DropdownMenuContent align="end">
+          <DropdownMenuGroup>
+            <DropdownMenuItem onClick={() => setEditar(true)}>
+              <PencilIcon />
+              Editar
+            </DropdownMenuItem>
+            {sprint.estado !== "cerrado" && (
+              <DropdownMenuItem onClick={() => setCeremonias(true)}>
+                <CalendarDaysIcon />
+                Ceremonias
+              </DropdownMenuItem>
+            )}
+            {sprint.estado === "planificado" && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onClick={() => setEliminar(true)}>
+                  <Trash2Icon />
+                  Eliminar
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <CeremoniasSprint sprint={sprint} abierto={ceremonias} onAbiertoChange={setCeremonias} />
+
+      <Dialog open={editar} onOpenChange={setEditar}>
+        <DialogContent className="sm:max-w-lg">
+          {editar && (
+            <form action={onGuardar}>
+              <DialogHeader>
+                <DialogTitle>Editar {codigoSprint(sprint.numero)}</DialogTitle>
+              </DialogHeader>
+              <CamposSprint sprint={sprint} proyectos={proyectos} />
+              <DialogFooter>
+                <Button type="submit" disabled={pendiente}>
+                  {pendiente && <Spinner data-icon="inline-start" />}
+                  Guardar cambios
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={eliminar} onOpenChange={setEliminar}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar {sprint.nombre}?</AlertDialogTitle>
+            <AlertDialogTitle>¿Eliminar {codigoSprint(sprint.numero)}?</AlertDialogTitle>
             <AlertDialogDescription>
               Sus tarjetas vuelven al backlog. No se borra ninguna tarjeta.
             </AlertDialogDescription>
