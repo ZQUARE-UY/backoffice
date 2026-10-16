@@ -2,6 +2,7 @@ import {
   CalendarClockIcon,
   FileTextIcon,
   FolderKanbanIcon,
+  GlobeIcon,
   HomeIcon,
   KanbanIcon,
   LightbulbIcon,
@@ -34,6 +35,7 @@ export const GRUPOS_NAV: { label: string | null; secciones: SeccionNav[] }[] = [
     label: "Gestión",
     secciones: [
       { titulo: "Clientes", href: "/clientes", icono: UsersIcon },
+      { titulo: "Web", href: "/web", icono: GlobeIcon },
       { titulo: "Reuniones", href: "/reuniones", icono: CalendarClockIcon },
       { titulo: "Documentos", href: "/documentos", icono: FileTextIcon },
       { titulo: "Finanzas", href: "/finanzas", icono: WalletIcon },

@@ -1042,3 +1042,13 @@ cuatro.
   ancho actual (`--ancho-sidebar`). El tema (claro/oscuro/sistema) salió del
   menú del usuario a un selector visible justo arriba del nombre, también
   en el menú de celular.
+- **2026-10-16** — Web ↔ backoffice, etapa 1 (contacto): sección nueva
+  **Web** (`/web`) donde vive todo lo que llega de zquare.uy. Tabla
+  `consultas_web` (migración `20261016000002`) y ruta pública
+  `/api/publico/contacto` (origen permitido zquare.uy + previews, trampa
+  para bots, límite 3/email y 30 totales por hora) que el formulario de la
+  web llama. Las consultas entran como "nueva" (contador en el sidebar) y
+  desde la ficha se promueven: crear cliente potencial (origen "web", con
+  carpeta en Drive) o vincular el cliente con el mismo email; también se
+  marcan atendidas o se descartan. Próximas etapas en /web: métricas
+  (propias + Google Analytics) y contenido de la web editable.
