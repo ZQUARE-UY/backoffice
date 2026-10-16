@@ -42,6 +42,11 @@ export const GRUPOS_NAV: { label: string | null; secciones: SeccionNav[] }[] = [
   },
 ]
 
+// Cookie con el estado del sidebar de escritorio ("colapsado" o "expandido").
+// Vive acá y no en app-sidebar porque el layout (servidor) la lee, y lo que se
+// exporta de un módulo "use client" no llega al servidor como valor.
+export const COOKIE_SIDEBAR = "zq-sidebar"
+
 export function seccionActiva(href: string, pathname: string): boolean {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`)
 }

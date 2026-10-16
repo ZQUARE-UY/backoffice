@@ -1,17 +1,12 @@
 "use client"
 
 import { LogOutIcon } from "lucide-react"
-import { useTheme } from "next-themes"
 
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { iniciales } from "@/lib/formato"
@@ -19,18 +14,20 @@ import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 
 // El usuario al pie del sidebar (y del menú de celular): avatar con
-// iniciales, nombre y mail. Abre un menú con el tema y cerrar sesión.
+// iniciales, nombre y mail. Abre un menú con cerrar sesión (el tema va
+// aparte, en SelectorTema, justo arriba).
 export function UserMenu({
   nombre,
   email,
   className,
+  compacto = false,
 }: {
   nombre: string
   email: string
   className?: string
+  // Sidebar colapsado: solo el avatar.
+  compacto?: boolean
 }) {
-  const { theme, setTheme } = useTheme()
-
   async function cerrarSesion() {
     const supabase = createClient()
     await supabase.auth.signOut()
@@ -42,14 +39,16 @@ export function UserMenu({
       <DropdownMenuTrigger
         className={cn(
           "flex w-full min-w-0 items-center gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-sidebar-accent",
+          compacto && "justify-center px-0",
           className
         )}
         aria-label={`Cuenta de ${nombre}`}
+        title={compacto ? nombre : undefined}
       >
         <span className="zq-avatar" aria-hidden="true">
           {iniciales(nombre || email)}
         </span>
-        <span className="flex min-w-0 flex-col">
+        <span className={cn("flex min-w-0 flex-col", compacto && "hidden")}>
           <span className="truncate text-sm leading-5 font-semibold text-sidebar-foreground">
             {nombre}
           </span>
@@ -57,15 +56,6 @@ export function UserMenu({
         </span>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="start" className="w-56">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>Tema</DropdownMenuLabel>
-          <DropdownMenuRadioGroup value={theme} onValueChange={(v) => setTheme(String(v))}>
-            <DropdownMenuRadioItem value="light">Claro</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="dark">Oscuro</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="system">Como el sistema</DropdownMenuRadioItem>
-          </DropdownMenuRadioGroup>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuItem onClick={cerrarSesion}>
             <LogOutIcon />

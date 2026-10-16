@@ -213,11 +213,19 @@
   }
 
   /* ── Layout ── */
+  /* Ancho del sidebar de escritorio; el panel de notificaciones (que va en un
+     portal, fuera del sidebar) se pega a su borde. */
+  :root {
+    --ancho-sidebar: 240px;
+  }
+  :root:has(.zq-sidebar[data-colapsado]) {
+    --ancho-sidebar: 64px;
+  }
   .zq-sidebar {
     position: sticky;
     top: 0;
     height: 100dvh;
-    width: 240px;
+    width: var(--ancho-sidebar);
     flex: none;
     box-sizing: border-box;
     display: flex;
@@ -225,7 +233,23 @@
     background: var(--sidebar);
     color: var(--sidebar-foreground);
     padding: 20px 12px 16px;
+    overflow-x: hidden;
     overflow-y: auto;
+    transition: width 150ms ease;
+  }
+  /* Colapsado: solo íconos, 64px. */
+  .zq-sidebar[data-colapsado] {
+    padding-inline: 10px;
+  }
+  .zq-sidebar[data-colapsado] .zq-nav-item {
+    position: relative;
+    justify-content: center;
+    padding: 0;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .zq-sidebar {
+      transition: none;
+    }
   }
   .zq-sidebar-seccion {
     margin: 18px 10px 6px;
@@ -523,7 +547,7 @@
   /* ── Panel lateral (notificaciones) ── */
   .zq-panel-velo {
     position: fixed;
-    inset: 0 0 0 240px;
+    inset: 0 0 0 var(--ancho-sidebar);
     z-index: 40;
     background: var(--velo);
     backdrop-filter: blur(6px);
@@ -533,7 +557,7 @@
     position: fixed;
     top: 0;
     bottom: 0;
-    left: 240px;
+    left: var(--ancho-sidebar);
     z-index: 41;
     width: 380px;
     box-sizing: border-box;

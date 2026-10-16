@@ -11,6 +11,7 @@ import { EVENTO_CREAR } from "@/components/captura-rapida"
 import { UserMenu } from "@/components/user-menu"
 import { GRUPOS_NAV, seccionActiva, tituloSeccion } from "@/components/zq/navegacion"
 import { Campanita } from "@/components/zq/panel-notificaciones"
+import { SelectorTema } from "@/components/zq/selector-tema"
 import type { Notificacion } from "@/lib/notificaciones"
 
 // Navegación de celular (menos de 720px): barra superior con ☰, el título de
@@ -64,6 +65,7 @@ export function BarraMovil({
               ))}
             </nav>
             <div className="mt-auto border-t border-sidebar-border pt-3">
+              <SelectorTema />
               <UserMenu nombre={nombre} email={email} />
             </div>
           </Dialog.Popup>
