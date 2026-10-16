@@ -7,7 +7,7 @@ export const metadata = { title: "Métricas · Web" }
 
 // Métricas propias de zquare.uy: lo que manda la web a /api/publico/eventos,
 // resumido por la función metricas_web de la base. Las consultas salen de
-// la bandeja (consultas_web), que es el dato real.
+// la bandeja (consultas_web), que es el dato real, sin las descartadas.
 export default async function MetricasWebPage({
   searchParams,
 }: {
@@ -29,6 +29,8 @@ export default async function MetricasWebPage({
       .select("id", { count: "exact", head: true })
       .gte("created_at", desde)
       .lt("created_at", hasta)
+      // Las descartadas (spam, pruebas) no son consultas reales.
+      .neq("estado", "descartada")
       .is("deleted_at", null),
   ])
 

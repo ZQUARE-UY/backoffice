@@ -79,7 +79,7 @@ export function VistaMetricas({
   const cifras = [
     { rotulo: "Visitantes", valor: formatearNumero(visitantes), nota: "únicos por día" },
     { rotulo: "Páginas vistas", valor: formatearNumero(r?.vistas ?? 0), nota: null },
-    { rotulo: "Consultas", valor: formatearNumero(nConsultas), nota: "por el formulario" },
+    { rotulo: "Consultas", valor: formatearNumero(nConsultas), nota: "por el formulario, sin descartadas" },
     { rotulo: "Conversión", valor: pct(nConsultas), nota: "consultas / visitantes" },
   ]
 
