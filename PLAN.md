@@ -1070,3 +1070,9 @@ cuatro.
   `web_orden`, `web_cargo_es/en`). La web lo lee de `/api/publico/contenido`
   (cache de CDN de 1 minuto) y lo pone encima de su `I18N`; sin respuesta,
   usa el suyo. Las métricas ya no cuentan las consultas descartadas (#68).
+- **2026-10-16** — Web: fotos del equipo. En Web → Contenido → Equipo cada
+  socio tiene subir/cambiar/quitar foto. El navegador la recorta cuadrada a
+  800px en webp antes de mandarla (entra en el límite de 1MB de las server
+  actions); se guarda en el bucket público `web` de Supabase Storage
+  (migración `20261016000005`, columna `socios.web_foto_url`) y la web la
+  muestra en lugar del recuadro "FOTO".

@@ -28,7 +28,7 @@ export async function GET(req: Request) {
         .is("deleted_at", null),
       admin
         .from("socios")
-        .select("id, nombre, web_visible, web_orden, web_cargo_es, web_cargo_en")
+        .select("id, nombre, web_visible, web_orden, web_cargo_es, web_cargo_en, web_foto_url")
         .eq("web_visible", true)
         .is("deleted_at", null),
     ])

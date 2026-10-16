@@ -16,6 +16,7 @@ import {
   publicarBloque,
 } from "./actions"
 import { EditorBloque } from "./editor-bloque"
+import { FotoSocio } from "./foto-socio"
 
 // Web → Contenido: lo que zquare.uy muestra en Servicios, Método, Equipo y
 // Testimonios. La web lo lee de /api/publico/contenido (cacheado un minuto)
@@ -117,7 +118,7 @@ function SeccionEquipo({ socios }: { socios: SocioWeb[] }) {
       <div className="flex flex-col gap-0.5">
         <h2 className="m-0 text-lg font-semibold tracking-tight">Equipo</h2>
         <p className="m-0 text-sm text-muted-foreground">
-          Sale de los socios. {visibles === 0 ? "Ninguno marcado: la web muestra el equipo que tiene escrito." : `${visibles} en la web.`}
+          Sale de los socios. La foto se recorta cuadrada. {visibles === 0 ? "Ninguno marcado: la web muestra el equipo que tiene escrito." : `${visibles} en la web.`}
         </p>
       </div>
       <ul className="m-0 list-none rounded-xl border bg-card p-0">
@@ -128,6 +129,7 @@ function SeccionEquipo({ socios }: { socios: SocioWeb[] }) {
               abajo={i < socios.length - 1 ? moverSocio.bind(null, s.id, 1) : null}
               nombre={s.nombre}
             />
+            <FotoSocio socioId={s.id} nombre={s.nombre} url={s.web_foto_url} />
             <form action={actualizarSocioWeb.bind(null, s.id)} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
               <label className="flex min-w-[180px] items-center gap-2 font-semibold">
                 <input type="checkbox" name="web_visible" defaultChecked={s.web_visible} className="size-4 accent-[var(--lima)]" />
