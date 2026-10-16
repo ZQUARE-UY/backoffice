@@ -41,10 +41,7 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/api/oauth") ||
     path.startsWith("/.well-known") ||
     // Cron de Vercel: se autentica por CRON_SECRET, no por sesión.
-    path.startsWith("/api/cron") ||
-    // Rutas que llama la web pública (zquare.uy): se protegen por origen y
-    // límites propios (ver lib/consultas-web.ts).
-    path.startsWith("/api/publico")
+    path.startsWith("/api/cron")
 
   if (!user && !esRutaPublica) {
     const url = request.nextUrl.clone()
