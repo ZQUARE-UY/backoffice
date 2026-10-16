@@ -5,4 +5,5 @@ import type { Pestana } from "@/components/zq/pildoras"
 export const PESTANAS_WEB: Pestana[] = [
   { href: "/web", label: "Consultas" },
   { href: "/web/metricas", label: "Métricas" },
+  { href: "/web/contenido", label: "Contenido" },
 ]

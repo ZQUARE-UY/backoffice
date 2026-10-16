@@ -1061,3 +1061,12 @@ cuatro.
   sin cookies ni IP: visitante = hash diario de IP + navegador + sal. El
   resumen lo arma la función `metricas_web` en la base (PostgREST corta en
   1000 filas). Google Analytics sigue listo en `analytics.js`, falta el ID.
+- **2026-10-16** — Web ↔ backoffice, etapa 3 (contenido): pestaña
+  **Contenido** en la sección Web para editar servicios (con la etiqueta del
+  formulario), pasos del método y testimonios, en español e inglés, con
+  publicar/ordenar/eliminar. Tabla `contenido_web` (migración
+  `20261016000004`, arranca con el texto actual de la web; los testimonios
+  son de ejemplo). El equipo sale de los socios (columnas `web_visible`,
+  `web_orden`, `web_cargo_es/en`). La web lo lee de `/api/publico/contenido`
+  (cache de CDN de 1 minuto) y lo pone encima de su `I18N`; sin respuesta,
+  usa el suyo. Las métricas ya no cuentan las consultas descartadas (#68).
