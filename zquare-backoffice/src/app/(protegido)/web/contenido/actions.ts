@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { esTipo, TIPOS, type TipoBloque } from "@/lib/contenido-web"
 import { idSocioActual } from "@/lib/socio-actual"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
 function texto(formData: FormData, clave: string, max: number): string {
@@ -124,5 +125,48 @@ export async function moverSocio(id: string, direccion: -1 | 1) {
   if (i < 0 || j < 0 || j >= ids.length) return
   ;[ids[i], ids[j]] = [ids[j], ids[i]]
   await Promise.all(ids.map((sid, n) => supabase.from("socios").update({ web_orden: n + 1 }).eq("id", sid)))
+  revalidar()
+}
+
+const BUCKET = "web"
+
+// Foto del socio para la web. Llega ya recortada y achicada por el navegador
+// (webp de ~800px, ver foto-socio.tsx). Se sube con la service role, así que
+// primero se verifica que quien llama sea socio. Cada foto va con un nombre
+// nuevo (así ningún caché muestra la vieja) y la anterior se borra.
+export async function subirFotoSocio(id: string, formData: FormData) {
+  if (!(await idSocioActual())) throw new Error("No autorizado")
+  const archivo = formData.get("foto")
+  if (!(archivo instanceof File) || archivo.size === 0) throw new Error("Falta la foto")
+  if (!["image/webp", "image/jpeg", "image/png"].includes(archivo.type)) throw new Error("La foto tiene que ser una imagen")
+  if (archivo.size > 1_500_000) throw new Error("La foto es demasiado pesada")
+
+  const admin = createAdminClient()
+  const extension = archivo.type.split("/")[1]
+  const ruta = `equipo/${id}-${Date.now()}.${extension}`
+  const { error } = await admin.storage
+    .from(BUCKET)
+    .upload(ruta, archivo, { contentType: archivo.type, cacheControl: "31536000" })
+  if (error) throw new Error(`No se pudo subir la foto: ${error.message}`)
+  const url = admin.storage.from(BUCKET).getPublicUrl(ruta).data.publicUrl
+
+  await reemplazarFoto(id, url)
+}
+
+export async function quitarFotoSocio(id: string) {
+  if (!(await idSocioActual())) throw new Error("No autorizado")
+  await reemplazarFoto(id, null)
+}
+
+async function reemplazarFoto(id: string, url: string | null) {
+  const supabase = await createClient()
+  const { data: antes } = await supabase.from("socios").select("web_foto_url").eq("id", id).single<{ web_foto_url: string | null }>()
+  const { error } = await supabase.from("socios").update({ web_foto_url: url }).eq("id", id)
+  if (error) throw new Error(error.message)
+
+  // La anterior ya no la usa nadie (tolerante: si falla, queda huérfana).
+  const marca = `/object/public/${BUCKET}/`
+  const vieja = antes?.web_foto_url?.split(marca)[1]
+  if (vieja) await createAdminClient().storage.from(BUCKET).remove([vieja]).catch(() => null)
   revalidar()
 }

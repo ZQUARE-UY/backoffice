@@ -18,7 +18,7 @@ export default async function ContenidoWebPage() {
       .order("created_at"),
     supabase
       .from("socios")
-      .select("id, nombre, web_visible, web_orden, web_cargo_es, web_cargo_en")
+      .select("id, nombre, web_visible, web_orden, web_cargo_es, web_cargo_en, web_foto_url")
       .is("deleted_at", null)
       .order("web_orden")
       .order("nombre"),

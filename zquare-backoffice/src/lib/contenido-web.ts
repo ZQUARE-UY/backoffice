@@ -23,6 +23,7 @@ export type SocioWeb = {
   web_orden: number
   web_cargo_es: string | null
   web_cargo_en: string | null
+  web_foto_url: string | null
 }
 
 type Campo = { clave: string; label: string; largo?: boolean; max: number }
@@ -78,7 +79,8 @@ type Lote = {
   steps?: [string, string, string][]
   testimonials?: [string, string, string, string][]
   interests?: string[]
-  team?: [string, string][]
+  // [nombre, cargo, foto]: la foto es opcional (sin ella, el recuadro del diseño).
+  team?: [string, string, string][]
 }
 
 // Lo que lee la web: por idioma, las listas con la forma de su I18N. Una
@@ -112,6 +114,7 @@ export function contenidoPublico(bloques: Bloque[], socios: SocioWeb[]): Record<
       lote.team = equipo.map((s) => [
         s.nombre,
         ((idioma === "en" ? s.web_cargo_en : s.web_cargo_es) || s.web_cargo_es || "").trim(),
+        s.web_foto_url ?? "",
       ])
     }
     return lote
