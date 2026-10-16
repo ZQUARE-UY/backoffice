@@ -1035,3 +1035,10 @@ cuatro.
   deducirlo por fecha. MCP: `crear_decision` acepta `reunion`,
   `transcripcion_reunion` devuelve `decisiones_registradas` y los listados
   de decisiones muestran la reunión.
+- **2026-10-16** — Sidebar colapsable: botón junto a la campanita que lo
+  achica a 64px (solo íconos, sin logo; el contador de Reuniones queda como
+  globito). El estado va en la cookie `zq-sidebar` y el layout la lee del
+  lado del servidor para no parpadear. El panel de notificaciones se pega al
+  ancho actual (`--ancho-sidebar`). El tema (claro/oscuro/sistema) salió del
+  menú del usuario a un selector visible justo arriba del nombre, también
+  en el menú de celular.

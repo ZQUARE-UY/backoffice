@@ -1,52 +1,103 @@
 "use client"
 
+import { useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { PanelLeftCloseIcon, PanelLeftOpenIcon } from "lucide-react"
 
 import { BusquedaGlobal } from "@/components/busqueda-global"
 import { UserMenu } from "@/components/user-menu"
-import { GRUPOS_NAV, seccionActiva } from "@/components/zq/navegacion"
+import { COOKIE_SIDEBAR, GRUPOS_NAV, seccionActiva } from "@/components/zq/navegacion"
 import { Campanita } from "@/components/zq/panel-notificaciones"
+import { SelectorTema } from "@/components/zq/selector-tema"
 import type { Notificacion } from "@/lib/notificaciones"
 
 // Sidebar carbón de 240px (escritorio, 720px o más): logo arriba con la
-// campanita a la derecha, buscador, secciones y el usuario al pie. El ítem
-// activo va en lima. Debajo de 720px lo reemplaza el menú de celular.
+// campanita y el botón de colapsar a la derecha, buscador, secciones y el
+// usuario al pie. El ítem activo va en lima. Debajo de 720px lo reemplaza el
+// menú de celular. Colapsado queda en 64px, solo íconos y sin logo (en Inicio
+// ya está el isotipo grande); el estado va en una
+// cookie que el layout lee al renderizar.
 export function AppSidebar({
   nombre,
   email,
   notificaciones,
   // Reuniones esperando que este socio marque su disponibilidad.
   pendientesReuniones = 0,
+  colapsadoInicial = false,
 }: {
   nombre: string
   email: string
   notificaciones: Notificacion[]
   pendientesReuniones?: number
+  colapsadoInicial?: boolean
 }) {
   const pathname = usePathname()
+  const [colapsado, setColapsado] = useState(colapsadoInicial)
+
+  function alternar() {
+    const nuevo = !colapsado
+    setColapsado(nuevo)
+    document.cookie = `${COOKIE_SIDEBAR}=${nuevo ? "colapsado" : "expandido"}; path=/; max-age=31536000; samesite=lax`
+  }
+
+  const botonAlternar = (
+    <button
+      type="button"
+      onClick={alternar}
+      className="zq-tactil text-sidebar-muted hover:text-sidebar-foreground"
+      aria-label={colapsado ? "Expandir menú" : "Colapsar menú"}
+      aria-expanded={!colapsado}
+      title={colapsado ? "Expandir menú" : "Colapsar menú"}
+    >
+      {colapsado ? (
+        <PanelLeftOpenIcon className="size-[18px]" aria-hidden="true" />
+      ) : (
+        <PanelLeftCloseIcon className="size-[18px]" aria-hidden="true" />
+      )}
+    </button>
+  )
 
   return (
-    <aside className="zq-sidebar hidden escritorio:flex" aria-label="Navegación principal">
-      <div className="mb-4 flex items-center justify-between gap-2 pl-2.5">
-        <Link href="/" aria-label="ZQUARE, ir al inicio" className="rounded-md">
-          <Image
-            src="/marca/zquare-logotipo-sobre-oscuro.svg"
-            alt=""
-            width={103}
-            height={26}
-            priority
-          />
-        </Link>
-        <Campanita notificaciones={notificaciones} className="-mr-1 text-sidebar-foreground" />
-      </div>
-      <BusquedaGlobal className="mb-1 border-sidebar-border bg-sidebar-accent text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground" />
+    <aside
+      className="zq-sidebar hidden escritorio:flex"
+      aria-label="Navegación principal"
+      data-colapsado={colapsado || undefined}
+    >
+      {colapsado ? (
+        <div className="mb-3 flex flex-col items-center gap-1">
+          <Campanita notificaciones={notificaciones} className="text-sidebar-foreground" />
+          {botonAlternar}
+        </div>
+      ) : (
+        <div className="mb-4 flex items-center justify-between gap-2 pl-2.5">
+          <Link href="/" aria-label="ZQUARE, ir al inicio" className="rounded-md">
+            <Image
+              src="/marca/zquare-logotipo-sobre-oscuro.svg"
+              alt=""
+              width={103}
+              height={26}
+              priority
+            />
+          </Link>
+          <div className="-mr-1 flex items-center">
+            <Campanita notificaciones={notificaciones} className="text-sidebar-foreground" />
+            {botonAlternar}
+          </div>
+        </div>
+      )}
+      <BusquedaGlobal
+        compacto={colapsado}
+        className="mb-1 border-sidebar-border bg-sidebar-accent text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
+      />
       <nav className="flex flex-col gap-0.5">
         {GRUPOS_NAV.map((grupo) => (
           <div key={grupo.label ?? "principal"} className="flex flex-col gap-0.5">
-            {grupo.label ? (
+            {grupo.label && !colapsado ? (
               <p className="zq-sidebar-seccion">{grupo.label}</p>
+            ) : grupo.label ? (
+              <hr className="mx-2 my-3 border-sidebar-border" />
             ) : (
               <span className="h-3" aria-hidden="true" />
             )}
@@ -56,10 +107,17 @@ export function AppSidebar({
                 href={s.href}
                 className="zq-nav-item"
                 aria-current={seccionActiva(s.href, pathname) ? "page" : undefined}
+                aria-label={colapsado ? s.titulo : undefined}
+                title={colapsado ? s.titulo : undefined}
               >
                 <s.icono className="size-4" aria-hidden="true" />
-                <span className="flex-1">{s.titulo}</span>
-                {s.href === "/reuniones" && pendientesReuniones > 0 && (
+                {!colapsado && <span className="flex-1">{s.titulo}</span>}
+                {s.href === "/reuniones" && pendientesReuniones > 0 && colapsado && (
+                  <span className="zq-contador" aria-hidden="true">
+                    {pendientesReuniones > 9 ? "9+" : pendientesReuniones}
+                  </span>
+                )}
+                {s.href === "/reuniones" && pendientesReuniones > 0 && !colapsado && (
                   <span
                     className="zq-num rounded-full bg-sidebar-accent px-2 text-xs leading-5 font-semibold text-sidebar-foreground"
                     aria-label={`${pendientesReuniones} esperando tu disponibilidad`}
@@ -73,7 +131,8 @@ export function AppSidebar({
         ))}
       </nav>
       <div className="mt-auto border-t border-sidebar-border pt-3">
-        <UserMenu nombre={nombre} email={email} />
+        <SelectorTema compacto={colapsado} />
+        <UserMenu nombre={nombre} email={email} compacto={colapsado} />
       </div>
     </aside>
   )

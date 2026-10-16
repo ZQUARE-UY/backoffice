@@ -49,8 +49,11 @@ const GRUPOS: { kind: ResultadoBusqueda["kind"]; label: string }[] = [
 export function BusquedaGlobal({
   className,
   placeholder = "Buscar…",
+  compacto = false,
 }: {
   className?: string
+  // Sidebar colapsado: solo la lupa.
+  compacto?: boolean
   // Documentos usa el buscador grande: "Buscá por nombre o por significado".
   placeholder?: string
 }) {
@@ -120,16 +123,23 @@ export function BusquedaGlobal({
       <button
         type="button"
         onClick={() => setAbierto(true)}
+        aria-label={compacto ? "Buscar (⌘K)" : undefined}
+        title={compacto ? "Buscar (⌘K)" : undefined}
         className={cn(
           "flex w-full items-center gap-2 rounded-lg border border-input bg-background px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted",
+          compacto && "justify-center px-0",
           className
         )}
       >
         <SearchIcon className="size-4 shrink-0" />
-        <span>{placeholder}</span>
-        <kbd className="ml-auto hidden rounded border bg-muted px-1.5 font-mono text-[10px] sm:inline">
-          ⌘K
-        </kbd>
+        {!compacto && (
+          <>
+            <span>{placeholder}</span>
+            <kbd className="ml-auto hidden rounded border bg-muted px-1.5 font-mono text-[10px] sm:inline">
+              ⌘K
+            </kbd>
+          </>
+        )}
       </button>
 
       <CommandDialog open={abierto} onOpenChange={setAbierto}>
