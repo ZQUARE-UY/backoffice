@@ -25,16 +25,24 @@ export function AppSidebar({
   notificaciones,
   // Reuniones esperando que este socio marque su disponibilidad.
   pendientesReuniones = 0,
+  // Consultas de la web sin revisar.
+  consultasNuevas = 0,
   colapsadoInicial = false,
 }: {
   nombre: string
   email: string
   notificaciones: Notificacion[]
   pendientesReuniones?: number
+  consultasNuevas?: number
   colapsadoInicial?: boolean
 }) {
   const pathname = usePathname()
   const [colapsado, setColapsado] = useState(colapsadoInicial)
+  // Contador al lado de la sección (globito si el sidebar está colapsado).
+  const contadores: Record<string, { n: number; etiqueta: string }> = {
+    "/reuniones": { n: pendientesReuniones, etiqueta: "esperando tu disponibilidad" },
+    "/web": { n: consultasNuevas, etiqueta: consultasNuevas === 1 ? "consulta nueva" : "consultas nuevas" },
+  }
 
   function alternar() {
     const nuevo = !colapsado
@@ -107,24 +115,30 @@ export function AppSidebar({
                 href={s.href}
                 className="zq-nav-item"
                 aria-current={seccionActiva(s.href, pathname) ? "page" : undefined}
-                aria-label={colapsado ? s.titulo : undefined}
+                aria-label={
+                  colapsado
+                    ? [s.titulo, contadores[s.href]?.n ? `${contadores[s.href].n} ${contadores[s.href].etiqueta}` : ""]
+                        .filter(Boolean)
+                        .join(", ")
+                    : undefined
+                }
                 title={colapsado ? s.titulo : undefined}
               >
                 <s.icono className="size-4" aria-hidden="true" />
                 {!colapsado && <span className="flex-1">{s.titulo}</span>}
-                {s.href === "/reuniones" && pendientesReuniones > 0 && colapsado && (
-                  <span className="zq-contador" aria-hidden="true">
-                    {pendientesReuniones > 9 ? "9+" : pendientesReuniones}
-                  </span>
-                )}
-                {s.href === "/reuniones" && pendientesReuniones > 0 && !colapsado && (
-                  <span
-                    className="zq-num rounded-full bg-sidebar-accent px-2 text-xs leading-5 font-semibold text-sidebar-foreground"
-                    aria-label={`${pendientesReuniones} esperando tu disponibilidad`}
-                  >
-                    {pendientesReuniones}
-                  </span>
-                )}
+                {(contadores[s.href]?.n ?? 0) > 0 &&
+                  (colapsado ? (
+                    <span className="zq-contador" aria-hidden="true">
+                      {contadores[s.href].n > 9 ? "9+" : contadores[s.href].n}
+                    </span>
+                  ) : (
+                    <span
+                      className="zq-num rounded-full bg-sidebar-accent px-2 text-xs leading-5 font-semibold text-sidebar-foreground"
+                      aria-label={`${contadores[s.href].n} ${contadores[s.href].etiqueta}`}
+                    >
+                      {contadores[s.href].n}
+                    </span>
+                  ))}
               </Link>
             ))}
           </div>

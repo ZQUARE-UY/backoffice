@@ -28,9 +28,15 @@ export default async function ProtegidoLayout({
   // socioActual y solicitudesPendientes van con `cache`: el dashboard los
   // vuelve a pedir en el mismo request y comparten resultado.
   const socio = await socioActual()
-  const [pendientesReuniones, notificaciones] = await Promise.all([
+  const [pendientesReuniones, notificaciones, consultasNuevas] = await Promise.all([
     socio ? solicitudesPendientes(socio.id).then((s) => s.length) : 0,
     notificacionesRecientes(socio?.id ?? null),
+    supabase
+      .from("consultas_web")
+      .select("id", { count: "exact", head: true })
+      .eq("estado", "nueva")
+      .is("deleted_at", null)
+      .then((r) => r.count ?? 0),
   ])
 
   // El sidebar recuerda si lo dejaste colapsado; se lee del lado del servidor
@@ -47,6 +53,7 @@ export default async function ProtegidoLayout({
         email={email}
         notificaciones={notificaciones}
         pendientesReuniones={pendientesReuniones}
+        consultasNuevas={consultasNuevas}
         colapsadoInicial={colapsado}
       />
       <div className="flex min-w-0 flex-1 flex-col">
