@@ -1052,3 +1052,12 @@ cuatro.
   carpeta en Drive) o vincular el cliente con el mismo email; también se
   marcan atendidas o se descartan. Próximas etapas en /web: métricas
   (propias + Google Analytics) y contenido de la web editable.
+- **2026-10-16** — Web ↔ backoffice, etapa 2 (métricas): pestaña **Métricas**
+  en la sección Web (`/web/metricas`, 7/30/90 días): visitantes, páginas
+  vistas, consultas y conversión; visitantes por día; origen, recorrido por
+  secciones, scroll, botones, países, dispositivo e idioma. La web manda
+  lotes de eventos con `sendBeacon` a `/api/publico/eventos` (fuera del
+  proxy de sesión) y se guardan en `eventos_web` (migración `20261016000003`)
+  sin cookies ni IP: visitante = hash diario de IP + navegador + sal. El
+  resumen lo arma la función `metricas_web` en la base (PostgREST corta en
+  1000 filas). Google Analytics sigue listo en `analytics.js`, falta el ID.
