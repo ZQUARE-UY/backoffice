@@ -17,7 +17,7 @@ export default async function WebPage({
 
   let consulta = supabase
     .from("consultas_web")
-    .select("*, clientes(id, nombre)")
+    .select("*, clientes(id, nombre), chats_web(id)")
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
   if (filtro !== "todas") consulta = consulta.eq("estado", filtro)

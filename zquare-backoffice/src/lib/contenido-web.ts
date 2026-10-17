@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js"
+
 // Contenido de la web (zquare.uy) que se edita en Web → Contenido. Acá viven
 // los campos de cada tipo de bloque (los usa el formulario y la validación)
 // y el armado del JSON que lee la web, con la misma forma que su objeto I18N.
@@ -143,4 +145,29 @@ export function contenidoPublico(
   }
 
   return { es: armar("es"), en: armar("en"), secciones }
+}
+
+// Lee de la base lo publicado y lo arma como contenidoPublico. Lo usan la
+// ruta pública de contenido y el chat de la web (que responde con esto).
+export async function cargarContenidoPublico(admin: SupabaseClient) {
+  const [bloques, socios, config] = await Promise.all([
+    admin
+      .from("contenido_web")
+      .select("id, tipo, orden, publicado, es, en, nombre, empresa")
+      .eq("publicado", true)
+      .is("deleted_at", null),
+    admin
+      .from("socios")
+      .select("id, nombre, web_visible, web_orden, web_cargo_es, web_cargo_en, web_foto_url")
+      .eq("web_visible", true)
+      .is("deleted_at", null),
+    admin.from("configuracion").select("valor").eq("clave", CLAVE_CONFIG_SECCIONES).maybeSingle<{ valor: unknown }>(),
+  ])
+  if (bloques.error || socios.error) throw new Error(bloques.error?.message ?? socios.error?.message)
+
+  return contenidoPublico(
+    (bloques.data ?? []) as Bloque[],
+    (socios.data ?? []) as SocioWeb[],
+    leerSecciones(config.data?.valor)
+  )
 }

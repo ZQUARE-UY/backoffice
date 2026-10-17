@@ -7,6 +7,7 @@ import {
   InboxIcon,
   KanbanIcon,
   LightbulbIcon,
+  MessagesSquareIcon,
   PanelsTopLeftIcon,
   ScrollTextIcon,
   UsersIcon,
@@ -51,6 +52,7 @@ export const GRUPOS_NAV: { label: string | null; secciones: SeccionNav[] }[] = [
     label: "Web",
     secciones: [
       { titulo: "Consultas", href: "/web", icono: InboxIcon, exacta: true },
+      { titulo: "Chats", href: "/web/chats", icono: MessagesSquareIcon },
       { titulo: "Métricas", href: "/web/metricas", icono: ChartColumnIcon },
       { titulo: "Contenido", href: "/web/contenido", icono: PanelsTopLeftIcon },
     ],
