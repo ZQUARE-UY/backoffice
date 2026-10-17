@@ -1116,3 +1116,9 @@ cuatro.
   conversaciones por visitante por hora y totales por hora). La web la lee de
   `GET /api/publico/chat` (cacheado 1 min); apagado, no muestra el chat y el
   personaje vuelve a sus textos sin invitar a hablar.
+- **2026-10-17** — Chat de la web: **respuestas rápidas**. El bot puede
+  terminar con una línea `>> opción | opción` (hasta dos, cortas); la ruta
+  las separa del texto y las manda en `sugerencias`, y la web las muestra
+  como botones (rediseño "La mascota asomada", propuesta C del lienzo de
+  Claude Design). Regla nueva en el prompt: no decir que hizo algo que no
+  puede hacer.
