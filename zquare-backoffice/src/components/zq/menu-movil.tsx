@@ -56,7 +56,7 @@ export function BarraMovil({
                       href={s.href}
                       onClick={() => setAbierto(false)}
                       className="zq-menu-movil-item"
-                      aria-current={seccionActiva(s.href, pathname) ? "page" : undefined}
+                      aria-current={seccionActiva(s.href, pathname, s.exacta) ? "page" : undefined}
                     >
                       {s.titulo}
                     </Link>

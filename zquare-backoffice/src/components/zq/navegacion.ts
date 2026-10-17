@@ -2,10 +2,12 @@ import {
   CalendarClockIcon,
   FileTextIcon,
   FolderKanbanIcon,
-  GlobeIcon,
+  ChartColumnIcon,
   HomeIcon,
+  InboxIcon,
   KanbanIcon,
   LightbulbIcon,
+  PanelsTopLeftIcon,
   ScrollTextIcon,
   UsersIcon,
   WalletIcon,
@@ -16,7 +18,9 @@ import {
 // lee cada pantalla. "Desarrollo" va primero porque es el día a día. Inicio
 // queda suelto arriba, sin título de grupo, porque no pertenece a ninguno.
 // Lo usan el sidebar de escritorio y el menú de celular.
-export type SeccionNav = { titulo: string; href: string; icono: LucideIcon }
+// `exacta`: activa solo en esa ruta, no en las de abajo (/web no se prende
+// en /web/metricas, que tiene su propio ítem).
+export type SeccionNav = { titulo: string; href: string; icono: LucideIcon; exacta?: boolean }
 
 export const GRUPOS_NAV: { label: string | null; secciones: SeccionNav[] }[] = [
   {
@@ -35,11 +39,20 @@ export const GRUPOS_NAV: { label: string | null; secciones: SeccionNav[] }[] = [
     label: "Gestión",
     secciones: [
       { titulo: "Clientes", href: "/clientes", icono: UsersIcon },
-      { titulo: "Web", href: "/web", icono: GlobeIcon },
       { titulo: "Reuniones", href: "/reuniones", icono: CalendarClockIcon },
       { titulo: "Documentos", href: "/documentos", icono: FileTextIcon },
       { titulo: "Finanzas", href: "/finanzas", icono: WalletIcon },
       { titulo: "Decisiones", href: "/decisiones", icono: ScrollTextIcon },
+    ],
+  },
+  {
+    // Todo lo que viene de zquare.uy: se analiza acá y después se promueve
+    // al resto del backoffice.
+    label: "Web",
+    secciones: [
+      { titulo: "Consultas", href: "/web", icono: InboxIcon, exacta: true },
+      { titulo: "Métricas", href: "/web/metricas", icono: ChartColumnIcon },
+      { titulo: "Contenido", href: "/web/contenido", icono: PanelsTopLeftIcon },
     ],
   },
 ]
@@ -49,8 +62,8 @@ export const GRUPOS_NAV: { label: string | null; secciones: SeccionNav[] }[] = [
 // exporta de un módulo "use client" no llega al servidor como valor.
 export const COOKIE_SIDEBAR = "zq-sidebar"
 
-export function seccionActiva(href: string, pathname: string): boolean {
-  return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`)
+export function seccionActiva(href: string, pathname: string, exacta = false): boolean {
+  return href === "/" || exacta ? pathname === href : pathname === href || pathname.startsWith(`${href}/`)
 }
 
 // Título de la barra de celular: la sección en la que estás. Presupuestos
@@ -58,7 +71,7 @@ export function seccionActiva(href: string, pathname: string): boolean {
 export function tituloSeccion(pathname: string): string {
   for (const grupo of GRUPOS_NAV) {
     for (const s of grupo.secciones) {
-      if (seccionActiva(s.href, pathname)) return s.titulo
+      if (seccionActiva(s.href, pathname, s.exacta)) return s.titulo
     }
   }
   if (pathname.startsWith("/presupuestos")) return "Presupuestos"

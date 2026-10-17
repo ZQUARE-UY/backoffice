@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { origenPermitido } from "@/lib/consultas-web"
-import { contenidoPublico, type Bloque, type SocioWeb } from "@/lib/contenido-web"
+import { CLAVE_CONFIG_SECCIONES, contenidoPublico, leerSecciones, type Bloque, type SocioWeb } from "@/lib/contenido-web"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 // Contenido editable de zquare.uy (Web → Contenido en el backoffice). Público
@@ -20,7 +20,7 @@ export async function GET(req: Request) {
   const encabezados = cors(req.headers.get("origin"))
   try {
     const admin = createAdminClient()
-    const [bloques, socios] = await Promise.all([
+    const [bloques, socios, config] = await Promise.all([
       admin
         .from("contenido_web")
         .select("id, tipo, orden, publicado, es, en, nombre, empresa")
@@ -31,10 +31,16 @@ export async function GET(req: Request) {
         .select("id, nombre, web_visible, web_orden, web_cargo_es, web_cargo_en, web_foto_url")
         .eq("web_visible", true)
         .is("deleted_at", null),
+      admin.from("configuracion").select("valor").eq("clave", CLAVE_CONFIG_SECCIONES).maybeSingle<{ valor: unknown }>(),
     ])
     if (bloques.error || socios.error) throw new Error(bloques.error?.message ?? socios.error?.message)
 
-    return NextResponse.json(contenidoPublico((bloques.data ?? []) as Bloque[], (socios.data ?? []) as SocioWeb[]), {
+    const contenido = contenidoPublico(
+      (bloques.data ?? []) as Bloque[],
+      (socios.data ?? []) as SocioWeb[],
+      leerSecciones(config.data?.valor)
+    )
+    return NextResponse.json(contenido, {
       headers: { ...encabezados, "Cache-Control": "public, s-maxage=60, stale-while-revalidate=600" },
     })
   } catch (e) {
