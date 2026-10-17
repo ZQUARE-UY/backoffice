@@ -6,7 +6,6 @@ import { Encabezado } from "@/components/zq/encabezado"
 import { fechaCorta, fechaRelativa, iniciales } from "@/lib/formato"
 import { cn } from "@/lib/utils"
 
-import { PESTANAS_WEB } from "./pestanas"
 import { cambiarEstadoConsulta, promoverACliente, vincularACliente, type EstadoConsulta } from "./actions"
 
 export type Consulta = {
@@ -67,7 +66,7 @@ export function VistaWeb({
 
   return (
     <>
-      <Encabezado titulo="Web" pestanas={PESTANAS_WEB} />
+      <Encabezado titulo="Consultas" rotulo="Web · zquare.uy" />
 
       <nav className="zq-pildoras self-start" aria-label="Estado de las consultas">
         {FILTROS.map((f) => (

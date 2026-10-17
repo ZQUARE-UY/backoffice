@@ -1076,3 +1076,14 @@ cuatro.
   actions); se guarda en el bucket público `web` de Supabase Storage
   (migración `20261016000005`, columna `socios.web_foto_url`) y la web la
   muestra en lugar del recuadro "FOTO".
+- **2026-10-16** — Web → Contenido rediseñado (propuesta 2 de Claude Design):
+  panel a la izquierda con las secciones en acordeón y el elemento elegido
+  desplegado con sus campos; zquare.uy a la derecha en un iframe
+  (`?vista_previa=1`) que pinta el borrador por `postMessage` sin guardarlo
+  ni contar la visita. Todo se publica junto ("Publicar N cambios",
+  `publicarContenido`), con marca "Editado" y Descartar; las fotos siguen
+  publicándose al subirlas. Secciones que se prenden y apagan (configuracion
+  `web_secciones`, sin migración). Consultas/Métricas/Contenido pasan al
+  sidebar como grupo "Web" (sin pestañas); el sidebar se colapsa solo en
+  Contenido sin tocar la preferencia guardada; el editor ocupa el alto de la
+  pantalla; sin rebote de scroll (`overscroll-behavior-y: none`).

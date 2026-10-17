@@ -26,6 +26,23 @@ export type SocioWeb = {
   web_foto_url: string | null
 }
 
+// Qué secciones muestra la web (Web → Contenido). Se guarda en la tabla
+// configuracion, clave "web_secciones"; lo que falte se toma como visible.
+export type ClaveSeccion = "servicios" | "metodo" | "equipo" | "testimonios"
+export type Secciones = Record<ClaveSeccion, boolean>
+export const CLAVE_CONFIG_SECCIONES = "web_secciones"
+export const SECCIONES_VISIBLES: Secciones = { servicios: true, metodo: true, equipo: true, testimonios: true }
+
+export function leerSecciones(valor: unknown): Secciones {
+  const v = (valor && typeof valor === "object" ? valor : {}) as Partial<Record<ClaveSeccion, unknown>>
+  return {
+    servicios: v.servicios !== false,
+    metodo: v.metodo !== false,
+    equipo: v.equipo !== false,
+    testimonios: v.testimonios !== false,
+  }
+}
+
 type Campo = { clave: string; label: string; largo?: boolean; max: number }
 
 export const TIPOS: Record<
@@ -83,9 +100,14 @@ type Lote = {
   team?: [string, string, string][]
 }
 
-// Lo que lee la web: por idioma, las listas con la forma de su I18N. Una
-// lista que no alcanza para el diseño no se manda y la web usa la suya.
-export function contenidoPublico(bloques: Bloque[], socios: SocioWeb[]): Record<Idioma, Lote> {
+// Lo que lee la web: por idioma, las listas con la forma de su I18N, y qué
+// secciones se ven. Una lista que no alcanza para el diseño no se manda y la
+// web usa la suya.
+export function contenidoPublico(
+  bloques: Bloque[],
+  socios: SocioWeb[],
+  secciones: Secciones = SECCIONES_VISIBLES
+): Record<Idioma, Lote> & { secciones: Secciones } {
   const publicados = bloques.filter((b) => b.publicado).sort((a, b) => a.orden - b.orden)
   const de = (tipo: TipoBloque) => publicados.filter((b) => b.tipo === tipo)
   const equipo = socios.filter((s) => s.web_visible).sort((a, b) => a.web_orden - b.web_orden)
@@ -120,5 +142,5 @@ export function contenidoPublico(bloques: Bloque[], socios: SocioWeb[]): Record<
     return lote
   }
 
-  return { es: armar("es"), en: armar("en") }
+  return { es: armar("es"), en: armar("en"), secciones }
 }

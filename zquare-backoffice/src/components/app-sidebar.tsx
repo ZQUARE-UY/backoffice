@@ -19,6 +19,8 @@ import type { Notificacion } from "@/lib/notificaciones"
 // menú de celular. Colapsado queda en 64px, solo íconos y sin logo (en Inicio
 // ya está el isotipo grande); el estado va en una
 // cookie que el layout lee al renderizar.
+const RUTAS_ANCHAS = ["/web/contenido"]
+
 export function AppSidebar({
   nombre,
   email,
@@ -37,7 +39,13 @@ export function AppSidebar({
   colapsadoInicial?: boolean
 }) {
   const pathname = usePathname()
-  const [colapsado, setColapsado] = useState(colapsadoInicial)
+  const [preferencia, setPreferencia] = useState(colapsadoInicial)
+  // Pantallas que necesitan el ancho (el editor de Web → Contenido): ahí el
+  // sidebar arranca colapsado sin tocar la preferencia guardada. Si lo
+  // expandís a mano en esa pantalla se respeta hasta que salís de ella.
+  const colapsaSolo = RUTAS_ANCHAS.includes(pathname)
+  const [expandidoEn, setExpandidoEn] = useState<string | null>(null)
+  const colapsado = colapsaSolo ? expandidoEn !== pathname : preferencia
   // Contador al lado de la sección (globito si el sidebar está colapsado).
   const contadores: Record<string, { n: number; etiqueta: string }> = {
     "/reuniones": { n: pendientesReuniones, etiqueta: "esperando tu disponibilidad" },
@@ -45,8 +53,12 @@ export function AppSidebar({
   }
 
   function alternar() {
-    const nuevo = !colapsado
-    setColapsado(nuevo)
+    if (colapsaSolo) {
+      setExpandidoEn(colapsado ? pathname : null)
+      return
+    }
+    const nuevo = !preferencia
+    setPreferencia(nuevo)
     document.cookie = `${COOKIE_SIDEBAR}=${nuevo ? "colapsado" : "expandido"}; path=/; max-age=31536000; samesite=lax`
   }
 
@@ -114,7 +126,7 @@ export function AppSidebar({
                 key={s.href}
                 href={s.href}
                 className="zq-nav-item"
-                aria-current={seccionActiva(s.href, pathname) ? "page" : undefined}
+                aria-current={seccionActiva(s.href, pathname, s.exacta) ? "page" : undefined}
                 aria-label={
                   colapsado
                     ? [s.titulo, contadores[s.href]?.n ? `${contadores[s.href].n} ${contadores[s.href].etiqueta}` : ""]

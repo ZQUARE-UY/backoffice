@@ -182,6 +182,9 @@
   }
   html {
     @apply font-sans;
+    /* Sin el rebote al pasarse de scroll (macOS): movía toda la página y
+       dejaba ver el fondo debajo del sidebar fijo. */
+    overscroll-behavior-y: none;
   }
   /* Foco visible en todo lo interactivo: anillo de 2px en --ring. */
   :focus-visible {
@@ -333,6 +336,23 @@
     }
   }
 
+  /* Pantallas que ocupan exactamente el alto de la ventana (el editor de
+     Web → Contenido): el contenido no scrollea y el último hijo llena lo
+     que queda. */
+  @media (min-width: 720px) {
+    .zq-contenido:has(> .zq-editor-web) {
+      flex: none;
+      height: 100dvh;
+      max-width: none;
+      padding: 0;
+    }
+    .zq-editor-web {
+      flex: 1;
+      min-height: 0;
+      grid-template-rows: minmax(0, 1fr);
+    }
+  }
+
   /* ── Encabezado de página ── */
   .zq-encabezado {
     display: flex;
@@ -390,6 +410,27 @@
     background: color-mix(in oklab, var(--foreground) 6%, transparent);
   }
   .zq-pildoras a[aria-current="page"] {
+    background: var(--foreground);
+    color: var(--background);
+    font-weight: 600;
+  }
+  /* Variante con botones (alternan una opción en la misma pantalla). */
+  .zq-pildora-boton {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border: 0;
+    border-radius: 999px;
+    background: none;
+    color: var(--foreground);
+    font: inherit;
+    cursor: pointer;
+  }
+  .zq-pildora-boton:hover {
+    background: color-mix(in oklab, var(--foreground) 6%, transparent);
+  }
+  .zq-pildora-boton[aria-pressed="true"] {
     background: var(--foreground);
     color: var(--background);
     font-weight: 600;

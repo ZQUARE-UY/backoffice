@@ -3,7 +3,6 @@ import Link from "next/link"
 import { Encabezado } from "@/components/zq/encabezado"
 import { formatearNumero } from "@/lib/formato"
 
-import { PESTANAS_WEB } from "../pestanas"
 import { GraficoDias, type PuntoDia } from "./grafico-dias"
 import { ListaBarras, type Fila } from "./lista-barras"
 
@@ -89,7 +88,7 @@ export function VistaMetricas({
 
   return (
     <>
-      <Encabezado titulo="Web" pestanas={PESTANAS_WEB} />
+      <Encabezado titulo="Métricas" rotulo="Web · zquare.uy" />
 
       <nav className="zq-pildoras self-start" aria-label="Período">
         {RANGOS.map((n) => (

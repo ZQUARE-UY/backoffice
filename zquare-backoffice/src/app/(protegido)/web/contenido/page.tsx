@@ -1,15 +1,19 @@
-import type { Bloque, SocioWeb } from "@/lib/contenido-web"
+import { CLAVE_CONFIG_SECCIONES, leerSecciones, type Bloque, type SocioWeb } from "@/lib/contenido-web"
 import { createClient } from "@/lib/supabase/server"
 
-import { VistaContenido } from "./vista-contenido"
+import { EditorWeb } from "./editor-web"
 
 export const metadata = { title: "Contenido · Web" }
 
-// Web → Contenido: trae los bloques y los socios; la vista está en
-// vista-contenido.tsx.
+// La web que muestra la vista previa: en desarrollo, la local
+// (python -m http.server 4321 en el repo de la web).
+const WEB_URL = process.env.NODE_ENV === "development" ? "http://localhost:4321" : "https://zquare.uy"
+
+// Web → Contenido: trae los bloques y los socios; el editor está en
+// editor-web.tsx.
 export default async function ContenidoWebPage() {
   const supabase = await createClient()
-  const [{ data: bloques }, { data: socios }] = await Promise.all([
+  const [{ data: bloques }, { data: socios }, { data: config }] = await Promise.all([
     supabase
       .from("contenido_web")
       .select("id, tipo, orden, publicado, es, en, nombre, empresa")
@@ -22,6 +26,14 @@ export default async function ContenidoWebPage() {
       .is("deleted_at", null)
       .order("web_orden")
       .order("nombre"),
+    supabase.from("configuracion").select("valor").eq("clave", CLAVE_CONFIG_SECCIONES).maybeSingle<{ valor: unknown }>(),
   ])
-  return <VistaContenido bloques={(bloques ?? []) as Bloque[]} socios={(socios ?? []) as SocioWeb[]} />
+  return (
+    <EditorWeb
+      bloques={(bloques ?? []) as Bloque[]}
+      socios={(socios ?? []) as SocioWeb[]}
+      secciones={leerSecciones(config?.valor)}
+      webUrl={WEB_URL}
+    />
+  )
 }
