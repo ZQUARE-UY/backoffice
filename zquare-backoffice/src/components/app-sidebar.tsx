@@ -29,6 +29,8 @@ export function AppSidebar({
   pendientesReuniones = 0,
   // Consultas de la web sin revisar.
   consultasNuevas = 0,
+  // Chats de la web sin revisar.
+  chatsNuevos = 0,
   colapsadoInicial = false,
 }: {
   nombre: string
@@ -36,6 +38,7 @@ export function AppSidebar({
   notificaciones: Notificacion[]
   pendientesReuniones?: number
   consultasNuevas?: number
+  chatsNuevos?: number
   colapsadoInicial?: boolean
 }) {
   const pathname = usePathname()
@@ -50,6 +53,7 @@ export function AppSidebar({
   const contadores: Record<string, { n: number; etiqueta: string }> = {
     "/reuniones": { n: pendientesReuniones, etiqueta: "esperando tu disponibilidad" },
     "/web": { n: consultasNuevas, etiqueta: consultasNuevas === 1 ? "consulta nueva" : "consultas nuevas" },
+    "/web/chats": { n: chatsNuevos, etiqueta: chatsNuevos === 1 ? "chat nuevo" : "chats nuevos" },
   }
 
   function alternar() {

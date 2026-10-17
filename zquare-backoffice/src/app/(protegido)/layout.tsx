@@ -28,13 +28,21 @@ export default async function ProtegidoLayout({
   // socioActual y solicitudesPendientes van con `cache`: el dashboard los
   // vuelve a pedir en el mismo request y comparten resultado.
   const socio = await socioActual()
-  const [pendientesReuniones, notificaciones, consultasNuevas] = await Promise.all([
+  const [pendientesReuniones, notificaciones, consultasNuevas, chatsNuevos] = await Promise.all([
     socio ? solicitudesPendientes(socio.id).then((s) => s.length) : 0,
     notificacionesRecientes(socio?.id ?? null),
     supabase
       .from("consultas_web")
       .select("id", { count: "exact", head: true })
       .eq("estado", "nueva")
+      .is("deleted_at", null)
+      .then((r) => r.count ?? 0),
+    // Chats de la web sin revisar (los vacíos no cuentan: no aparecen en la lista).
+    supabase
+      .from("chats_web")
+      .select("id", { count: "exact", head: true })
+      .eq("estado", "nuevo")
+      .gt("turnos", 0)
       .is("deleted_at", null)
       .then((r) => r.count ?? 0),
   ])
@@ -54,6 +62,7 @@ export default async function ProtegidoLayout({
         notificaciones={notificaciones}
         pendientesReuniones={pendientesReuniones}
         consultasNuevas={consultasNuevas}
+        chatsNuevos={chatsNuevos}
         colapsadoInicial={colapsado}
       />
       <div className="flex min-w-0 flex-1 flex-col">

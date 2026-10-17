@@ -39,6 +39,8 @@ export async function cambiarEstadoChat(id: string, estado: EstadoChat) {
     .eq("id", id)
   if (error) throw new Error(error.message)
   revalidatePath("/web/chats")
+  // El contador de chats nuevos está en el sidebar (layout).
+  revalidatePath("/", "layout")
 }
 
 // Notas y etiquetas de los socios sobre la conversación.
