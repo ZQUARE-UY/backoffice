@@ -697,7 +697,7 @@ parsear la URL.
 | Supabase Free (500 MB DB) | 0 USD — alcanza de sobra para 4 usuarios |
 | Vercel Hobby | 0 USD — *ojo: el plan Hobby es formalmente para uso no comercial; si quieren estar 100% en regla es Pro (20 USD/mes) o migrar el hosting a Cloudflare (gratis)* |
 | Google Workspace | Ya lo pagan |
-| API de Claude (fase 4) | Pocos USD/mes según uso |
+| API de Claude (fase 4 + chat de la web, Haiku 5.5) | Pocos USD/mes según uso — una conversación del chat cuesta del orden de US$ 0,001–0,01 |
 
 ## 9. Próximo paso
 
@@ -1093,3 +1093,26 @@ cuatro.
   vía Google Analytics Data API con la cuenta de servicio del backoffice
   (rol Lector en la propiedad; API habilitada en su proyecto de Cloud). Va
   en su propio Suspense y explica el error si falta acceso o la API.
+- **2026-10-17** — **Chat con IA en zquare.uy** (Claude Haiku 5.5, API de
+  Anthropic). Ruta pública `/api/publico/chat` (mismos orígenes que el
+  formulario): la web manda el id de la conversación y el mensaje; la
+  historia vive en `chats_web` (migración `20261016000006`, mensajes en el
+  formato de la API, se reenvían sin editar). Responde con el contenido
+  publicado en Web → Contenido (sin testimonios) y, si la persona da nombre y
+  email y quiere que la contacten, la herramienta `dejar_consulta` crea la
+  consulta en la bandeja con `consultas_web.origen = 'chat'` (columna nueva)
+  y un resumen. Topes: 1000 caracteres por mensaje, 20 mensajes por
+  conversación, 60 conversaciones nuevas por hora en total y 5 por visitante
+  (hash diario de las métricas, migración `20261017000001`; sin guardar la
+  IP), respuestas de hasta 1500 tokens. Nueva pantalla
+  **Web → Chats** (conversación como se vio en la web, costo aproximado y
+  link a la consulta); la ficha de la consulta enlaza a su chat. Requiere
+  `ANTHROPIC_API_KEY` en Vercel (sin ella la ruta da 503 y la web esconde el
+  chat).
+- **2026-10-17** — Chat de la web **configurable** en Web → Chats →
+  Configurar (tabla `configuracion`, clave `web_chat`, sin migración):
+  prendido/apagado, saludo es/en, información extra que el bot usa además
+  del contenido publicado, y los tres límites (mensajes por conversación,
+  conversaciones por visitante por hora y totales por hora). La web la lee de
+  `GET /api/publico/chat` (cacheado 1 min); apagado, no muestra el chat y el
+  personaje vuelve a sus textos sin invitar a hablar.

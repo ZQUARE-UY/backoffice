@@ -21,6 +21,9 @@ export type Consulta = {
   created_at: string
   revisada_at: string | null
   clientes: { id: string; nombre: string } | null
+  origen: "formulario" | "chat"
+  // La conversación del chat de la web en la que la dejó, si vino por ahí.
+  chats_web: { id: string }[]
 }
 
 export const FILTROS: { valor: EstadoConsulta | "todas"; label: string }[] = [
@@ -81,7 +84,7 @@ export function VistaWeb({
           <p className="m-0 font-semibold text-foreground">
             {filtro === "nueva" ? "No hay consultas nuevas" : "No hay consultas acá"}
           </p>
-          <p className="m-0 mt-1">Las que lleguen por el formulario de contacto de zquare.uy aparecen en esta lista.</p>
+          <p className="m-0 mt-1">Las que lleguen por el formulario de contacto o el chat de zquare.uy aparecen en esta lista.</p>
         </div>
       ) : (
         <div className="flex min-h-[560px] flex-wrap items-stretch overflow-hidden rounded-xl border bg-card">
@@ -116,7 +119,7 @@ export function VistaWeb({
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate font-semibold">{c.nombre}</span>
                     <span className="truncate text-xs text-muted-foreground">
-                      {[c.empresa, fechaRelativa(c.created_at)].filter(Boolean).join(" · ")}
+                      {[c.empresa, c.origen === "chat" ? "Por el chat" : null, fechaRelativa(c.created_at)].filter(Boolean).join(" · ")}
                     </span>
                   </span>
                 </Link>
@@ -208,8 +211,16 @@ function FichaConsulta({
       )}
 
       <div className="flex flex-col gap-2">
-        <h3 className="zq-rotulo text-[13px]">Mensaje{c.idioma === "en" ? " (en inglés)" : ""}</h3>
+        <h3 className="zq-rotulo text-[13px]">
+          {c.origen === "chat" ? "Resumen del chat" : "Mensaje"}
+          {c.idioma === "en" ? " (en inglés)" : ""}
+        </h3>
         <p className="m-0 rounded-[10px] border px-4 py-3.5 whitespace-pre-wrap">{c.mensaje}</p>
+        {c.chats_web[0] && (
+          <Link href={`/web/chats?chat=${c.chats_web[0].id}`} className="self-start text-sm font-semibold text-foreground">
+            Ver la conversación completa
+          </Link>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">

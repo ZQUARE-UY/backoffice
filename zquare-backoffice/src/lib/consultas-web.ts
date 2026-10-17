@@ -43,9 +43,11 @@ export type ConsultaEntrante = {
   intereses: string[]
   mensaje: string
   idioma: "es" | "en" | null
+  // Por dónde llegó: el formulario de contacto (por defecto) o el chat con IA.
+  origen?: "formulario" | "chat"
 }
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+export const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
 function texto(valor: unknown, max: number): string | null {
   if (typeof valor !== "string") return null
@@ -84,7 +86,7 @@ const TOTAL_HORA = 30
 export async function guardarConsulta(
   admin: SupabaseClient,
   c: ConsultaEntrante
-): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+): Promise<{ ok: true; id: string } | { ok: false; status: number; error: string }> {
   const haceUnaHora = new Date(Date.now() - 3_600_000).toISOString()
   const [porEmail, total] = await Promise.all([
     admin
@@ -98,14 +100,19 @@ export async function guardarConsulta(
     return { ok: false, status: 429, error: "Demasiados mensajes, probá más tarde" }
   }
 
-  const { error } = await admin.from("consultas_web").insert({
-    nombre: c.nombre,
-    email: c.email,
-    empresa: c.empresa,
-    intereses: c.intereses,
-    mensaje: c.mensaje,
-    idioma: c.idioma,
-  })
-  if (error) return { ok: false, status: 500, error: "No se pudo guardar" }
-  return { ok: true }
+  const { data, error } = await admin
+    .from("consultas_web")
+    .insert({
+      nombre: c.nombre,
+      email: c.email,
+      empresa: c.empresa,
+      intereses: c.intereses,
+      mensaje: c.mensaje,
+      idioma: c.idioma,
+      origen: c.origen ?? "formulario",
+    })
+    .select("id")
+    .single<{ id: string }>()
+  if (error || !data) return { ok: false, status: 500, error: "No se pudo guardar" }
+  return { ok: true, id: data.id }
 }
