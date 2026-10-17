@@ -44,8 +44,8 @@ export type Hermano = { id: string; created_at: string; turnos: number; consulta
 
 type ChatElegido = ChatLista & {
   mensajes: MensajeVisible[]
-  tokensEntrada: number
-  tokensSalida: number
+  // Lo que costó en la API de Claude (uso_api).
+  costoUsd: number
   ruta: string | null
   origen: { referente: string | null; utm_source: string | null; utm_medium: string | null; utm_campaign: string | null }
   ciudad: string | null
@@ -79,11 +79,6 @@ const INCIDENTES: Record<Incidente["tipo"], string> = {
   tope_mensajes: "Llegó al tope de mensajes",
 }
 
-// Precio de Claude Haiku 5.5 (USD por millón de tokens, prompts de hasta
-// 100K): solo para tener una idea de cuánto cuesta cada conversación.
-const USD_ENTRADA = 0.1
-const USD_SALIDA = 0.5
-
 const hora = (iso: string) =>
   new Date(iso).toLocaleTimeString("es-UY", { timeZone: "America/Montevideo", hour: "2-digit", minute: "2-digit", hour12: false })
 
@@ -116,6 +111,7 @@ export function VistaChats({
   etiquetasUsadas,
   apagado,
   configurar,
+  gastoMes,
 }: {
   chats: ChatLista[]
   filtro: EstadoChat | "todos"
@@ -127,6 +123,8 @@ export function VistaChats({
   apagado: boolean
   // Botón y diálogo de configuración (cliente), armado en page.tsx.
   configurar: React.ReactNode
+  // Lo que lleva gastado el chat en el mes (USD) y cuántas conversaciones.
+  gastoMes: { usd: number; chats: number }
 }) {
   const conFiltro = (extra: string) => {
     const q = [filtro === "nuevo" ? "" : `estado=${filtro}`, extra].filter(Boolean).join("&")
@@ -136,6 +134,11 @@ export function VistaChats({
   return (
     <>
       <Encabezado titulo="Chats" rotulo="Web · zquare.uy" acciones={configurar} />
+
+      <p className="m-0 -mt-2 text-muted-foreground">
+        Este mes: <strong className="zq-num text-foreground">US$ {formatearNumero(gastoMes.usd, 2)}</strong> en la API de
+        Claude · {gastoMes.chats} {gastoMes.chats === 1 ? "conversación" : "conversaciones"}
+      </p>
 
       {apagado && (
         <p className="m-0 rounded-xl border border-dashed border-input px-4 py-3 text-muted-foreground">
@@ -240,7 +243,6 @@ function Conversacion({
   hrefChat: (id: string) => string
   etiquetasUsadas: string[]
 }) {
-  const costo = (c.tokensEntrada * USD_ENTRADA + c.tokensSalida * USD_SALIDA) / 1_000_000
   const ultimo = c.turnosInfo.at(-1)
   const lugar = [c.ciudad, nombrePais(c.pais)].filter(Boolean).join(", ")
   const datos = [
@@ -249,7 +251,7 @@ function Conversacion({
     c.dispositivo ? DISPOSITIVOS[c.dispositivo] : null,
     lugar || null,
     c.idioma === "en" ? "En inglés" : null,
-    `US$ ${formatearNumero(costo, 4)}`,
+    `US$ ${formatearNumero(c.costoUsd, 4)}`,
   ].filter(Boolean)
 
   const { referente, utm_source, utm_medium, utm_campaign } = c.origen

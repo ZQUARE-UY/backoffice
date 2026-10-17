@@ -6,6 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { CLAVE_CONFIG_CHAT, leerConfigChat, type ConfigChat } from "@/lib/chat-web-config"
 import { EMAIL, guardarConsulta } from "@/lib/consultas-web"
 import { cargarContenidoPublico } from "@/lib/contenido-web"
+import { registrarUsoApi } from "@/lib/uso-api"
 
 // Chat con IA de la web (zquare.uy) → backoffice. Lo usa la ruta pública
 // /api/publico/chat. Responde preguntas sobre Zquare con el contenido que
@@ -135,15 +136,20 @@ export type Chat = {
   tokens_salida: number
   turnos_info: TurnoInfo[]
   incidentes: Incidente[]
+  costo_usd: number
 }
 
-const COLUMNAS_CHAT = "id, mensajes, turnos, consulta_id, tokens_entrada, tokens_salida, turnos_info, incidentes"
+const COLUMNAS_CHAT = "id, mensajes, turnos, consulta_id, tokens_entrada, tokens_salida, turnos_info, incidentes, costo_usd"
 
 // Deja anotado un incidente sin cortar la respuesta si no se puede guardar.
-async function anotarIncidente(admin: SupabaseClient, chat: Chat, incidente: Omit<Incidente, "en">) {
+// `costo`: lo que se gastó en ese turno antes de cortar (también se cobra).
+async function anotarIncidente(admin: SupabaseClient, chat: Chat, incidente: Omit<Incidente, "en">, costo = 0) {
   const { error } = await admin
     .from("chats_web")
-    .update({ incidentes: [...chat.incidentes, { en: new Date().toISOString(), ...incidente }].slice(-50) })
+    .update({
+      incidentes: [...chat.incidentes, { en: new Date().toISOString(), ...incidente }].slice(-50),
+      costo_usd: Number(chat.costo_usd) + costo,
+    })
     .eq("id", chat.id)
   if (error) console.error("Chat web: no se pudo anotar el incidente", error.message)
 }
@@ -232,6 +238,7 @@ export async function responder(
   let dejoConsulta = false
   let tokensEntrada = 0
   let tokensSalida = 0
+  let costo = 0
   const client = new Anthropic()
   const system = await instrucciones(admin, config.info)
 
@@ -253,11 +260,12 @@ export async function responder(
         (respuesta.usage.cache_read_input_tokens ?? 0) +
         (respuesta.usage.cache_creation_input_tokens ?? 0)
       tokensSalida += respuesta.usage.output_tokens
+      costo += await registrarUsoApi(admin, { funcion: "chat_web", modelo: MODELO, usage: respuesta.usage, referencia: chat.id })
 
       // Los clasificadores de seguridad rechazaron el pedido: no se guarda
       // ese mensaje (si quedara, se reenviaría en cada turno).
       if (respuesta.stop_reason === "refusal") {
-        await anotarIncidente(admin, chat, { tipo: "rechazo", mensaje: entrada.mensaje.slice(0, 300) })
+        await anotarIncidente(admin, chat, { tipo: "rechazo", mensaje: entrada.mensaje.slice(0, 300) }, costo)
         return { ok: true, chatId: chat.id, respuesta: ERROR_GENERICO[entrada.idioma], sugerencias: [], consulta: false, ultimo: false }
       }
 
@@ -284,7 +292,7 @@ export async function responder(
     await anotarIncidente(admin, chat, {
       tipo: "error",
       mensaje: e instanceof Anthropic.APIError ? `API de Claude ${e.status ?? ""}`.trim() : "Error al responder",
-    })
+    }, costo)
     return { ok: false, status: 502, error: ERROR_GENERICO[entrada.idioma] }
   }
 
@@ -293,7 +301,7 @@ export async function responder(
   // resultados) para que el próximo turno arranque de una respuesta.
   while (nuevos.length > 1 && nuevos[nuevos.length - 1].role === "user") nuevos.splice(-2)
   if (nuevos.length === 1) {
-    await anotarIncidente(admin, chat, { tipo: "error", mensaje: "Se cortó en medio de herramientas" })
+    await anotarIncidente(admin, chat, { tipo: "error", mensaje: "Se cortó en medio de herramientas" }, costo)
     return { ok: false, status: 502, error: ERROR_GENERICO[entrada.idioma] }
   }
 
@@ -307,6 +315,7 @@ export async function responder(
       consulta_id: consultaId,
       tokens_entrada: chat.tokens_entrada + tokensEntrada,
       tokens_salida: chat.tokens_salida + tokensSalida,
+      costo_usd: Number(chat.costo_usd) + costo,
     })
     .eq("id", chat.id)
   if (error) console.error("Chat web: no se pudo guardar la conversación", error.message)
