@@ -118,6 +118,13 @@ const HERRAMIENTAS: Anthropic.Tool[] = [
   },
 ]
 
+// Uno por mensaje de la persona: cuándo lo mandó, cuánto tardó la respuesta
+// (ms) y si tocó una respuesta rápida o un atajo en vez de escribirlo.
+export type TurnoInfo = { en: string; ms: number; rapida: boolean }
+
+// Lo que salió mal en la conversación y antes no quedaba registrado.
+export type Incidente = { en: string; tipo: "rechazo" | "error" | "tope_mensajes"; mensaje?: string }
+
 export type Chat = {
   id: string
   mensajes: Anthropic.MessageParam[]
@@ -125,6 +132,19 @@ export type Chat = {
   consulta_id: string | null
   tokens_entrada: number
   tokens_salida: number
+  turnos_info: TurnoInfo[]
+  incidentes: Incidente[]
+}
+
+const COLUMNAS_CHAT = "id, mensajes, turnos, consulta_id, tokens_entrada, tokens_salida, turnos_info, incidentes"
+
+// Deja anotado un incidente sin cortar la respuesta si no se puede guardar.
+async function anotarIncidente(admin: SupabaseClient, chat: Chat, incidente: Omit<Incidente, "en">) {
+  const { error } = await admin
+    .from("chats_web")
+    .update({ incidentes: [...chat.incidentes, { en: new Date().toISOString(), ...incidente }].slice(-50) })
+    .eq("id", chat.id)
+  if (error) console.error("Chat web: no se pudo anotar el incidente", error.message)
 }
 
 type Resultado =
@@ -148,8 +168,15 @@ export async function responder(
     dispositivo: "movil" | "tablet" | "escritorio"
     // Hash diario del visitante (lib/eventos-web.ts), para el tope por persona.
     visitante: string
+    // Tocó una respuesta rápida o un atajo del inicio.
+    rapida: boolean
+    // De dónde vino (se guarda al empezar la conversación).
+    origen: { referente: string | null; utm_source: string | null; utm_medium: string | null; utm_campaign: string | null }
+    pais: string | null
+    ciudad: string | null
   }
 ): Promise<Resultado> {
+  const inicio = Date.now()
   const config = await cargarConfigChat(admin)
   if (!config.activo) return { ok: false, status: 503, error: "El chat está apagado" }
   const { mensajesPorChat, chatsPorVisitanteHora, chatsHora } = config.limites
@@ -158,13 +185,14 @@ export async function responder(
   if (entrada.chatId) {
     const { data } = await admin
       .from("chats_web")
-      .select("id, mensajes, turnos, consulta_id, tokens_entrada, tokens_salida")
+      .select(COLUMNAS_CHAT)
       .eq("id", entrada.chatId)
       .is("deleted_at", null)
       .maybeSingle<Chat>()
     chat = data
   }
   if (chat && chat.turnos >= mensajesPorChat) {
+    await anotarIncidente(admin, chat, { tipo: "tope_mensajes", mensaje: entrada.mensaje.slice(0, 300) })
     return { ok: false, status: 429, error: "Llegaste al límite de mensajes de esta conversación" }
   }
   if (!chat) {
@@ -182,8 +210,16 @@ export async function responder(
     }
     const { data, error } = await admin
       .from("chats_web")
-      .insert({ idioma: entrada.idioma, ruta: entrada.ruta, dispositivo: entrada.dispositivo, visitante: entrada.visitante })
-      .select("id, mensajes, turnos, consulta_id, tokens_entrada, tokens_salida")
+      .insert({
+        idioma: entrada.idioma,
+        ruta: entrada.ruta,
+        dispositivo: entrada.dispositivo,
+        visitante: entrada.visitante,
+        ...entrada.origen,
+        pais: entrada.pais,
+        ciudad: entrada.ciudad,
+      })
+      .select(COLUMNAS_CHAT)
       .single<Chat>()
     if (error || !data) return { ok: false, status: 500, error: "No se pudo empezar la conversación" }
     chat = data
@@ -220,6 +256,7 @@ export async function responder(
       // Los clasificadores de seguridad rechazaron el pedido: no se guarda
       // ese mensaje (si quedara, se reenviaría en cada turno).
       if (respuesta.stop_reason === "refusal") {
+        await anotarIncidente(admin, chat, { tipo: "rechazo", mensaje: entrada.mensaje.slice(0, 300) })
         return { ok: true, chatId: chat.id, respuesta: ERROR_GENERICO[entrada.idioma], sugerencias: [], consulta: false, ultimo: false }
       }
 
@@ -243,6 +280,10 @@ export async function responder(
   } catch (e) {
     if (e instanceof Anthropic.APIError) console.error(`Chat web: la API de Claude respondió ${e.status}`, e.message)
     else console.error("Chat web: error al responder", e)
+    await anotarIncidente(admin, chat, {
+      tipo: "error",
+      mensaje: e instanceof Anthropic.APIError ? `API de Claude ${e.status ?? ""}`.trim() : "Error al responder",
+    })
     return { ok: false, status: 502, error: ERROR_GENERICO[entrada.idioma] }
   }
 
@@ -250,7 +291,10 @@ export async function responder(
   // termina en resultados sin respuesta: se descartan ese par (llamada y
   // resultados) para que el próximo turno arranque de una respuesta.
   while (nuevos.length > 1 && nuevos[nuevos.length - 1].role === "user") nuevos.splice(-2)
-  if (nuevos.length === 1) return { ok: false, status: 502, error: ERROR_GENERICO[entrada.idioma] }
+  if (nuevos.length === 1) {
+    await anotarIncidente(admin, chat, { tipo: "error", mensaje: "Se cortó en medio de herramientas" })
+    return { ok: false, status: 502, error: ERROR_GENERICO[entrada.idioma] }
+  }
 
   const turnos = chat.turnos + 1
   const { error } = await admin
@@ -258,6 +302,7 @@ export async function responder(
     .update({
       mensajes: [...chat.mensajes, ...nuevos],
       turnos,
+      turnos_info: [...chat.turnos_info, { en: new Date(inicio).toISOString(), ms: Date.now() - inicio, rapida: entrada.rapida }],
       consulta_id: consultaId,
       tokens_entrada: chat.tokens_entrada + tokensEntrada,
       tokens_salida: chat.tokens_salida + tokensSalida,
@@ -274,6 +319,20 @@ export async function responder(
     consulta: dejoConsulta,
     ultimo: turnos >= mensajesPorChat,
   }
+}
+
+// 👍/👎 de la persona (o null para sacarlo). Solo en conversaciones que ya
+// tienen algún mensaje.
+export async function valorar(admin: SupabaseClient, chatId: string, valor: 1 | -1 | null): Promise<boolean> {
+  const { data, error } = await admin
+    .from("chats_web")
+    .update({ valoracion: valor, valoracion_at: valor ? new Date().toISOString() : null })
+    .eq("id", chatId)
+    .gt("turnos", 0)
+    .is("deleted_at", null)
+    .select("id")
+  if (error) console.error("Chat web: no se pudo guardar la valoración", error.message)
+  return !error && (data?.length ?? 0) > 0
 }
 
 async function usarHerramienta(
@@ -332,13 +391,16 @@ export function separarSugerencias(crudo: string): { texto: string; sugerencias:
 
 // Para mostrar la conversación en el backoffice: solo lo que se vio en la web
 // (los textos), más una marca donde el bot dejó la consulta.
-export type MensajeVisible = { de: "persona" | "bot" | "consulta"; texto: string }
+// Cada mensaje de la persona lleva el número de turno (para cruzarlo con
+// turnos_info: hora, demora de la respuesta y si fue respuesta rápida).
+export type MensajeVisible = { de: "persona" | "bot" | "consulta"; texto: string; turno?: number }
 
 export function mensajesVisibles(mensajes: Anthropic.MessageParam[]): MensajeVisible[] {
   const visibles: MensajeVisible[] = []
+  let turno = 0
   for (const m of mensajes) {
     if (typeof m.content === "string") {
-      visibles.push({ de: m.role === "user" ? "persona" : "bot", texto: m.content })
+      visibles.push(m.role === "user" ? { de: "persona", texto: m.content, turno: turno++ } : { de: "bot", texto: m.content })
       continue
     }
     for (const b of m.content) {

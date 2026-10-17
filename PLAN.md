@@ -1122,3 +1122,14 @@ cuatro.
   como botones (rediseño "La mascota asomada", propuesta C del lienzo de
   Claude Design). Regla nueva en el prompt: no decir que hizo algo que no
   puede hacer.
+- **2026-10-17** — Chat de la web: **más datos por conversación** (migración
+  `20261017000002_chats_web_datos`). Se guarda de dónde vino (referente y
+  UTM que manda la web, país y ciudad de los headers de Vercel, sin IP),
+  `turnos_info` (hora de cada mensaje, demora de la respuesta y si tocó una
+  respuesta rápida), `incidentes` (rechazos, errores de la API, tope de
+  mensajes) y la valoración 👍/👎 de la persona (ruta nueva
+  `/api/publico/chat/valoracion`). En Web → Chats: filtro por estado
+  (nuevo → revisado → archivado), notas y etiquetas de los socios, duración,
+  lugar, origen, hora y demora por mensaje, incidentes, otros chats del mismo
+  visitante ese día ("Posiblemente X" si en otro dejó sus datos) y qué hizo
+  en la web ese día (eventos_web con el mismo hash).
