@@ -1133,3 +1133,14 @@ cuatro.
   lugar, origen, hora y demora por mensaje, incidentes, otros chats del mismo
   visitante ese día ("Posiblemente X" si en otro dejó sus datos) y qué hizo
   en la web ese día (eventos_web con el mismo hash).
+- **2026-10-17** — **Contador de uso de la API de Claude** (migración
+  `20261017000003_uso_api`). Tabla `uso_api`: una fila por llamada con los
+  tokens (entrada, caché escritura/lectura, salida) y el costo en USD según
+  la tabla de precios de `lib/uso-api.ts` (Haiku 5.5: US$ 0,10 / 0,50 por
+  millón; caché 1,25× / 0,1×; prompts de más de 100K a 0,50 / 2,50). El chat
+  de la web registra cada llamada y acumula `chats_web.costo_usd`. Lo de
+  antes se reconstruyó de los tokens de cada chat (`estimado = true`). En
+  Inicio, tarjeta "API de Claude" (este mes, proyección, mes pasado,
+  llamadas; función `uso_api_por_mes`); en Web → Chats, el gasto del mes y
+  el costo exacto de cada conversación. Embeddings y Whisper (Cloudflare
+  Workers AI) no se cuentan: van en la capa gratis.

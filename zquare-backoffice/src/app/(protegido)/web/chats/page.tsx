@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk"
 
 import { mensajesVisibles, type Incidente, type TurnoInfo } from "@/lib/chat-web"
 import { CLAVE_CONFIG_CHAT, leerConfigChat } from "@/lib/chat-web-config"
+import { inicioDelMes } from "@/lib/uso-api-resumen"
 import { createClient } from "@/lib/supabase/server"
 
 import { ConfigurarChat } from "./configurar-chat"
@@ -14,8 +15,7 @@ const COLUMNAS_LISTA =
 
 type Completo = {
   mensajes: Anthropic.MessageParam[]
-  tokens_entrada: number
-  tokens_salida: number
+  costo_usd: number
   ruta: string | null
   visitante: string | null
   referente: string | null
@@ -46,10 +46,11 @@ export default async function ChatsWebPage({ searchParams }: { searchParams: Pro
     .limit(100)
   if (filtro !== "todos") lista = lista.eq("estado", filtro)
 
-  const [{ data }, { data: fila }, { data: conEtiquetas }] = await Promise.all([
+  const [{ data }, { data: fila }, { data: conEtiquetas }, gastoMes] = await Promise.all([
     lista,
     supabase.from("configuracion").select("valor").eq("clave", CLAVE_CONFIG_CHAT).maybeSingle<{ valor: unknown }>(),
     supabase.from("chats_web").select("etiquetas").is("deleted_at", null).neq("etiquetas", "{}").limit(500),
+    gastoDelMes(),
   ])
   const config = leerConfigChat(fila?.valor)
   const chats = (data ?? []) as unknown as ChatLista[]
@@ -74,7 +75,7 @@ export default async function ChatsWebPage({ searchParams }: { searchParams: Pro
     const { data: completo } = await supabase
       .from("chats_web")
       .select(
-        "mensajes, tokens_entrada, tokens_salida, ruta, visitante, referente, utm_source, utm_medium, utm_campaign, ciudad, turnos_info, incidentes, notas"
+        "mensajes, costo_usd, ruta, visitante, referente, utm_source, utm_medium, utm_campaign, ciudad, turnos_info, incidentes, notas"
       )
       .eq("id", base.id)
       .maybeSingle<Completo>()
@@ -86,8 +87,7 @@ export default async function ChatsWebPage({ searchParams }: { searchParams: Pro
       elegido = {
         ...base,
         mensajes: mensajesVisibles(completo.mensajes),
-        tokensEntrada: completo.tokens_entrada,
-        tokensSalida: completo.tokens_salida,
+        costoUsd: Number(completo.costo_usd),
         ruta: completo.ruta,
         origen: {
           referente: completo.referente ?? primera?.referente ?? null,
@@ -113,6 +113,7 @@ export default async function ChatsWebPage({ searchParams }: { searchParams: Pro
       elegido={elegido}
       elegidoEnUrl={!!elegidoParam}
       etiquetasUsadas={etiquetasUsadas}
+      gastoMes={gastoMes}
       apagado={!config.activo}
       configurar={<ConfigurarChat config={config} configurado={!!process.env.ANTHROPIC_API_KEY} />}
     />
@@ -153,4 +154,17 @@ async function delMismoVisitante(chat: ChatLista, visitante: string | null) {
     recorrido: (eventos ?? []) as EventoRecorrido[],
     hermanos: (otros ?? []) as unknown as Hermano[],
   }
+}
+
+// Gasto del chat en el mes calendario de Montevideo (uso_api).
+async function gastoDelMes() {
+  const supabase = await createClient()
+  const { data } = await supabase.rpc("uso_api_por_mes", { desde: inicioDelMes() })
+  const fila = ((data ?? []) as { funcion: string; llamadas: number; costo_usd: number }[]).find((f) => f.funcion === "chat_web")
+  const { count } = await supabase
+    .from("chats_web")
+    .select("id", { count: "exact", head: true })
+    .gt("turnos", 0)
+    .gte("created_at", inicioDelMes())
+  return { usd: Number(fila?.costo_usd ?? 0), chats: count ?? 0 }
 }

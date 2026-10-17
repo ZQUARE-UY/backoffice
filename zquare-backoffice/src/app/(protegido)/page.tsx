@@ -17,10 +17,12 @@ import {
 } from "@/lib/dominio"
 import { paredEnZona } from "@/lib/disponibilidad"
 import { hoyUruguay } from "@/lib/finanzas"
-import { diasHasta, fechaCorta, tonoVencimiento, vencimiento } from "@/lib/formato"
+import { diasHasta, fechaCorta, formatearNumero, tonoVencimiento, vencimiento } from "@/lib/formato"
 import { solicitudesACoordinar } from "@/lib/reuniones"
 import { socioActual } from "@/lib/socio-actual"
 import { createClient } from "@/lib/supabase/server"
+import { NOMBRE_FUNCION } from "@/lib/uso-api"
+import { resumenUsoApi } from "@/lib/uso-api-resumen"
 import { cn } from "@/lib/utils"
 
 import { AgendaHoy } from "./agenda-hoy"
@@ -80,6 +82,7 @@ export default async function InicioPage() {
     { data: proyectosData },
     { data: clientesData },
     aCoordinar,
+    usoApi,
   ] = await Promise.all([
     supabase.from("sprints").select("*").neq("estado", "cerrado").is("deleted_at", null),
     supabase
@@ -93,6 +96,7 @@ export default async function InicioPage() {
       .is("deleted_at", null),
     supabase.from("clientes").select("id, nombre").is("deleted_at", null),
     socio ? solicitudesACoordinar(socio.id) : Promise.resolve([]),
+    resumenUsoApi(),
   ])
 
   const hoy = hoyUruguay()
@@ -381,6 +385,40 @@ export default async function InicioPage() {
             </ul>
             <Link href="/finanzas" className="mt-3 inline-block text-sm font-semibold">
               Ver finanzas →
+            </Link>
+          </section>
+
+          <section aria-labelledby="usoapi" className="rounded-xl border px-6 py-5">
+            <h2 id="usoapi" className="zq-rotulo mb-3">
+              API de Claude
+            </h2>
+            <p className="m-0 flex items-baseline justify-between gap-2">
+              <span>Este mes</span>
+              <span className="zq-num text-xl font-semibold">US$ {formatearNumero(usoApi.mes, 2)}</span>
+            </p>
+            <ul className="m-0 mt-2 flex list-none flex-col gap-1 p-0 text-sm text-muted-foreground">
+              {usoApi.porFuncion.length > 1 &&
+                usoApi.porFuncion.map((f) => (
+                  <li key={f.funcion} className="flex justify-between gap-2">
+                    <span>{NOMBRE_FUNCION[f.funcion] ?? f.funcion}</span>
+                    <span className="zq-num">US$ {formatearNumero(f.usd, 2)}</span>
+                  </li>
+                ))}
+              <li className="flex justify-between gap-2">
+                <span>Proyección a fin de mes</span>
+                <span className="zq-num">US$ {formatearNumero(usoApi.proyeccion, 2)}</span>
+              </li>
+              <li className="flex justify-between gap-2">
+                <span>Mes pasado</span>
+                <span className="zq-num">US$ {formatearNumero(usoApi.mesAnterior, 2)}</span>
+              </li>
+              <li className="flex justify-between gap-2">
+                <span>Llamadas este mes</span>
+                <span className="zq-num">{formatearNumero(usoApi.llamadas)}</span>
+              </li>
+            </ul>
+            <Link href="/web/chats" className="mt-3 inline-block text-sm font-semibold">
+              Ver chats →
             </Link>
           </section>
         </div>
