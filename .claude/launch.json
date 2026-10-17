@@ -4,8 +4,25 @@
     {
       "name": "backoffice",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "zquare-backoffice"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--prefix",
+        "zquare-backoffice"
+      ],
       "port": 3000
+    },
+    {
+      "name": "landing",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "4321",
+        "--directory",
+        "/Users/joaquinmarquez/Documents/Codigo/Zquare/Pagina Web"
+      ],
+      "port": 4321
     }
   ]
 }
