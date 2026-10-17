@@ -1102,7 +1102,9 @@ cuatro.
   email y quiere que la contacten, la herramienta `dejar_consulta` crea la
   consulta en la bandeja con `consultas_web.origen = 'chat'` (columna nueva)
   y un resumen. Topes: 1000 caracteres por mensaje, 20 mensajes por
-  conversación, 60 conversaciones nuevas por hora. Nueva pantalla
+  conversación, 60 conversaciones nuevas por hora en total y 5 por visitante
+  (hash diario de las métricas, migración `20261017000001`; sin guardar la
+  IP), respuestas de hasta 1500 tokens. Nueva pantalla
   **Web → Chats** (conversación como se vio en la web, costo aproximado y
   link a la consulta); la ficha de la consulta enlaza a su chat. Requiere
   `ANTHROPIC_API_KEY` en Vercel (sin ella la ruta da 503 y la web esconde el

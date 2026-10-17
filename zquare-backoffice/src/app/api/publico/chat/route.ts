@@ -2,13 +2,15 @@ import { NextResponse } from "next/server"
 
 import { MAX_MENSAJE, responder } from "@/lib/chat-web"
 import { encabezadosCors, origenPermitido } from "@/lib/consultas-web"
-import { dispositivo, esRobot } from "@/lib/eventos-web"
+import { dispositivo, esRobot, hashVisitante } from "@/lib/eventos-web"
+import { hoyUruguay } from "@/lib/finanzas"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 // Chat con IA de zquare.uy. Público (sin sesión): lo protegen el origen
 // permitido y los topes de lib/chat-web.ts (largo del mensaje, mensajes por
-// conversación y conversaciones nuevas por hora). La web manda el id de la
-// conversación y el mensaje nuevo; la historia vive en la base.
+// conversación y conversaciones nuevas por hora, en total y por visitante).
+// La web manda el id de la conversación y el mensaje nuevo; la historia vive
+// en la base.
 
 export const maxDuration = 60
 
@@ -47,12 +49,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "El chat no está configurado" }, { status: 503, headers: cors })
   }
 
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? req.headers.get("x-real-ip") ?? ""
   const resultado = await responder(createAdminClient(), {
     chatId: typeof cuerpo.chat_id === "string" && UUID.test(cuerpo.chat_id) ? cuerpo.chat_id : null,
     mensaje,
     idioma: cuerpo.lang === "en" ? "en" : "es",
     ruta: typeof cuerpo.ruta === "string" ? cuerpo.ruta.slice(0, 200) : null,
     dispositivo: dispositivo(ua, cuerpo.w),
+    visitante: hashVisitante(ip, ua, hoyUruguay()),
   })
   if (!resultado.ok) {
     return NextResponse.json({ error: resultado.error }, { status: resultado.status, headers: cors })

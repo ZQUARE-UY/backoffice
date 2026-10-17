@@ -15,10 +15,12 @@ import { cargarContenidoPublico } from "@/lib/contenido-web"
 
 const MODELO = "claude-haiku-5-5"
 
-// Límites para que nadie lo use de chat gratis ni dispare el costo.
+// Límites para que nadie lo use de chat gratis, dispare el costo o deje el
+// chat sin servicio para el resto.
 export const MAX_MENSAJE = 1000
 const MAX_TURNOS = 20
 const CHATS_NUEVOS_HORA = 60
+const CHATS_POR_VISITANTE_HORA = 5
 const MAX_VUELTAS = 3
 
 // Lo que la web muestra cuando el contenido de la base no alcanza (mismo
@@ -134,6 +136,8 @@ export async function responder(
     idioma: "es" | "en"
     ruta: string | null
     dispositivo: "movil" | "tablet" | "escritorio"
+    // Hash diario del visitante (lib/eventos-web.ts), para el tope por persona.
+    visitante: string
   }
 ): Promise<Resultado> {
   let chat: Chat | null = null
@@ -151,16 +155,20 @@ export async function responder(
   }
   if (!chat) {
     const haceUnaHora = new Date(Date.now() - 3_600_000).toISOString()
-    const { count } = await admin
-      .from("chats_web")
-      .select("id", { count: "exact", head: true })
-      .gte("created_at", haceUnaHora)
-    if ((count ?? 0) >= CHATS_NUEVOS_HORA) {
+    const [total, propias] = await Promise.all([
+      admin.from("chats_web").select("id", { count: "exact", head: true }).gte("created_at", haceUnaHora),
+      admin
+        .from("chats_web")
+        .select("id", { count: "exact", head: true })
+        .eq("visitante", entrada.visitante)
+        .gte("created_at", haceUnaHora),
+    ])
+    if ((total.count ?? 0) >= CHATS_NUEVOS_HORA || (propias.count ?? 0) >= CHATS_POR_VISITANTE_HORA) {
       return { ok: false, status: 429, error: "Demasiadas conversaciones, probá más tarde" }
     }
     const { data, error } = await admin
       .from("chats_web")
-      .insert({ idioma: entrada.idioma, ruta: entrada.ruta, dispositivo: entrada.dispositivo })
+      .insert({ idioma: entrada.idioma, ruta: entrada.ruta, dispositivo: entrada.dispositivo, visitante: entrada.visitante })
       .select("id, mensajes, turnos, consulta_id, tokens_entrada, tokens_salida")
       .single<Chat>()
     if (error || !data) return { ok: false, status: 500, error: "No se pudo empezar la conversación" }
@@ -180,7 +188,9 @@ export async function responder(
     for (let vuelta = 0; vuelta < MAX_VUELTAS; vuelta++) {
       const respuesta = await client.messages.create({
         model: MODELO,
-        max_tokens: 4096,
+        // Respuestas cortas: alcanza para pensar un poco y contestar, y acota
+        // el costo si alguien intenta sacarle textos largos.
+        max_tokens: 1500,
         output_config: { effort: "low" },
         cache_control: { type: "ephemeral" },
         system,
