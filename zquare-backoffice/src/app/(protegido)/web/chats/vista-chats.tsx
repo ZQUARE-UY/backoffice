@@ -133,12 +133,23 @@ export function VistaChats({
 
   return (
     <>
-      <Encabezado titulo="Chats" rotulo="Web · zquare.uy" acciones={configurar} />
-
-      <p className="m-0 -mt-2 text-muted-foreground">
-        Este mes: <strong className="zq-num text-foreground">US$ {formatearNumero(gastoMes.usd, 2)}</strong> en la API de
-        Claude · {gastoMes.chats} {gastoMes.chats === 1 ? "conversación" : "conversaciones"}
-      </p>
+      <Encabezado
+        titulo="Chats"
+        rotulo="Web · zquare.uy"
+        acciones={
+          <>
+            <span
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-sm text-muted-foreground"
+              title="Gasto en la API de Claude este mes"
+            >
+              Este mes
+              <strong className="zq-num text-foreground">US$ {formatearNumero(gastoMes.usd, 2)}</strong> ·{" "}
+              {gastoMes.chats} {gastoMes.chats === 1 ? "chat" : "chats"}
+            </span>
+            {configurar}
+          </>
+        }
+      />
 
       {apagado && (
         <p className="m-0 rounded-xl border border-dashed border-input px-4 py-3 text-muted-foreground">
