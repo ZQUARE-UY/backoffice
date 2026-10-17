@@ -1,6 +1,9 @@
+import { Suspense } from "react"
+
 import { hoyUruguay } from "@/lib/finanzas"
 import { createClient } from "@/lib/supabase/server"
 
+import { BloqueGoogleAnalytics, BloqueGoogleAnalyticsCargando } from "./bloque-ga"
 import { RANGOS, sumarDias, VistaMetricas, type Resumen } from "./vista-metricas"
 
 export const metadata = { title: "Métricas · Web" }
@@ -35,13 +38,18 @@ export default async function MetricasWebPage({
   ])
 
   return (
-    <VistaMetricas
-      dias={dias}
-      hoy={hoy}
-      resumen={data as Resumen | null}
-      consultas={consultas ?? 0}
-      error={error?.message ?? null}
-    />
+    <>
+      <VistaMetricas
+        dias={dias}
+        hoy={hoy}
+        resumen={data as Resumen | null}
+        consultas={consultas ?? 0}
+        error={error?.message ?? null}
+      />
+      <Suspense key={dias} fallback={<BloqueGoogleAnalyticsCargando />}>
+        <BloqueGoogleAnalytics desde={primerDia} hasta={hoy} />
+      </Suspense>
+    </>
   )
 }
 

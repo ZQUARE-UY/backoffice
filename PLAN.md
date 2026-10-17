@@ -1087,3 +1087,9 @@ cuatro.
   sidebar como grupo "Web" (sin pestañas); el sidebar se colapsa solo en
   Contenido sin tocar la preferencia guardada; el editor ocupa el alto de la
   pantalla; sin rebote de scroll (`overscroll-behavior-y: none`).
+- **2026-10-17** — Web → Métricas suma un bloque de **Google Analytics**
+  (propiedad 559359658, la del `G-5M9ZXV9E8C` de zquare.uy): usuarios y
+  nuevos, sesiones, tiempo por sesión, interacción, fuente/medio y ciudades,
+  vía Google Analytics Data API con la cuenta de servicio del backoffice
+  (rol Lector en la propiedad; API habilitada en su proyecto de Cloud). Va
+  en su propio Suspense y explica el error si falta acceso o la API.
