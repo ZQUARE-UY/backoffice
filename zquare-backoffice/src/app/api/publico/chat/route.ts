@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { MAX_MENSAJE, responder } from "@/lib/chat-web"
+import { cargarConfigChat, MAX_MENSAJE, responder } from "@/lib/chat-web"
 import { encabezadosCors, origenPermitido } from "@/lib/consultas-web"
 import { dispositivo, esRobot, hashVisitante } from "@/lib/eventos-web"
 import { hoyUruguay } from "@/lib/finanzas"
@@ -15,6 +15,22 @@ import { createAdminClient } from "@/lib/supabase/admin"
 export const maxDuration = 60
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// Lo que la web necesita antes de mostrar el chat: si está prendido (y
+// configurado) y el saludo. Público y cacheado un minuto en el CDN.
+export async function GET(req: Request) {
+  const cors = encabezadosCors(req.headers.get("origin"))
+  try {
+    const config = await cargarConfigChat(createAdminClient())
+    return NextResponse.json(
+      { activo: config.activo && !!process.env.ANTHROPIC_API_KEY, saludo: config.saludo },
+      { headers: { ...cors, "Cache-Control": "public, s-maxage=60, stale-while-revalidate=600" } }
+    )
+  } catch (e) {
+    console.error("Chat web: no se pudo leer la configuración", e)
+    return NextResponse.json({ activo: false }, { status: 500, headers: { ...cors, "Cache-Control": "no-store" } })
+  }
+}
 
 export async function OPTIONS(req: Request) {
   const origen = req.headers.get("origin")

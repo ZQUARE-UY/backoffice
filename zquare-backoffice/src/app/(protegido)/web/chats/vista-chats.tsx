@@ -40,14 +40,26 @@ export function VistaChats({
   chats,
   elegido,
   elegidoEnUrl,
+  apagado,
+  configurar,
 }: {
   chats: ChatLista[]
   elegido: ChatElegido | null
   elegidoEnUrl: boolean
+  // El chat está apagado en Web → Chats → Configurar.
+  apagado: boolean
+  // Botón y diálogo de configuración (cliente), armado en page.tsx.
+  configurar: React.ReactNode
 }) {
   return (
     <>
-      <Encabezado titulo="Chats" rotulo="Web · zquare.uy" />
+      <Encabezado titulo="Chats" rotulo="Web · zquare.uy" acciones={configurar} />
+
+      {apagado && (
+        <p className="m-0 rounded-xl border border-dashed border-input px-4 py-3 text-muted-foreground">
+          El chat está <strong className="text-foreground">apagado</strong>: la web no lo muestra. Prendelo en Configurar.
+        </p>
+      )}
 
       {chats.length === 0 ? (
         <div className="rounded-xl border border-dashed border-input p-8 text-center text-muted-foreground">

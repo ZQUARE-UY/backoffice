@@ -3,6 +3,7 @@ import "server-only"
 import Anthropic from "@anthropic-ai/sdk"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import { CLAVE_CONFIG_CHAT, leerConfigChat, type ConfigChat } from "@/lib/chat-web-config"
 import { EMAIL, guardarConsulta } from "@/lib/consultas-web"
 import { cargarContenidoPublico } from "@/lib/contenido-web"
 
@@ -15,13 +16,19 @@ import { cargarContenidoPublico } from "@/lib/contenido-web"
 
 const MODELO = "claude-haiku-5-5"
 
-// Límites para que nadie lo use de chat gratis, dispare el costo o deje el
-// chat sin servicio para el resto.
+// Límites fijos; los de conversaciones se configuran en Web → Chats
+// (lib/chat-web-config.ts).
 export const MAX_MENSAJE = 1000
-const MAX_TURNOS = 20
-const CHATS_NUEVOS_HORA = 60
-const CHATS_POR_VISITANTE_HORA = 5
 const MAX_VUELTAS = 3
+
+export async function cargarConfigChat(admin: SupabaseClient): Promise<ConfigChat> {
+  const { data } = await admin
+    .from("configuracion")
+    .select("valor")
+    .eq("clave", CLAVE_CONFIG_CHAT)
+    .maybeSingle<{ valor: unknown }>()
+  return leerConfigChat(data?.valor)
+}
 
 // Lo que la web muestra cuando el contenido de la base no alcanza (mismo
 // texto que el I18N de index.html).
@@ -38,9 +45,10 @@ const PASOS_WEB: [string, string, string][] = [
   ["Operación", "Continuo", "Monitoreo, evaluación de modelos y mejoras sobre el sistema en producción."],
 ]
 
-// Prompt de sistema: fijo salvo el contenido publicado, así se cachea entre
-// conversaciones. Los testimonios no entran a propósito (hay de ejemplo).
-async function instrucciones(admin: SupabaseClient): Promise<string> {
+// Prompt de sistema: fijo salvo el contenido publicado y la info extra de la
+// configuración, así se cachea entre conversaciones. Los testimonios no entran
+// a propósito (hay de ejemplo).
+async function instrucciones(admin: SupabaseClient, info: string): Promise<string> {
   let lote: Awaited<ReturnType<typeof cargarContenidoPublico>>["es"] = {}
   try {
     lote = (await cargarContenidoPublico(admin)).es
@@ -68,7 +76,7 @@ Equipo:
 ${equipo}
 
 Contacto: hola@zquare.uy, o el formulario de la sección Contacto de la web. Respondemos en menos de 48 horas hábiles con una primera lectura del problema y próximos pasos.
-</empresa>
+${info ? `\nInformación adicional del equipo de Zquare (también vale como fuente):\n${info}\n` : ""}</empresa>
 
 Cómo responder:
 - Contestá en el idioma de la persona (español rioplatense con "vos", o inglés). Respuestas cortas: dos a cuatro oraciones, en texto plano, sin títulos ni tablas. Listas cortas con guiones solo si de verdad ayudan.
@@ -140,6 +148,10 @@ export async function responder(
     visitante: string
   }
 ): Promise<Resultado> {
+  const config = await cargarConfigChat(admin)
+  if (!config.activo) return { ok: false, status: 503, error: "El chat está apagado" }
+  const { mensajesPorChat, chatsPorVisitanteHora, chatsHora } = config.limites
+
   let chat: Chat | null = null
   if (entrada.chatId) {
     const { data } = await admin
@@ -150,7 +162,7 @@ export async function responder(
       .maybeSingle<Chat>()
     chat = data
   }
-  if (chat && chat.turnos >= MAX_TURNOS) {
+  if (chat && chat.turnos >= mensajesPorChat) {
     return { ok: false, status: 429, error: "Llegaste al límite de mensajes de esta conversación" }
   }
   if (!chat) {
@@ -163,7 +175,7 @@ export async function responder(
         .eq("visitante", entrada.visitante)
         .gte("created_at", haceUnaHora),
     ])
-    if ((total.count ?? 0) >= CHATS_NUEVOS_HORA || (propias.count ?? 0) >= CHATS_POR_VISITANTE_HORA) {
+    if ((total.count ?? 0) >= chatsHora || (propias.count ?? 0) >= chatsPorVisitanteHora) {
       return { ok: false, status: 429, error: "Demasiadas conversaciones, probá más tarde" }
     }
     const { data, error } = await admin
@@ -182,7 +194,7 @@ export async function responder(
   let tokensEntrada = 0
   let tokensSalida = 0
   const client = new Anthropic()
-  const system = await instrucciones(admin)
+  const system = await instrucciones(admin, config.info)
 
   try {
     for (let vuelta = 0; vuelta < MAX_VUELTAS; vuelta++) {
@@ -256,7 +268,7 @@ export async function responder(
     chatId: chat.id,
     respuesta: textos.join("\n\n") || ERROR_GENERICO[entrada.idioma],
     consulta: dejoConsulta,
-    ultimo: turnos >= MAX_TURNOS,
+    ultimo: turnos >= mensajesPorChat,
   }
 }
 

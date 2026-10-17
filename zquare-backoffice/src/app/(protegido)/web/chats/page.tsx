@@ -1,8 +1,10 @@
 import type Anthropic from "@anthropic-ai/sdk"
 
 import { mensajesVisibles } from "@/lib/chat-web"
+import { CLAVE_CONFIG_CHAT, leerConfigChat } from "@/lib/chat-web-config"
 import { createClient } from "@/lib/supabase/server"
 
+import { ConfigurarChat } from "./configurar-chat"
 import { VistaChats, type ChatLista } from "./vista-chats"
 
 export const metadata = { title: "Chats · Web" }
@@ -13,13 +15,17 @@ export default async function ChatsWebPage({ searchParams }: { searchParams: Pro
   const { chat: elegidoParam } = await searchParams
   const supabase = await createClient()
 
-  const { data } = await supabase
-    .from("chats_web")
-    .select("id, turnos, idioma, dispositivo, created_at, updated_at, consulta_id, primero:mensajes->0->>content, consultas_web(nombre)")
-    .is("deleted_at", null)
-    .gt("turnos", 0)
-    .order("updated_at", { ascending: false })
-    .limit(100)
+  const [{ data }, { data: fila }] = await Promise.all([
+    supabase
+      .from("chats_web")
+      .select("id, turnos, idioma, dispositivo, created_at, updated_at, consulta_id, primero:mensajes->0->>content, consultas_web(nombre)")
+      .is("deleted_at", null)
+      .gt("turnos", 0)
+      .order("updated_at", { ascending: false })
+      .limit(100),
+    supabase.from("configuracion").select("valor").eq("clave", CLAVE_CONFIG_CHAT).maybeSingle<{ valor: unknown }>(),
+  ])
+  const config = leerConfigChat(fila?.valor)
   const chats = (data ?? []) as unknown as ChatLista[]
 
   const elegidoId = chats.find((c) => c.id === elegidoParam)?.id ?? chats[0]?.id ?? null
@@ -41,5 +47,13 @@ export default async function ChatsWebPage({ searchParams }: { searchParams: Pro
     }
   }
 
-  return <VistaChats chats={chats} elegido={elegido} elegidoEnUrl={!!elegidoParam} />
+  return (
+    <VistaChats
+      chats={chats}
+      elegido={elegido}
+      elegidoEnUrl={!!elegidoParam}
+      apagado={!config.activo}
+      configurar={<ConfigurarChat config={config} configurado={!!process.env.ANTHROPIC_API_KEY} />}
+    />
+  )
 }

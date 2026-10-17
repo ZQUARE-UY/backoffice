@@ -1109,3 +1109,10 @@ cuatro.
   link a la consulta); la ficha de la consulta enlaza a su chat. Requiere
   `ANTHROPIC_API_KEY` en Vercel (sin ella la ruta da 503 y la web esconde el
   chat).
+- **2026-10-17** — Chat de la web **configurable** en Web → Chats →
+  Configurar (tabla `configuracion`, clave `web_chat`, sin migración):
+  prendido/apagado, saludo es/en, información extra que el bot usa además
+  del contenido publicado, y los tres límites (mensajes por conversación,
+  conversaciones por visitante por hora y totales por hora). La web la lee de
+  `GET /api/publico/chat` (cacheado 1 min); apagado, no muestra el chat y el
+  personaje vuelve a sus textos sin invitar a hablar.
