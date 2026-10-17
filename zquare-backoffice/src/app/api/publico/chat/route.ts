@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { cargarConfigChat, MAX_MENSAJE, responder } from "@/lib/chat-web"
 import { encabezadosCors, origenPermitido } from "@/lib/consultas-web"
-import { dispositivo, esRobot, hashVisitante } from "@/lib/eventos-web"
+import { dispositivo, esRobot, hashVisitante, origenVisita } from "@/lib/eventos-web"
 import { hoyUruguay } from "@/lib/finanzas"
 import { createAdminClient } from "@/lib/supabase/admin"
 
@@ -73,6 +73,11 @@ export async function POST(req: Request) {
     ruta: typeof cuerpo.ruta === "string" ? cuerpo.ruta.slice(0, 200) : null,
     dispositivo: dispositivo(ua, cuerpo.w),
     visitante: hashVisitante(ip, ua, hoyUruguay()),
+    rapida: cuerpo.rapida === true,
+    origen: origenVisita(cuerpo),
+    // Vercel los manda sin guardar la IP; la ciudad viene codificada para URL.
+    pais: req.headers.get("x-vercel-ip-country"),
+    ciudad: ciudad(req.headers.get("x-vercel-ip-city")),
   })
   if (!resultado.ok) {
     return NextResponse.json({ error: resultado.error }, { status: resultado.status, headers: cors })
@@ -87,4 +92,13 @@ export async function POST(req: Request) {
     },
     { headers: cors }
   )
+}
+
+function ciudad(valor: string | null): string | null {
+  if (!valor) return null
+  try {
+    return decodeURIComponent(valor).slice(0, 80)
+  } catch {
+    return null
+  }
 }

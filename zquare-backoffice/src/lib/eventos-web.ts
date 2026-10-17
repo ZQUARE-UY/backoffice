@@ -71,16 +71,24 @@ function limpiarProps(props: unknown): Record<string, string | number> {
 
 export type Contexto = { visitante: string; pais: string | null; dispositivo: ReturnType<typeof dispositivo> }
 
-// Lote que manda la web: { ruta, ref, utm, lang, w, eventos: [{ n, p }] }.
-export function filasDeLote(cuerpo: Record<string, unknown>, ctx: Contexto) {
+// De dónde vino la visita, como lo manda la web: { ref, utm: { source, medium,
+// campaign } }. También lo usa el chat.
+export function origenVisita(cuerpo: Record<string, unknown>) {
   const utm = (cuerpo.utm && typeof cuerpo.utm === "object" ? cuerpo.utm : {}) as Record<string, unknown>
-  const comun = {
-    visitante: ctx.visitante,
-    ruta: texto(cuerpo.ruta, 200),
+  return {
     referente: dominioReferente(cuerpo.ref),
     utm_source: texto(utm.source, 80),
     utm_medium: texto(utm.medium, 80),
     utm_campaign: texto(utm.campaign, 120),
+  }
+}
+
+// Lote que manda la web: { ruta, ref, utm, lang, w, eventos: [{ n, p }] }.
+export function filasDeLote(cuerpo: Record<string, unknown>, ctx: Contexto) {
+  const comun = {
+    visitante: ctx.visitante,
+    ruta: texto(cuerpo.ruta, 200),
+    ...origenVisita(cuerpo),
     pais: ctx.pais,
     dispositivo: ctx.dispositivo,
     idioma: cuerpo.lang === "en" ? "en" : cuerpo.lang === "es" ? "es" : null,
