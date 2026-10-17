@@ -162,11 +162,11 @@ export function VistaChats({
           <p className="m-0 mt-1">Las que la gente tenga con el chat de zquare.uy aparecen en Nuevos.</p>
         </div>
       ) : (
-        <div className="flex min-h-[560px] flex-wrap items-stretch overflow-hidden rounded-xl border bg-card">
+        <div className="zq-chats flex min-h-[560px] flex-wrap items-stretch overflow-hidden rounded-xl border bg-card escritorio:min-h-0 escritorio:flex-nowrap">
           <nav
             aria-label="Conversaciones"
             className={cn(
-              "flex min-w-[260px] flex-[0_1_340px] flex-col gap-0.5 border-r p-3 max-escritorio:flex-auto max-escritorio:border-r-0",
+              "flex min-w-[260px] flex-[0_1_340px] flex-col gap-0.5 border-r p-3 max-escritorio:flex-auto max-escritorio:border-r-0 escritorio:overflow-y-auto escritorio:overscroll-contain",
               elegidoEnUrl && "max-escritorio:hidden"
             )}
           >
@@ -270,7 +270,10 @@ function Conversacion({
   return (
     <section
       aria-label="Conversación"
-      className={cn("flex min-w-0 flex-[1_1_480px] flex-col gap-5 px-8 py-7 max-escritorio:px-4", soloEnEscritorio && "max-escritorio:hidden")}
+      className={cn(
+        "flex min-w-0 flex-[1_1_480px] flex-col gap-5 px-8 py-7 max-escritorio:px-4 escritorio:overflow-y-auto escritorio:overscroll-contain",
+        soloEnEscritorio && "max-escritorio:hidden"
+      )}
     >
       <Button variant="ghost" size="sm" nativeButton={false} render={<Link href={volver} />} className="-ml-2 self-start escritorio:hidden">
         <ArrowLeftIcon data-icon="inline-start" />

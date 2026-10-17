@@ -111,7 +111,7 @@ export function AppSidebar({
         compacto={colapsado}
         className="mb-1 border-sidebar-border bg-sidebar-accent text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
       />
-      <nav className="flex flex-col gap-0.5">
+      <nav className="zq-sidebar-nav flex flex-col gap-0.5">
         {GRUPOS_NAV.map((grupo) => (
           <div key={grupo.label ?? "principal"} className="flex flex-col gap-0.5">
             {grupo.label && !colapsado ? (
@@ -156,7 +156,7 @@ export function AppSidebar({
           </div>
         ))}
       </nav>
-      <div className="mt-auto border-t border-sidebar-border pt-3">
+      <div className="mt-3 border-t border-sidebar-border pt-3">
         <SelectorTema compacto={colapsado} />
         <UserMenu nombre={nombre} email={email} compacto={colapsado} />
       </div>
