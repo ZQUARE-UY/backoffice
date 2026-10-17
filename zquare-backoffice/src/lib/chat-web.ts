@@ -80,6 +80,8 @@ ${info ? `\nInformación adicional del equipo de Zquare (también vale como fuen
 
 Cómo responder:
 - Contestá en el idioma de la persona (español rioplatense con "vos", o inglés). Respuestas cortas: dos a cuatro oraciones, en texto plano, sin títulos ni tablas. Listas cortas con guiones solo si de verdad ayudan.
+- Respuestas rápidas: si ayuda a seguir la charla, terminá con una última línea que empiece con ">>" y una o dos respuestas que la persona podría tocar, separadas por " | ", de hasta cinco palabras, en su idioma y escritas como si las dijera ella. Ejemplo: ">> Quiero una propuesta | ¿Cuánto tarda?". No la pongas si ya dejaste la consulta o si no hace falta.
+- No digas que hiciste algo que no podés hacer: lo único que podés hacer además de responder es dejar la consulta con la herramienta.
 - Usá solo la información de <empresa>. No inventes clientes, casos, tecnologías, precios, plazos ni cifras. Si no sabés algo, decilo y ofrecé que alguien del equipo le responda.
 - Precios: dependen de cada proyecto; se definen después del diagnóstico. No des montos ni rangos.
 - Si la persona cuenta un problema, ayudala a pensar cómo la IA o el software podrían resolverlo, en términos generales, y hacé una pregunta para entender mejor. No escribas código ni hagas trabajo de consultoría completo en el chat.
@@ -126,7 +128,7 @@ export type Chat = {
 }
 
 type Resultado =
-  | { ok: true; chatId: string; respuesta: string; consulta: boolean; ultimo: boolean }
+  | { ok: true; chatId: string; respuesta: string; sugerencias: string[]; consulta: boolean; ultimo: boolean }
   | { ok: false; status: number; error: string }
 
 const ERROR_GENERICO = {
@@ -218,7 +220,7 @@ export async function responder(
       // Los clasificadores de seguridad rechazaron el pedido: no se guarda
       // ese mensaje (si quedara, se reenviaría en cada turno).
       if (respuesta.stop_reason === "refusal") {
-        return { ok: true, chatId: chat.id, respuesta: ERROR_GENERICO[entrada.idioma], consulta: false, ultimo: false }
+        return { ok: true, chatId: chat.id, respuesta: ERROR_GENERICO[entrada.idioma], sugerencias: [], consulta: false, ultimo: false }
       }
 
       nuevos.push({ role: "assistant", content: respuesta.content })
@@ -263,10 +265,12 @@ export async function responder(
     .eq("id", chat.id)
   if (error) console.error("Chat web: no se pudo guardar la conversación", error.message)
 
+  const { texto, sugerencias } = separarSugerencias(textos.join("\n\n"))
   return {
     ok: true,
     chatId: chat.id,
-    respuesta: textos.join("\n\n") || ERROR_GENERICO[entrada.idioma],
+    respuesta: texto || ERROR_GENERICO[entrada.idioma],
+    sugerencias,
     consulta: dejoConsulta,
     ultimo: turnos >= mensajesPorChat,
   }
@@ -310,6 +314,22 @@ async function usarHerramienta(
   return { texto: "Consulta registrada. El equipo le escribe por email.", error: false, consultaId: r.id }
 }
 
+// Las respuestas rápidas vienen en las líneas que empiezan con ">>" (ver el
+// prompt): salen del texto y se mandan aparte, hasta dos y cortas.
+const LINEA_SUGERENCIAS = /^\s*>>.*$/gm
+
+export function separarSugerencias(crudo: string): { texto: string; sugerencias: string[] } {
+  const lineas = crudo.match(LINEA_SUGERENCIAS) ?? []
+  const ultima = lineas.at(-1)?.replace(/^\s*>>/, "") ?? ""
+  const sugerencias = ultima
+    .split("|")
+    .map((s) => s.trim().replace(/^["“]|["”]$/g, "").slice(0, 60))
+    .filter(Boolean)
+    .slice(0, 2)
+  const texto = crudo.replace(LINEA_SUGERENCIAS, "").replace(/\n{3,}/g, "\n\n").trim()
+  return { texto, sugerencias }
+}
+
 // Para mostrar la conversación en el backoffice: solo lo que se vio en la web
 // (los textos), más una marca donde el bot dejó la consulta.
 export type MensajeVisible = { de: "persona" | "bot" | "consulta"; texto: string }
@@ -322,8 +342,9 @@ export function mensajesVisibles(mensajes: Anthropic.MessageParam[]): MensajeVis
       continue
     }
     for (const b of m.content) {
-      if (b.type === "text" && b.text.trim()) visibles.push({ de: m.role === "user" ? "persona" : "bot", texto: b.text.trim() })
-      else if (b.type === "tool_use" && b.name === "dejar_consulta") visibles.push({ de: "consulta", texto: "Dejó sus datos de contacto" })
+      const texto = b.type === "text" ? (m.role === "assistant" ? separarSugerencias(b.text).texto : b.text.trim()) : ""
+      if (texto) visibles.push({ de: m.role === "user" ? "persona" : "bot", texto })
+      if (b.type === "tool_use" && b.name === "dejar_consulta") visibles.push({ de: "consulta", texto: "Dejó sus datos de contacto" })
     }
   }
   return visibles

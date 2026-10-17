@@ -81,6 +81,7 @@ export async function POST(req: Request) {
     {
       chat_id: resultado.chatId,
       respuesta: resultado.respuesta,
+      sugerencias: resultado.sugerencias,
       consulta: resultado.consulta,
       ultimo: resultado.ultimo,
     },
