@@ -236,8 +236,9 @@
     background: var(--sidebar);
     color: var(--sidebar-foreground);
     padding: 20px 12px 16px;
-    overflow-x: hidden;
-    overflow-y: auto;
+    /* Fijo: logo, búsqueda y usuario quedan quietos; solo scrollea la lista
+       de secciones (.zq-sidebar-nav) si no entra. */
+    overflow: hidden;
     transition: width 150ms ease;
   }
   /* Colapsado: solo íconos, 64px. */
@@ -253,6 +254,17 @@
     .zq-sidebar {
       transition: none;
     }
+  }
+  .zq-sidebar-nav {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--sidebar-border) transparent;
+    /* Aire para que el foco y el fondo del ítem activo no se corten. */
+    margin-inline: -4px;
+    padding-inline: 4px;
   }
   .zq-sidebar-seccion {
     margin: 18px 10px 6px;
@@ -333,6 +345,19 @@
     .zq-contenido {
       padding: 40px 40px 56px;
       gap: 28px;
+    }
+  }
+
+  /* Web → Chats en escritorio: la página no scrollea; la lista y la
+     conversación scrollean cada una por su lado. */
+  @media (min-width: 720px) {
+    .zq-contenido:has(.zq-chats) {
+      flex: none;
+      height: 100dvh;
+    }
+    .zq-chats {
+      flex: 1;
+      min-height: 0;
     }
   }
 
