@@ -60,6 +60,7 @@ export const TEMAS_CHAT: Record<string, { nombre: string; donde: string }> = {
   "metodo-prueba": { nombre: "Validación (maqueta para probar)", donde: "a la Z parada en el paso del método" },
   "metodo-construccion": { nombre: "Desarrollo (por etapas)", donde: "a la Z parada en el paso del método" },
   "metodo-acompanamiento": { nombre: "Puesta en marcha (capacitación y acompañamiento)", donde: "a la Z parada en el paso del método" },
+  contacto: { nombre: "Contacto (ayuda para completar el formulario)", donde: "a la Z parada sobre el formulario de" },
 }
 const ABRE_CONTEXTO = "<contexto>"
 const CIERRA_CONTEXTO = "</contexto>"

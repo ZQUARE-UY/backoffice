@@ -40,6 +40,9 @@ export type ConsultaEntrante = {
   nombre: string
   email: string
   empresa: string | null
+  // Teléfono o WhatsApp y cómo nos conoció: opcionales, del formulario.
+  telefono?: string | null
+  conocio?: string | null
   intereses: string[]
   mensaje: string
   idioma: "es" | "en" | null
@@ -73,6 +76,8 @@ export function validarConsulta(cuerpo: Record<string, unknown>): ConsultaEntran
     nombre,
     email,
     empresa: texto(cuerpo.company, 160),
+    telefono: texto(cuerpo.phone, 40),
+    conocio: texto(cuerpo.source, 60),
     intereses,
     mensaje,
     idioma: cuerpo.lang === "en" ? "en" : cuerpo.lang === "es" ? "es" : null,
@@ -106,6 +111,8 @@ export async function guardarConsulta(
       nombre: c.nombre,
       email: c.email,
       empresa: c.empresa,
+      telefono: c.telefono ?? null,
+      conocio: c.conocio ?? null,
       intereses: c.intereses,
       mensaje: c.mensaje,
       idioma: c.idioma,

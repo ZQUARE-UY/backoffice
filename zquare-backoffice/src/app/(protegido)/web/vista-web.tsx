@@ -8,11 +8,20 @@ import { cn } from "@/lib/utils"
 
 import { cambiarEstadoConsulta, promoverACliente, vincularACliente, type EstadoConsulta } from "./actions"
 
+// Número para wa.me: solo dígitos; un número uruguayo escrito con el 0 adelante
+// (099 123 456) pasa a llevar el código de país (59899123456).
+function aWhatsApp(tel: string): string {
+  const d = tel.replace(/[^0-9]/g, "")
+  return d.startsWith("0") ? `598${d.slice(1)}` : d
+}
+
 export type Consulta = {
   id: string
   nombre: string
   email: string
   empresa: string | null
+  telefono: string | null
+  conocio: string | null
   intereses: string[]
   mensaje: string
   idioma: "es" | "en" | null
@@ -196,6 +205,25 @@ function FichaConsulta({
           Responder por mail
         </Button>
       </div>
+
+      {(c.telefono || c.conocio) && (
+        <div className="flex flex-wrap gap-x-8 gap-y-2">
+          {c.telefono && (
+            <div className="flex flex-col gap-1">
+              <h3 className="zq-rotulo text-[13px]">Teléfono / WhatsApp</h3>
+              <a className="underline underline-offset-4" href={`https://wa.me/${aWhatsApp(c.telefono)}`} target="_blank" rel="noreferrer">
+                {c.telefono}
+              </a>
+            </div>
+          )}
+          {c.conocio && (
+            <div className="flex flex-col gap-1">
+              <h3 className="zq-rotulo text-[13px]">Nos conoció por</h3>
+              <span>{c.conocio}</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {c.intereses.length > 0 && (
         <div className="flex flex-col gap-2">
