@@ -47,14 +47,19 @@ const PASOS_WEB: [string, string, string][] = [
   ["Acompañamiento", "Mientras lo uses", "Arreglamos lo que falle y lo mejoramos con lo que te vaya pidiendo tu equipo."],
 ]
 
-// Servicios desde cuyo botón la web puede abrir el chat (clave → nombre). La
-// clave viene de la web y solo se acepta si está acá.
-export const TEMAS_CHAT: Record<string, string> = {
-  diagnostico: "Diagnóstico de procesos",
-  asistentes: "Asistentes y automatizaciones",
-  sistemas: "Sistemas a medida",
-  datos: "Datos e integraciones",
-  capacitaciones: "Capacitaciones",
+// Desde dónde puede abrirse el chat con contexto (clave → qué tocó la persona).
+// La clave viene de la web y solo se acepta si está acá: los botones de los
+// servicios y el personaje parado en cada escalón de «Cómo trabajamos».
+export const TEMAS_CHAT: Record<string, { nombre: string; donde: string }> = {
+  diagnostico: { nombre: "Diagnóstico de procesos", donde: "el botón del servicio" },
+  asistentes: { nombre: "Asistentes y automatizaciones", donde: "el botón del servicio" },
+  sistemas: { nombre: "Sistemas a medida", donde: "el botón del servicio" },
+  datos: { nombre: "Datos e integraciones", donde: "el botón del servicio" },
+  capacitaciones: { nombre: "Capacitaciones", donde: "el botón del servicio" },
+  "metodo-diagnostico": { nombre: "Diagnóstico", donde: "a la Z parada en el paso del método" },
+  "metodo-prueba": { nombre: "Prueba", donde: "a la Z parada en el paso del método" },
+  "metodo-construccion": { nombre: "Construcción", donde: "a la Z parada en el paso del método" },
+  "metodo-acompanamiento": { nombre: "Acompañamiento", donde: "a la Z parada en el paso del método" },
 }
 const ABRE_CONTEXTO = "<contexto>"
 const CIERRA_CONTEXTO = "</contexto>"
@@ -63,9 +68,9 @@ const CIERRA_CONTEXTO = "</contexto>"
 // servidor, nunca la web: la clave se valida contra TEMAS_CHAT). Queda en la
 // historia, así la Z lo tiene presente en los turnos siguientes.
 function conContexto(mensaje: string, tema: string | null): string {
-  const nombre = tema ? TEMAS_CHAT[tema] : undefined
-  if (!nombre) return mensaje
-  return `${ABRE_CONTEXTO}La persona tocó el botón del servicio «${nombre}» en la web y abrió este chat desde ahí. Orientá la conversación a ese servicio: preguntale por su situación y contale cómo lo encara ZQUARE, sin repetir la descripción de la web.${CIERRA_CONTEXTO}
+  const t = tema ? TEMAS_CHAT[tema] : undefined
+  if (!t) return mensaje
+  return `${ABRE_CONTEXTO}La persona tocó ${t.donde} «${t.nombre}» en la web y abrió este chat desde ahí. Orientá la conversación a eso: preguntale por su situación y contale cómo lo encara ZQUARE, sin repetir el texto de la web.${CIERRA_CONTEXTO}
 
 ${mensaje}`
 }
