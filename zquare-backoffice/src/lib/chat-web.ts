@@ -115,7 +115,7 @@ ${pasos}
 Equipo:
 ${equipo}
 
-Contacto: hola@zquare.uy, o el formulario de la sección Contacto de la web. Respondemos en menos de 48 horas hábiles con una primera lectura del problema y próximos pasos.
+Contacto: info@zquare.uy, o el formulario de la sección Contacto de la web. Respondemos en menos de 48 horas hábiles con una primera lectura del problema y próximos pasos.
 ${info ? `\nInformación adicional del equipo de ZQUARE (también vale como fuente):\n${info}\n` : ""}</empresa>
 
 Cómo responder:
@@ -198,8 +198,8 @@ type Resultado =
   | { ok: false; status: number; error: string }
 
 const ERROR_GENERICO = {
-  es: "No pude responder ahora. Probá de nuevo en un rato o escribinos a hola@zquare.uy.",
-  en: "I couldn't answer right now. Please try again later or email us at hola@zquare.uy.",
+  es: "No pude responder ahora. Probá de nuevo en un rato o escribinos a info@zquare.uy.",
+  en: "I couldn't answer right now. Please try again later or email us at info@zquare.uy.",
 }
 
 // Un turno: el mensaje de la persona, la respuesta (con la herramienta si la
@@ -416,8 +416,8 @@ async function usarHerramienta(
     return {
       texto:
         r.status === 429
-          ? "No se pudo registrar ahora (demasiados envíos). Sugerile escribir a hola@zquare.uy."
-          : "No se pudo registrar por un error. Sugerile escribir a hola@zquare.uy.",
+          ? "No se pudo registrar ahora (demasiados envíos). Sugerile escribir a info@zquare.uy."
+          : "No se pudo registrar por un error. Sugerile escribir a info@zquare.uy.",
       error: true,
     }
   }
