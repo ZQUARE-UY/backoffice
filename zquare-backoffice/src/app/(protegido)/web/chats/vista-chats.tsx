@@ -345,6 +345,7 @@ function Conversacion({
           const info = m.turno !== undefined ? c.turnosInfo[m.turno] : undefined
           return (
             <li key={i} className={cn("flex max-w-[85%] flex-col gap-1", m.de === "persona" ? "items-end self-end" : "items-start self-start")}>
+              {m.tema && <span className="text-xs text-muted-foreground">Abrió el chat desde «{m.tema}»</span>}
               <span
                 className={cn(
                   "rounded-[14px] px-4 py-2.5 whitespace-pre-wrap",
