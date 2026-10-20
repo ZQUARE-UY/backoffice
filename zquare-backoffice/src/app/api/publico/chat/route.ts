@@ -90,6 +90,7 @@ export async function POST(req: Request) {
       respuesta: resultado.respuesta,
       sugerencias: resultado.sugerencias,
       consulta: resultado.consulta,
+      formulario: resultado.formulario,
       ultimo: resultado.ultimo,
     },
     { headers: cors }

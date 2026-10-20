@@ -132,8 +132,16 @@ Cómo responder:
 Dejar el contacto:
 - Cuando haya interés concreto (quiere avanzar, pide presupuesto, una reunión o hablar con alguien), ofrecé que el equipo lo contacte y pedí nombre y email (empresa, opcional).
 - Usá la herramienta dejar_consulta solo cuando la persona te haya dado su nombre y su email en esta conversación y esté de acuerdo en que la contacten. Nunca inventes ni completes datos que no dio.
-- Después de usarla, confirmá en una oración que el equipo le va a escribir en menos de 48 horas hábiles.`
+- Después de usarla, confirmá en una oración que el equipo le va a escribir en menos de 48 horas hábiles.
+
+Completar el formulario de la web:
+- Si la persona prefiere el formulario de contacto, o te pide que se lo completes, usá completar_formulario con lo que contó en esta conversación. Esa herramienta no envía nada: llena el formulario de la página para que la persona lo revise y lo envíe ella.
+- Poné solo datos que la persona dio; lo que no dijo va vacío. Nunca inventes nombre, email ni teléfono. El mensaje es un resumen en primera persona (como si lo escribiera la persona) de qué necesita.
+- Después de usarla, decile en una oración que toque «Completar el formulario» para revisarlo y enviarlo.`
 }
+
+// Claves de los servicios del formulario de la web (mismo orden que en la página).
+const SERVICIOS_FORMULARIO = ["diagnostico", "asistentes", "sistemas", "datos", "capacitaciones"] as const
 
 const HERRAMIENTAS: Anthropic.Tool[] = [
   {
@@ -157,7 +165,36 @@ const HERRAMIENTAS: Anthropic.Tool[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "completar_formulario",
+    description:
+      "Completa el formulario de contacto de la página con lo que la persona contó en la conversación, para que lo revise y lo envíe ella. No envía nada. Lo que la persona no dijo va como cadena vacía (o lista vacía).",
+    strict: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        nombre: { type: "string", description: "Nombre tal como lo dio la persona; vacío si no lo dijo." },
+        email: { type: "string", description: "Email tal como lo dio la persona; vacío si no lo dijo." },
+        empresa: { type: "string", description: "Empresa, si la dijo; si no, vacío." },
+        telefono: { type: "string", description: "Teléfono o WhatsApp, si lo dio; si no, vacío." },
+        intereses: {
+          type: "array",
+          items: { type: "string", enum: [...SERVICIOS_FORMULARIO] },
+          description: "Los servicios que encajan con lo que necesita (puede ser ninguno).",
+        },
+        mensaje: {
+          type: "string",
+          description: "Qué necesita, en dos a cuatro oraciones en primera persona, en el idioma de la conversación.",
+        },
+      },
+      required: ["nombre", "email", "empresa", "telefono", "intereses", "mensaje"],
+      additionalProperties: false,
+    },
+  },
 ]
+
+// Lo que la IA deja armado para el formulario de la página (lo envía la persona).
+export type FormularioChat = { nombre: string; email: string; empresa: string; telefono: string; intereses: string[]; mensaje: string }
 
 // Uno por mensaje de la persona: cuándo lo mandó, cuánto tardó la respuesta
 // (ms) y si tocó una respuesta rápida o un atajo en vez de escribirlo.
@@ -194,7 +231,7 @@ async function anotarIncidente(admin: SupabaseClient, chat: Chat, incidente: Omi
 }
 
 type Resultado =
-  | { ok: true; chatId: string; respuesta: string; sugerencias: string[]; consulta: boolean; ultimo: boolean }
+  | { ok: true; chatId: string; respuesta: string; sugerencias: string[]; consulta: boolean; formulario: FormularioChat | null; ultimo: boolean }
   | { ok: false; status: number; error: string }
 
 const ERROR_GENERICO = {
@@ -277,6 +314,7 @@ export async function responder(
   const textos: string[] = []
   let consultaId = chat.consulta_id
   let dejoConsulta = false
+  let formulario: FormularioChat | null = null
   let tokensEntrada = 0
   let tokensSalida = 0
   let costo = 0
@@ -307,7 +345,7 @@ export async function responder(
       // ese mensaje (si quedara, se reenviaría en cada turno).
       if (respuesta.stop_reason === "refusal") {
         await anotarIncidente(admin, chat, { tipo: "rechazo", mensaje: entrada.mensaje.slice(0, 300) }, costo)
-        return { ok: true, chatId: chat.id, respuesta: ERROR_GENERICO[entrada.idioma], sugerencias: [], consulta: false, ultimo: false }
+        return { ok: true, chatId: chat.id, respuesta: ERROR_GENERICO[entrada.idioma], sugerencias: [], consulta: false, formulario: null, ultimo: false }
       }
 
       nuevos.push({ role: "assistant", content: respuesta.content })
@@ -318,6 +356,15 @@ export async function responder(
 
       const resultados: Anthropic.ToolResultBlockParam[] = []
       for (const uso of usos) {
+        if (uso.name === "completar_formulario") {
+          formulario = datosFormulario(uso.input)
+          resultados.push({
+            type: "tool_result",
+            tool_use_id: uso.id,
+            content: "Listo: el formulario de la página quedó armado. Decile en una oración que toque «Completar el formulario» para revisarlo y enviarlo.",
+          })
+          continue
+        }
         const r = await usarHerramienta(admin, uso, consultaId, entrada.idioma)
         if (r.consultaId) {
           consultaId = r.consultaId
@@ -368,6 +415,7 @@ export async function responder(
     respuesta: texto || ERROR_GENERICO[entrada.idioma],
     sugerencias,
     consulta: dejoConsulta,
+    formulario,
     ultimo: turnos >= mensajesPorChat,
   }
 }
@@ -384,6 +432,23 @@ export async function valorar(admin: SupabaseClient, chatId: string, valor: 1 | 
     .select("id")
   if (error) console.error("Chat web: no se pudo guardar la valoración", error.message)
   return !error && (data?.length ?? 0) > 0
+}
+
+// Limpia lo que la IA mandó para el formulario: textos acotados, email solo si es
+// válido y servicios solo de la lista.
+export function datosFormulario(entrada: unknown): FormularioChat {
+  const d = (entrada ?? {}) as Record<string, unknown>
+  const texto = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "")
+  const email = texto(d.email, 200).toLowerCase()
+  const claves: readonly string[] = SERVICIOS_FORMULARIO
+  return {
+    nombre: texto(d.nombre, 120),
+    email: EMAIL.test(email) ? email : "",
+    empresa: texto(d.empresa, 160),
+    telefono: texto(d.telefono, 40),
+    intereses: Array.isArray(d.intereses) ? [...new Set(d.intereses.filter((x): x is string => typeof x === "string" && claves.includes(x)))] : [],
+    mensaje: texto(d.mensaje, 2000),
+  }
 }
 
 async function usarHerramienta(
