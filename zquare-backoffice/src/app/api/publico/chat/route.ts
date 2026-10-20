@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { cargarConfigChat, MAX_MENSAJE, responder } from "@/lib/chat-web"
+import { cargarConfigChat, MAX_MENSAJE, responder, TEMAS_CHAT } from "@/lib/chat-web"
 import { encabezadosCors, origenPermitido } from "@/lib/consultas-web"
 import { dispositivo, esRobot, hashVisitante, origenVisita } from "@/lib/eventos-web"
 import { hoyUruguay } from "@/lib/finanzas"
@@ -74,6 +74,8 @@ export async function POST(req: Request) {
     dispositivo: dispositivo(ua, cuerpo.w),
     visitante: hashVisitante(ip, ua, hoyUruguay()),
     rapida: cuerpo.rapida === true,
+    // desde el botón de un servicio (clave validada en responder)
+    tema: typeof cuerpo.tema === "string" && cuerpo.tema in TEMAS_CHAT ? cuerpo.tema : null,
     origen: origenVisita(cuerpo),
     // Vercel los manda sin guardar la IP; la ciudad viene codificada para URL.
     pais: req.headers.get("x-vercel-ip-country"),
