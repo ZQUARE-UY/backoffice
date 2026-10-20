@@ -41,10 +41,10 @@ const SERVICIOS_WEB: [string, string][] = [
   ["Capacitaciones", "Capacitamos a tu equipo para que aprenda a utilizar la inteligencia artificial de forma práctica, efectiva y responsable, adaptando cada capacitación a las tareas reales de la empresa. No se necesitan conocimientos previos. Incluye talleres prácticos, ejercicios con herramientas de uso cotidiano (Gmail, Excel, Word) y una guía con ejemplos y recomendaciones."],
 ]
 const PASOS_WEB: [string, string, string][] = [
-  ["Diagnóstico", "1–2 semanas", "Charlamos con tu equipo y vemos cómo trabajan hoy. Al final te damos un plan: qué hacer primero, cuánto cuesta y cuánto demora."],
-  ["Prueba", "2–4 semanas", "Armamos una primera versión chica y la usan personas de tu empresa. Si no sirve, lo sabés antes de invertir más."],
-  ["Construcción", "Entregas cada 2 semanas", "Lo terminamos por partes y cada dos semanas te mostramos lo nuevo funcionando."],
-  ["Acompañamiento", "Mientras lo uses", "Arreglamos lo que falle y lo mejoramos con lo que te vaya pidiendo tu equipo."],
+  ["Descubrimiento", "Sin costo", "Nos reunimos para conocer tu idea, entender qué esperás del proyecto y resolver las dudas iniciales. Con eso definimos los próximos pasos, los tiempos y el presupuesto."],
+  ["Validación", "1–2 semanas", "Transformamos la propuesta en una maqueta que podés probar. Revisamos juntos la experiencia, ajustamos los detalles y confirmamos que estamos yendo en la dirección correcta."],
+  ["Desarrollo", "Por etapas", "Avanzamos en ciclos de dos semanas, con entregas que podés ver y probar. En cada etapa revisamos los resultados, incorporamos tus comentarios y seguimos construyendo hasta tener todo listo."],
+  ["Puesta en marcha", "Al entregar", "Te mostramos cómo funciona todo, capacitamos a tu equipo y acompañamos los primeros días de uso. Resolvemos las dudas que aparezcan para que la transición sea lo más sencilla posible."],
 ]
 
 // Desde dónde puede abrirse el chat con contexto (clave → qué tocó la persona).
@@ -56,10 +56,10 @@ export const TEMAS_CHAT: Record<string, { nombre: string; donde: string }> = {
   sistemas: { nombre: "Sistemas a medida", donde: "el botón del servicio" },
   datos: { nombre: "Datos e integraciones", donde: "el botón del servicio" },
   capacitaciones: { nombre: "Capacitaciones", donde: "el botón del servicio" },
-  "metodo-diagnostico": { nombre: "Diagnóstico", donde: "a la Z parada en el paso del método" },
-  "metodo-prueba": { nombre: "Prueba", donde: "a la Z parada en el paso del método" },
-  "metodo-construccion": { nombre: "Construcción", donde: "a la Z parada en el paso del método" },
-  "metodo-acompanamiento": { nombre: "Acompañamiento", donde: "a la Z parada en el paso del método" },
+  "metodo-diagnostico": { nombre: "Descubrimiento (primera reunión, sin costo)", donde: "a la Z parada en el paso del método" },
+  "metodo-prueba": { nombre: "Validación (maqueta para probar)", donde: "a la Z parada en el paso del método" },
+  "metodo-construccion": { nombre: "Desarrollo (por etapas)", donde: "a la Z parada en el paso del método" },
+  "metodo-acompanamiento": { nombre: "Puesta en marcha (capacitación y acompañamiento)", donde: "a la Z parada en el paso del método" },
 }
 const ABRE_CONTEXTO = "<contexto>"
 const CIERRA_CONTEXTO = "</contexto>"
