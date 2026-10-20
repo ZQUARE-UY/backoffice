@@ -156,7 +156,7 @@ export function VistaMetricas({
                 titulo="Botones que tocan"
                 filas={[
                   ...(r?.ctas ?? []),
-                  ...((r?.clicks_email ?? 0) > 0 ? [{ clave: "Mail (hola@zquare.uy)", n: r?.clicks_email ?? 0 }] : []),
+                  ...((r?.clicks_email ?? 0) > 0 ? [{ clave: "Mail (info@zquare.uy)", n: r?.clicks_email ?? 0 }] : []),
                 ]}
                 unidad="clicks"
                 vacio="Nadie tocó un botón todavía."
