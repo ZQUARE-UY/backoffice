@@ -134,10 +134,18 @@ Dejar el contacto:
 - Usá la herramienta dejar_consulta solo cuando la persona te haya dado su nombre y su email en esta conversación y esté de acuerdo en que la contacten. Nunca inventes ni completes datos que no dio.
 - Después de usarla, confirmá en una oración que el equipo le va a escribir en menos de 48 horas hábiles.
 
+Cómo seguir cuando ya contó lo que necesita:
+- Según cómo venga la charla, ofrecé uno de dos caminos (no los dos a la vez, salvo que la persona dude): dejar sus datos en el formulario de la web, o seguir la conversación con el equipo por WhatsApp. Si quiere avanzar con algo concreto, pide presupuesto o una propuesta, sugerí el formulario; si prefiere hablar con una persona, tiene apuro o una consulta que conviene conversar, sugerí WhatsApp.
+- Cuando la persona acepte el formulario, usá completar_formulario. Cuando acepte WhatsApp (o te pida hablar con alguien), usá ofrecer_whatsapp.
+
 Completar el formulario de la web:
 - Si la persona prefiere el formulario de contacto, o te pide que se lo completes, usá completar_formulario con lo que contó en esta conversación. Esa herramienta no envía nada: llena el formulario de la página para que la persona lo revise y lo envíe ella.
 - Poné solo datos que la persona dio; lo que no dijo va vacío. Nunca inventes nombre, email ni teléfono. El mensaje es un resumen en primera persona (como si lo escribiera la persona) de qué necesita.
-- Después de usarla, decile en una oración que toque «Completar el formulario» para revisarlo y enviarlo.`
+- Después de usarla, decile en una oración que toque «Completar el formulario» para revisarlo y enviarlo.
+
+Seguir por WhatsApp:
+- ofrecer_whatsapp muestra un botón para abrir WhatsApp con el equipo, con un primer mensaje ya escrito que resume lo que contó (en primera persona, en el idioma de la charla, dos o tres oraciones). No envía nada.
+- Después de usarla, decile en una oración que toque «Seguir por WhatsApp».`
 }
 
 // Claves de los servicios del formulario de la web (mismo orden que en la página).
@@ -191,6 +199,23 @@ const HERRAMIENTAS: Anthropic.Tool[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "ofrecer_whatsapp",
+    description:
+      "Muestra en la página un botón para seguir la conversación con el equipo por WhatsApp, con un primer mensaje ya escrito. No envía nada.",
+    strict: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        mensaje: {
+          type: "string",
+          description: "Primer mensaje para el equipo, en primera persona, con lo que la persona contó (dos o tres oraciones, en el idioma de la conversación).",
+        },
+      },
+      required: ["mensaje"],
+      additionalProperties: false,
+    },
+  },
 ]
 
 // Lo que la IA deja armado para el formulario de la página (lo envía la persona).
@@ -231,7 +256,7 @@ async function anotarIncidente(admin: SupabaseClient, chat: Chat, incidente: Omi
 }
 
 type Resultado =
-  | { ok: true; chatId: string; respuesta: string; sugerencias: string[]; consulta: boolean; formulario: FormularioChat | null; ultimo: boolean }
+  | { ok: true; chatId: string; respuesta: string; sugerencias: string[]; consulta: boolean; formulario: FormularioChat | null; whatsapp: { mensaje: string } | null; ultimo: boolean }
   | { ok: false; status: number; error: string }
 
 const ERROR_GENERICO = {
@@ -315,6 +340,7 @@ export async function responder(
   let consultaId = chat.consulta_id
   let dejoConsulta = false
   let formulario: FormularioChat | null = null
+  let whatsapp: { mensaje: string } | null = null
   let tokensEntrada = 0
   let tokensSalida = 0
   let costo = 0
@@ -345,7 +371,7 @@ export async function responder(
       // ese mensaje (si quedara, se reenviaría en cada turno).
       if (respuesta.stop_reason === "refusal") {
         await anotarIncidente(admin, chat, { tipo: "rechazo", mensaje: entrada.mensaje.slice(0, 300) }, costo)
-        return { ok: true, chatId: chat.id, respuesta: ERROR_GENERICO[entrada.idioma], sugerencias: [], consulta: false, formulario: null, ultimo: false }
+        return { ok: true, chatId: chat.id, respuesta: ERROR_GENERICO[entrada.idioma], sugerencias: [], consulta: false, formulario: null, whatsapp: null, ultimo: false }
       }
 
       nuevos.push({ role: "assistant", content: respuesta.content })
@@ -356,6 +382,16 @@ export async function responder(
 
       const resultados: Anthropic.ToolResultBlockParam[] = []
       for (const uso of usos) {
+        if (uso.name === "ofrecer_whatsapp") {
+          const d = (uso.input ?? {}) as Record<string, unknown>
+          whatsapp = { mensaje: typeof d.mensaje === "string" ? d.mensaje.trim().slice(0, 1000) : "" }
+          resultados.push({
+            type: "tool_result",
+            tool_use_id: uso.id,
+            content: "Listo: la página muestra el botón «Seguir por WhatsApp». Decile en una oración que lo toque para seguir con el equipo.",
+          })
+          continue
+        }
         if (uso.name === "completar_formulario") {
           formulario = datosFormulario(uso.input)
           resultados.push({
@@ -416,6 +452,7 @@ export async function responder(
     sugerencias,
     consulta: dejoConsulta,
     formulario,
+    whatsapp,
     ultimo: turnos >= mensajesPorChat,
   }
 }
