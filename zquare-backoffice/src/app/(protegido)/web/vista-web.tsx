@@ -42,6 +42,14 @@ export const FILTROS: { valor: EstadoConsulta | "todas"; label: string }[] = [
   { valor: "todas", label: "Todas" },
 ]
 
+// Cuántas consultas hay por «cómo nos conoció» (para las pastillas de origen),
+// de más a menos; las que no lo dijeron no cuentan.
+export function contarConocio(consultas: Consulta[]): { clave: string; n: number }[] {
+  const n = new Map<string, number>()
+  for (const c of consultas) if (c.conocio) n.set(c.conocio, (n.get(c.conocio) ?? 0) + 1)
+  return [...n].map(([clave, n]) => ({ clave, n })).sort((a, b) => b.n - a.n || a.clave.localeCompare(b.clave))
+}
+
 const ETIQUETA_ESTADO: Record<EstadoConsulta, string> = {
   nueva: "Nueva",
   atendida: "Atendida",
@@ -62,19 +70,35 @@ const ESTILO_ESTADO: Record<EstadoConsulta, string> = {
 export function VistaWeb({
   consultas,
   filtro,
+  redes,
+  red,
   elegida,
   elegidaEnUrl,
   existente,
 }: {
   consultas: Consulta[]
   filtro: EstadoConsulta | "todas"
+  // Orígenes («cómo nos conoció») que hay en el estado elegido, y el filtrado.
+  redes: { clave: string; n: number }[]
+  red: string | null
   elegida: Consulta | null
   elegidaEnUrl: boolean
   // Cliente con el mismo email que la elegida, si todavía no está vinculada.
   existente: { id: string; nombre: string } | null
 }) {
-  const hrefFiltro = (valor: string) => (valor === "nueva" ? "/web" : `/web?estado=${valor}`)
-  const hrefConsulta = (id: string) => `/web?${filtro === "nueva" ? "" : `estado=${filtro}&`}consulta=${id}`
+  // Las URL llevan solo lo que no es el valor por defecto (estado nueva, sin red).
+  const href = (p: { estado?: string; red?: string | null; consulta?: string }) => {
+    const q = new URLSearchParams()
+    const estado = p.estado ?? filtro
+    if (estado !== "nueva") q.set("estado", estado)
+    const r = p.red === undefined ? red : p.red
+    if (r) q.set("red", r)
+    if (p.consulta) q.set("consulta", p.consulta)
+    const s = q.toString()
+    return s ? `/web?${s}` : "/web"
+  }
+  const hrefFiltro = (valor: string) => href({ estado: valor })
+  const hrefConsulta = (id: string) => href({ consulta: id })
 
   return (
     <>
@@ -87,6 +111,19 @@ export function VistaWeb({
           </Link>
         ))}
       </nav>
+
+      {redes.length > 0 && (
+        <nav className="zq-pildoras -mt-3 self-start" aria-label="Cómo nos conocieron">
+          <Link href={href({ red: null })} scroll={false} aria-current={red ? undefined : "page"}>
+            Todos los orígenes
+          </Link>
+          {redes.map((r) => (
+            <Link key={r.clave} href={href({ red: r.clave })} scroll={false} aria-current={r.clave === red ? "page" : undefined}>
+              {r.clave} · {r.n}
+            </Link>
+          ))}
+        </nav>
+      )}
 
       {consultas.length === 0 ? (
         <div className="rounded-xl border border-dashed border-input p-8 text-center text-muted-foreground">
@@ -128,7 +165,7 @@ export function VistaWeb({
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate font-semibold">{c.nombre}</span>
                     <span className="truncate text-xs text-muted-foreground">
-                      {[c.empresa, c.origen === "chat" ? "Por el chat" : null, fechaRelativa(c.created_at)].filter(Boolean).join(" · ")}
+                      {[c.empresa, c.conocio, c.origen === "chat" ? "Por el chat" : null, fechaRelativa(c.created_at)].filter(Boolean).join(" · ")}
                     </span>
                   </span>
                 </Link>
@@ -140,7 +177,7 @@ export function VistaWeb({
             <FichaConsulta
               consulta={elegida}
               existente={existente}
-              volverA={hrefFiltro(filtro)}
+              volverA={href({})}
               soloEnEscritorio={!elegidaEnUrl}
             />
           ) : null}
