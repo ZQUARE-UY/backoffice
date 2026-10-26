@@ -4,7 +4,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { CLAVE_CONFIG_CHAT, leerConfigChat, type ConfigChat } from "@/lib/chat-web-config"
-import { EMAIL, guardarConsulta } from "@/lib/consultas-web"
+import { CONOCIO, EMAIL, guardarConsulta, normalizarConocio, redDeUtm, type Conocio } from "@/lib/consultas-web"
 import { cargarContenidoPublico } from "@/lib/contenido-web"
 import { registrarUsoApi } from "@/lib/uso-api"
 
@@ -132,6 +132,7 @@ Cómo responder:
 Dejar el contacto:
 - Cuando haya interés concreto (quiere avanzar, pide presupuesto, una reunión o hablar con alguien), ofrecé que el equipo lo contacte y pedí nombre y email (empresa, opcional).
 - Usá la herramienta dejar_consulta solo cuando la persona te haya dado su nombre y su email en esta conversación y esté de acuerdo en que la contacten. Nunca inventes ni completes datos que no dio.
+- Si en la charla contó cómo conoció a ZQUARE (LinkedIn, Instagram, Google, una recomendación, ya nos conocía), pasalo en conocio (también en completar_formulario); si no lo dijo, dejalo vacío. No hace falta preguntarlo.
 - Después de usarla, confirmá en una oración que el equipo le va a escribir en menos de 48 horas hábiles.
 
 Cómo seguir cuando ya contó lo que necesita:
@@ -168,8 +169,13 @@ const HERRAMIENTAS: Anthropic.Tool[] = [
           description:
             "Qué necesita la persona, en dos a cinco oraciones, con lo que contó en la conversación. En el idioma de la conversación.",
         },
+        conocio: {
+          type: "string",
+          enum: ["", ...CONOCIO],
+          description: "Cómo conoció a ZQUARE, solo si lo contó en la conversación; si no lo dijo, cadena vacía.",
+        },
       },
-      required: ["nombre", "email", "empresa", "resumen"],
+      required: ["nombre", "email", "empresa", "resumen", "conocio"],
       additionalProperties: false,
     },
   },
@@ -194,8 +200,13 @@ const HERRAMIENTAS: Anthropic.Tool[] = [
           type: "string",
           description: "Qué necesita, en dos a cuatro oraciones en primera persona, en el idioma de la conversación.",
         },
+        conocio: {
+          type: "string",
+          enum: ["", ...CONOCIO],
+          description: "Cómo conoció a ZQUARE, solo si lo contó en la conversación; si no lo dijo, cadena vacía.",
+        },
       },
-      required: ["nombre", "email", "empresa", "telefono", "intereses", "mensaje"],
+      required: ["nombre", "email", "empresa", "telefono", "intereses", "mensaje", "conocio"],
       additionalProperties: false,
     },
   },
@@ -219,7 +230,8 @@ const HERRAMIENTAS: Anthropic.Tool[] = [
 ]
 
 // Lo que la IA deja armado para el formulario de la página (lo envía la persona).
-export type FormularioChat = { nombre: string; email: string; empresa: string; telefono: string; intereses: string[]; mensaje: string }
+// `conocio`: una opción de «¿Cómo nos conociste?» (CONOCIO, en español) o vacío.
+export type FormularioChat = { nombre: string; email: string; empresa: string; telefono: string; intereses: string[]; mensaje: string; conocio: string }
 
 // Uno por mensaje de la persona: cuándo lo mandó, cuánto tardó la respuesta
 // (ms) y si tocó una respuesta rápida o un atajo en vez de escribirlo.
@@ -401,7 +413,7 @@ export async function responder(
           })
           continue
         }
-        const r = await usarHerramienta(admin, uso, consultaId, entrada.idioma)
+        const r = await usarHerramienta(admin, uso, consultaId, entrada.idioma, entrada.origen.utm_source)
         if (r.consultaId) {
           consultaId = r.consultaId
           dejoConsulta = true
@@ -485,14 +497,23 @@ export function datosFormulario(entrada: unknown): FormularioChat {
     telefono: texto(d.telefono, 40),
     intereses: Array.isArray(d.intereses) ? [...new Set(d.intereses.filter((x): x is string => typeof x === "string" && claves.includes(x)))] : [],
     mensaje: texto(d.mensaje, 2000),
+    conocio: conocioDeHerramienta(d.conocio) ?? "",
   }
+}
+
+// Lo que la IA puso en `conocio`, si es una de las opciones del formulario.
+function conocioDeHerramienta(valor: unknown): Conocio | null {
+  const v = typeof valor === "string" ? normalizarConocio(valor) : null
+  return v && (CONOCIO as readonly string[]).includes(v) ? (v as Conocio) : null
 }
 
 async function usarHerramienta(
   admin: SupabaseClient,
   uso: Anthropic.ToolUseBlock,
   consultaId: string | null,
-  idioma: "es" | "en"
+  idioma: "es" | "en",
+  // utm_source del link por el que llegó: si no contó cómo nos conoció, la red del link.
+  utmSource: string | null
 ): Promise<{ texto: string; error: boolean; consultaId?: string }> {
   if (uso.name !== "dejar_consulta") return { texto: `No existe la herramienta ${uso.name}.`, error: true }
   if (consultaId) return { texto: "La consulta de esta conversación ya está registrada; no hace falta dejarla de nuevo.", error: false }
@@ -509,6 +530,7 @@ async function usarHerramienta(
     nombre,
     email,
     empresa: texto(datos.empresa, 160) || null,
+    conocio: conocioDeHerramienta(datos.conocio) ?? redDeUtm(utmSource),
     intereses: [],
     mensaje: resumen || "(Consulta dejada en el chat de la web.)",
     idioma,

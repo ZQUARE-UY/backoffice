@@ -52,6 +52,38 @@ export type ConsultaEntrante = {
 
 export const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
+// Opciones de «¿Cómo nos conociste?» del formulario de la web, con el rótulo
+// en español (el formulario en inglés manda su traducción; acá se unifica para
+// poder filtrar). Las tres primeras son las redes del plan de redes sociales
+// (docs/REDES-SOCIALES.md); el chat registra las mismas.
+export const CONOCIO = ["Google", "LinkedIn", "Instagram", "Me lo recomendaron", "Ya los conocía", "Otro"] as const
+export type Conocio = (typeof CONOCIO)[number]
+
+const CONOCIO_EN: Record<string, Conocio> = {
+  "someone recommended you": "Me lo recomendaron",
+  "i already knew you": "Ya los conocía",
+  other: "Otro",
+}
+
+// Lleva lo que mandó el formulario al rótulo en español; lo que no es una
+// opción conocida queda como vino.
+export function normalizarConocio(valor: string | null): string | null {
+  if (!valor) return null
+  const clave = valor.trim().toLowerCase()
+  return CONOCIO.find((c) => c.toLowerCase() === clave) ?? CONOCIO_EN[clave] ?? valor.trim()
+}
+
+// La red por la que llegó la visita según el utm_source de su link
+// (zquare.uy/?utm_source=<red>&utm_medium=social, uno por red). Sirve para
+// las consultas del chat cuando la persona no contó cómo nos conoció.
+export function redDeUtm(utmSource: string | null | undefined): Conocio | null {
+  const s = (utmSource ?? "").toLowerCase()
+  if (s.includes("linkedin")) return "LinkedIn"
+  if (s.includes("instagram")) return "Instagram"
+  if (s.includes("google")) return "Google"
+  return null
+}
+
 function texto(valor: unknown, max: number): string | null {
   if (typeof valor !== "string") return null
   const t = valor.trim()
@@ -77,7 +109,7 @@ export function validarConsulta(cuerpo: Record<string, unknown>): ConsultaEntran
     email,
     empresa: texto(cuerpo.company, 160),
     telefono: texto(cuerpo.phone, 40),
-    conocio: texto(cuerpo.source, 60),
+    conocio: normalizarConocio(texto(cuerpo.source, 60)),
     intereses,
     mensaje,
     idioma: cuerpo.lang === "en" ? "en" : cuerpo.lang === "es" ? "es" : null,

@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 
-import { FILTROS, VistaWeb, type Consulta } from "./vista-web"
+import { contarConocio, FILTROS, VistaWeb, type Consulta } from "./vista-web"
 
 export const metadata = { title: "Web" }
 
@@ -9,9 +9,9 @@ export const metadata = { title: "Web" }
 export default async function WebPage({
   searchParams,
 }: {
-  searchParams: Promise<{ estado?: string; consulta?: string }>
+  searchParams: Promise<{ estado?: string; red?: string; consulta?: string }>
 }) {
-  const { estado: estadoParam, consulta: elegidaParam } = await searchParams
+  const { estado: estadoParam, red: redParam, consulta: elegidaParam } = await searchParams
   const filtro = FILTROS.find((f) => f.valor === estadoParam)?.valor ?? "nueva"
   const supabase = await createClient()
 
@@ -22,7 +22,13 @@ export default async function WebPage({
     .order("created_at", { ascending: false })
   if (filtro !== "todas") consulta = consulta.eq("estado", filtro)
   const { data } = await consulta
-  const consultas = (data ?? []) as unknown as Consulta[]
+  const todas = (data ?? []) as unknown as Consulta[]
+
+  // Por dónde nos conoció (`?red=LinkedIn`): se filtra acá, sobre lo que trajo
+  // el estado, y las pastillas muestran solo los orígenes que hay.
+  const redes = contarConocio(todas)
+  const red = redes.some((r) => r.clave === redParam) ? (redParam as string) : null
+  const consultas = red ? todas.filter((c) => c.conocio === red) : todas
 
   // Si la elegida ya no está en el filtro (se marcó atendida o se descartó),
   // se muestra la primera de la lista.
@@ -33,6 +39,8 @@ export default async function WebPage({
     <VistaWeb
       consultas={consultas}
       filtro={filtro}
+      redes={redes}
+      red={red}
       elegida={elegida}
       elegidaEnUrl={!!elegidaParam}
       existente={existente}
